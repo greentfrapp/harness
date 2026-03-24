@@ -143,6 +143,11 @@ export function createTaskRoutes(ctx: AppContext) {
 
     // Merge branch if it exists
     if (task.branch_name) {
+      if (!git.hasCommits(project.repo_path, project.target_branch, task.branch_name)) {
+        serverLog.warn(`Task branch has no commits ahead of ${project.target_branch}`, id);
+        return c.json({ error: 'No changes to merge — the agent may not have committed its work' }, 409);
+      }
+
       try {
         serverLog.info(`Merging ${task.branch_name} into ${project.target_branch}`, id);
         git.mergeBranch(project.repo_path, project.target_branch, task.branch_name, {
