@@ -1,0 +1,201 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { createTaskRoutes } from './tasks.ts';
+import type { AppContext } from '../context.ts';
+import type { Task, TaskEvent } from '../../shared/types.ts';
+
+function makeTask(overrides: Partial<Task> = {}): Task {
+  return {
+    id: 'task-1',
+    project_id: 'proj-1',
+    type: 'do',
+    status: 'queued',
+    prompt: 'test task',
+    priority: 'normal',
+    depends_on: null,
+    agent_type: 'claude-code',
+    agent_session_data: null,
+    worktree_path: null,
+    branch_name: null,
+    diff_summary: null,
+    agent_summary: null,
+    error_message: null,
+    retry_count: 0,
+    queue_position: 1,
+    created_at: 1000,
+    updated_at: 1000,
+    ...overrides,
+  };
+}
+
+function makeContext(): AppContext {
+  return {
+    config: {
+      worktree_limit: 3,
+      conversation_limit: 5,
+      task_types: {
+        do: { prompt_template: '...', needs_worktree: true, default_priority: 'normal' },
+        discuss: { prompt_template: '...', needs_worktree: false, default_priority: 'normal' },
+      },
+      projects: [],
+    },
+    sseManager: { addClient: vi.fn(), removeClient: vi.fn(), broadcast: vi.fn(), clientCount: 0 } as any,
+    taskQueue: { recomputePositions: vi.fn(), getNextReady: vi.fn(), dispatch: vi.fn(), isDependencySatisfied: vi.fn() } as any,
+    queries: {
+      getAllProjects: vi.fn().mockReturnValue([{ id: 'proj-1', name: 'test' }]),
+      getProjectById: vi.fn(),
+      seedProjects: vi.fn(),
+      createTask: vi.fn().mockImplementation((input) => makeTask({ ...input, id: 'new-1' })),
+      getTaskById: vi.fn(),
+      getTasksByStatus: vi.fn().mockReturnValue([]),
+      getTasksByProject: vi.fn().mockReturnValue([]),
+      getQueuedTasks: vi.fn().mockReturnValue([]),
+      updateTask: vi.fn().mockImplementation((id, updates) => makeTask({ id, ...updates })),
+      createTaskEvent: vi.fn(),
+      getTaskEvents: vi.fn().mockReturnValue([]),
+    } as any,
+  };
+}
+
+describe('Task Routes', () => {
+  let ctx: AppContext;
+  let app: ReturnType<typeof createTaskRoutes>;
+
+  beforeEach(() => {
+    ctx = makeContext();
+    app = createTaskRoutes(ctx);
+  });
+
+  describe('GET /projects', () => {
+    it('returns projects', async () => {
+      const res = await app.request('/projects');
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body).toEqual([{ id: 'proj-1', name: 'test' }]);
+    });
+  });
+
+  describe('GET /config', () => {
+    it('returns task types', async () => {
+      const res = await app.request('/config');
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.task_types).toHaveProperty('do');
+      expect(body.task_types).toHaveProperty('discuss');
+    });
+  });
+
+  describe('GET /tasks/:id', () => {
+    it('returns task with events', async () => {
+      const task = makeTask();
+      const events: TaskEvent[] = [{ id: 1, task_id: 'task-1', event_type: 'created', data: null, created_at: 1000 }];
+      (ctx.queries.getTaskById as any).mockReturnValue(task);
+      (ctx.queries.getTaskEvents as any).mockReturnValue(events);
+
+      const res = await app.request('/tasks/task-1');
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.id).toBe('task-1');
+      expect(body.events).toHaveLength(1);
+    });
+
+    it('returns 404 for unknown task', async () => {
+      (ctx.queries.getTaskById as any).mockReturnValue(undefined);
+      const res = await app.request('/tasks/nope');
+      expect(res.status).toBe(404);
+    });
+  });
+
+  describe('POST /tasks', () => {
+    it('creates a task and returns 201', async () => {
+      const created = makeTask({ id: 'new-1' });
+      (ctx.queries.createTask as any).mockReturnValue(created);
+      (ctx.queries.getTaskById as any).mockReturnValue(created);
+
+      const res = await app.request('/tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ project_id: 'proj-1', type: 'do', prompt: 'do something' }),
+      });
+
+      expect(res.status).toBe(201);
+      const body = await res.json();
+      expect(body.id).toBe('new-1');
+      expect(ctx.taskQueue.recomputePositions).toHaveBeenCalledWith('proj-1');
+      expect(ctx.sseManager.broadcast).toHaveBeenCalledWith('task:created', created);
+    });
+
+    it('returns 400 when prompt is missing', async () => {
+      const res = await app.request('/tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ project_id: 'proj-1', type: 'do' }),
+      });
+      expect(res.status).toBe(400);
+    });
+  });
+
+  describe('PATCH /tasks/:id', () => {
+    it('updates task and broadcasts', async () => {
+      const existing = makeTask({ status: 'queued' });
+      const updated = makeTask({ status: 'in_progress' });
+      (ctx.queries.getTaskById as any).mockReturnValue(existing);
+      (ctx.queries.updateTask as any).mockReturnValue(updated);
+
+      const res = await app.request('/tasks/task-1', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'in_progress' }),
+      });
+
+      expect(res.status).toBe(200);
+      expect(ctx.sseManager.broadcast).toHaveBeenCalledWith('task:updated', updated);
+    });
+
+    it('broadcasts inbox:new when status transitions to inbox', async () => {
+      const existing = makeTask({ status: 'in_progress' });
+      const updated = makeTask({ status: 'ready' });
+      (ctx.queries.getTaskById as any).mockReturnValue(existing);
+      (ctx.queries.updateTask as any).mockReturnValue(updated);
+
+      await app.request('/tasks/task-1', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'ready' }),
+      });
+
+      expect(ctx.sseManager.broadcast).toHaveBeenCalledWith('inbox:new', updated);
+    });
+
+    it('returns 404 for unknown task', async () => {
+      (ctx.queries.getTaskById as any).mockReturnValue(undefined);
+      const res = await app.request('/tasks/nope', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'ready' }),
+      });
+      expect(res.status).toBe(404);
+    });
+  });
+
+  describe('DELETE /tasks/:id', () => {
+    it('cancels task and broadcasts', async () => {
+      const existing = makeTask();
+      const cancelled = makeTask({ status: 'cancelled' });
+      (ctx.queries.getTaskById as any).mockReturnValue(existing);
+      (ctx.queries.updateTask as any).mockReturnValue(cancelled);
+
+      const res = await app.request('/tasks/task-1', { method: 'DELETE' });
+
+      expect(res.status).toBe(200);
+      expect(ctx.queries.updateTask).toHaveBeenCalledWith('task-1', { status: 'cancelled' });
+      expect(ctx.queries.createTaskEvent).toHaveBeenCalledWith('task-1', 'cancelled', null);
+      expect(ctx.sseManager.broadcast).toHaveBeenCalledWith('task:updated', cancelled);
+    });
+
+    it('returns 404 for unknown task', async () => {
+      (ctx.queries.getTaskById as any).mockReturnValue(undefined);
+      const res = await app.request('/tasks/nope', { method: 'DELETE' });
+      expect(res.status).toBe(404);
+    });
+  });
+});
