@@ -64,6 +64,16 @@ const truncatedPrompt = computed(() => {
   const text = props.task.prompt;
   return text.length > 120 ? text.slice(0, 120) + '...' : text;
 });
+
+function handleApprove(id: string) {
+  expanded.value = false;
+  emit('approve', id);
+}
+
+function handleReject(id: string) {
+  expanded.value = false;
+  emit('reject', id);
+}
 </script>
 
 <template>
@@ -128,8 +138,8 @@ const truncatedPrompt = computed(() => {
       :task="task"
       :context="context"
       @cancel="emit('cancel', $event)"
-      @approve="emit('approve', $event)"
-      @reject="emit('reject', $event)"
+      @approve="handleApprove($event)"
+      @reject="handleReject($event)"
       @defer="emit('defer', $event)"
       @delete="emit('delete', $event)"
     />
