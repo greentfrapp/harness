@@ -17,10 +17,11 @@
   "dependencies": {
     "@hono/node-server": "^1.14.1",
     "better-sqlite3": "^11.9.1",
+    "diff2html": "^3.4.48",
     "drizzle-orm": "^0.39.3",
     "hono": "^4.7.6",
-    "diff2html": "^3.4.48",
-    "jsonc-parser": "^3.3.1"
+    "jsonc-parser": "^3.3.1",
+    "marked": "^17.0.5"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
@@ -29,6 +30,7 @@
     ]
   },
   "devDependencies": {
+    "@tailwindcss/typography": "^0.5.19",
     "@tailwindcss/vite": "^4.1.3",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.15.2",
