@@ -145,7 +145,7 @@ function formatTime(ts: number): string {
     <!-- Diff stats (when no full diff viewer, but stats exist) -->
     <div v-else-if="task.diff_summary && !showDiffViewer">
       <h4 class="text-xs font-medium text-gray-500 uppercase mb-1">Diff Summary</h4>
-      <p class="text-xs text-gray-400 font-mono whitespace-pre">{{ task.diff_summary }}</p>
+      <p class="text-xs text-gray-400 font-mono whitespace-pre overflow-y-auto" style="max-height: 40vh;">{{ task.diff_summary }}</p>
     </div>
 
     <!-- Error -->

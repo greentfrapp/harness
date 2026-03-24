@@ -106,7 +106,8 @@ watch(renderedHtml, async () => {
     <div
       v-else
       ref="diffContainer"
-      class="diff-container overflow-x-auto rounded border border-gray-800"
+      class="diff-container overflow-x-auto overflow-y-auto rounded border border-gray-800"
+      style="max-height: 70vh;"
       v-html="renderedHtml"
     />
   </div>
