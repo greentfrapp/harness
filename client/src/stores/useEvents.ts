@@ -10,6 +10,7 @@ export const useEvents = defineStore('events', () => {
   let eventSource: EventSource | null = null;
   let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
   let reconnectDelay = 1000;
+  let hasConnectedBefore = false;
 
   function connect() {
     if (eventSource) {
@@ -20,6 +21,13 @@ export const useEvents = defineStore('events', () => {
 
     eventSource.addEventListener('connected', () => {
       connected.value = true;
+
+      // On reconnect, refetch everything to catch events missed while disconnected
+      if (hasConnectedBefore) {
+        refetchAll();
+      }
+      hasConnectedBefore = true;
+
       reconnectDelay = 1000;
     });
 
