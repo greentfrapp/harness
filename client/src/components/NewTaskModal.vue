@@ -11,6 +11,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   close: [];
   create: [input: CreateTaskInput];
+  settings: [];
 }>();
 
 const projectId = ref(props.projects[0]?.id ?? '');
@@ -81,7 +82,30 @@ const priorities: { value: Priority; label: string }[] = [
           <h2 class="text-lg font-semibold">New Task</h2>
         </div>
 
-        <form class="px-6 py-4 space-y-4" @submit.prevent="handleSubmit">
+        <!-- Empty state: no projects configured -->
+        <div v-if="!projects.length" class="px-6 py-8 text-center space-y-3">
+          <p class="text-sm text-gray-400">
+            No projects configured. Add at least one project in Settings to create tasks.
+          </p>
+          <div class="flex justify-center gap-2">
+            <button
+              type="button"
+              class="px-4 py-2 text-sm text-gray-400 hover:text-gray-200 transition-colors"
+              @click="emit('close')"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              class="px-4 py-2 text-sm font-medium bg-blue-600 hover:bg-blue-500 rounded-md transition-colors"
+              @click="emit('settings')"
+            >
+              Open Settings
+            </button>
+          </div>
+        </div>
+
+        <form v-else class="px-6 py-4 space-y-4" @submit.prevent="handleSubmit">
           <!-- Project -->
           <div>
             <label class="block text-xs font-medium text-gray-400 mb-1">Project</label>

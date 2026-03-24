@@ -30,21 +30,37 @@ function onKeydown(e: KeyboardEvent) {
   }
 }
 
+async function refreshConfig() {
+  const [configData] = await Promise.all([
+    api.config.get(),
+    api.projects.list().then((p) => (projects.value = p)),
+  ]);
+  taskTypes.value = Object.keys(configData.task_types || {});
+}
+
 async function handleCreateTask(input: CreateTaskInput) {
   await outbox.createTask(input);
+}
+
+async function handleSettingsClose() {
+  showSettings.value = false;
+  await refreshConfig();
+}
+
+function handleOpenSettingsFromTask() {
+  showNewTask.value = false;
+  showSettings.value = true;
 }
 
 onMounted(async () => {
   window.addEventListener('keydown', onKeydown);
   events.connect();
 
-  const [, , configData] = await Promise.all([
+  await Promise.all([
     outbox.fetchTasks(),
     inbox.fetchItems(),
-    api.config.get(),
-    api.projects.list().then((p) => (projects.value = p)),
+    refreshConfig(),
   ]);
-  taskTypes.value = Object.keys(configData.task_types || {});
 });
 
 onUnmounted(() => {
@@ -100,12 +116,13 @@ onUnmounted(() => {
       :existing-tasks="outbox.tasks"
       @close="showNewTask = false"
       @create="handleCreateTask"
+      @settings="handleOpenSettingsFromTask"
     />
 
     <!-- Settings Modal -->
     <SettingsModal
       v-if="showSettings"
-      @close="showSettings = false"
+      @close="handleSettingsClose"
     />
   </div>
 </template>
