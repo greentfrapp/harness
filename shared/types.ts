@@ -29,6 +29,7 @@ export const INBOX_STATUSES: TaskStatus[] = [
   'deferred',
   'error',
   'permission',
+  'approved',
 ];
 
 // Config types

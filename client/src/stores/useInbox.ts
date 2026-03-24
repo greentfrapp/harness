@@ -24,6 +24,8 @@ export const useInbox = defineStore('inbox', () => {
     [...items.value].sort((a, b) => {
       if (a.status === 'permission' && b.status !== 'permission') return -1;
       if (b.status === 'permission' && a.status !== 'permission') return 1;
+      if (a.status === 'approved' && b.status !== 'approved') return 1;
+      if (b.status === 'approved' && a.status !== 'approved') return -1;
       if (a.status === 'deferred' && b.status !== 'deferred') return 1;
       if (b.status === 'deferred' && a.status !== 'deferred') return -1;
       return b.updated_at - a.updated_at;
