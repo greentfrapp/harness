@@ -51,6 +51,14 @@ export const useEvents = defineStore('events', () => {
       inbox.onTaskUpdated(task);
     });
 
+    eventSource.addEventListener('task:removed', (e) => {
+      const { id } = JSON.parse(e.data);
+      const outbox = useOutbox();
+      const inbox = useInbox();
+      outbox.onTaskRemoved(id);
+      inbox.onTaskRemoved(id);
+    });
+
     // Forward task:progress events as custom DOM events for SessionStream
     eventSource.addEventListener('task:progress', (e) => {
       try {

@@ -52,6 +52,15 @@ export const useInbox = defineStore('inbox', () => {
     upsertOrRemove(items, task, INBOX_STATUSES);
   }
 
+  function onTaskRemoved(id: string) {
+    items.value = items.value.filter((t) => t.id !== id);
+  }
+
+  async function clearAll() {
+    await api.tasks.clearAll([...INBOX_STATUSES]);
+    items.value = [];
+  }
+
   return {
     items,
     sortedItems,
@@ -62,5 +71,7 @@ export const useInbox = defineStore('inbox', () => {
     updateTaskStatus,
     onInboxNew,
     onTaskUpdated,
+    onTaskRemoved,
+    clearAll,
   };
 });

@@ -130,6 +130,7 @@ export interface UpdateTaskInput {
 export type SSEEventType =
   | 'task:created'
   | 'task:updated'
+  | 'task:removed'
   | 'task:progress'
   | 'inbox:new'
   | 'inbox:updated';

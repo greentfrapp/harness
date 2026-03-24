@@ -49,6 +49,11 @@ export const useOutbox = defineStore('outbox', () => {
     tasks.value = tasks.value.filter((t) => t.id !== id);
   }
 
+  async function clearAll() {
+    await api.tasks.clearAll([...OUTBOX_STATUSES]);
+    tasks.value = [];
+  }
+
   return {
     tasks,
     sortedTasks,
@@ -59,5 +64,6 @@ export const useOutbox = defineStore('outbox', () => {
     onTaskCreated,
     onTaskUpdated,
     onTaskRemoved,
+    clearAll,
   };
 });

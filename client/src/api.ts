@@ -54,6 +54,8 @@ export const api = {
       }),
     cancel: (id: string) =>
       request<Task>(`/api/tasks/${id}`, { method: 'DELETE' }),
+    clearAll: (statuses: string[]) =>
+      request<{ deleted: string[] }>(`/api/tasks?status=${statuses.join(',')}`, { method: 'DELETE' }),
     approve: (id: string) =>
       request<Task & { blocked_dependents?: Array<{ id: string; prompt: string; status: string }> }>(
         `/api/tasks/${id}/approve`,

@@ -157,3 +157,20 @@ export function getTaskEvents(taskId: string): TaskEvent[] {
     .where(eq(taskEvents.task_id, taskId))
     .all() as TaskEvent[];
 }
+
+export function deleteTasksByStatus(statusList: string[]): Task[] {
+  const db = getDb();
+  const toDelete = db
+    .select()
+    .from(tasks)
+    .where(inArray(tasks.status, statusList))
+    .all() as Task[];
+  if (!toDelete.length) return [];
+  const ids = toDelete.map((t) => t.id);
+  db.delete(subtaskProposals)
+    .where(inArray(subtaskProposals.task_id, ids))
+    .run();
+  db.delete(taskEvents).where(inArray(taskEvents.task_id, ids)).run();
+  db.delete(tasks).where(inArray(tasks.id, ids)).run();
+  return toDelete;
+}
