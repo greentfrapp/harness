@@ -23,7 +23,10 @@ const projects = ref<Project[]>([]);
 const taskTypes = ref<string[]>([]);
 
 function onKeydown(e: KeyboardEvent) {
-  if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
+  const tag = (e.target as HTMLElement)?.tagName;
+  const isEditing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || (e.target as HTMLElement)?.isContentEditable;
+
+  if (e.key === 'c' && !e.ctrlKey && !e.metaKey && !e.altKey && !isEditing) {
     e.preventDefault();
     showNewTask.value = true;
   }
@@ -101,7 +104,7 @@ onUnmounted(() => {
           @click="showNewTask = true"
         >
           New Task
-          <kbd class="ml-2 text-xs text-blue-300 opacity-70">⌘N</kbd>
+          <kbd class="ml-2 text-xs text-blue-300 opacity-70">C</kbd>
         </button>
       </div>
     </header>
