@@ -143,7 +143,9 @@ export function createTaskRoutes(ctx: AppContext) {
     // Merge branch if it exists
     if (task.branch_name) {
       try {
-        git.mergeBranch(project.repo_path, project.target_branch, task.branch_name);
+        git.mergeBranch(project.repo_path, project.target_branch, task.branch_name, {
+          push: !!project.auto_push,
+        });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         return c.json({ error: `Merge failed: ${msg}` }, 409);

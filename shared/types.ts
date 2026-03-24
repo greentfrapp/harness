@@ -50,6 +50,7 @@ export interface ProjectConfig {
   target_branch?: string;
   worktree_limit?: number;
   conversation_limit?: number;
+  auto_push?: boolean;
 }
 
 export interface HarnessConfig {
@@ -68,6 +69,7 @@ export interface Project {
   target_branch: string;
   worktree_limit: number;
   conversation_limit: number;
+  auto_push: boolean;
   created_at: number;
 }
 

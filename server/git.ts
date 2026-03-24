@@ -99,6 +99,7 @@ export function mergeBranch(
   repoPath: string,
   targetBranch: string,
   branchName: string,
+  opts?: { push?: boolean },
 ): void {
   const tmpDir = path.join(os.tmpdir(), `harness-merge-${Date.now()}`);
   try {
@@ -106,10 +107,19 @@ export function mergeBranch(
       `git worktree add ${JSON.stringify(tmpDir)} ${targetBranch}`,
       { cwd: repoPath, stdio: 'pipe' },
     );
+    // Sync with remote before merging
+    try {
+      execSync('git pull --ff-only', { cwd: tmpDir, stdio: 'pipe' });
+    } catch {
+      // No remote configured or diverged — proceed with local state
+    }
     execSync(
       `git merge ${branchName} --no-ff -m "Merge ${branchName}"`,
       { cwd: tmpDir, stdio: 'pipe' },
     );
+    if (opts?.push) {
+      execSync('git push', { cwd: tmpDir, stdio: 'pipe' });
+    }
   } finally {
     try {
       execSync(`git worktree remove ${JSON.stringify(tmpDir)} --force`, {

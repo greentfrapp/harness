@@ -26,6 +26,7 @@ export function seedProjects(config: HarnessConfig): void {
         worktree_limit: project.worktree_limit ?? config.worktree_limit,
         conversation_limit:
           project.conversation_limit ?? config.conversation_limit,
+        auto_push: project.auto_push ?? false,
         created_at: now,
       })
       .onConflictDoUpdate({
@@ -36,6 +37,7 @@ export function seedProjects(config: HarnessConfig): void {
           worktree_limit: project.worktree_limit ?? config.worktree_limit,
           conversation_limit:
             project.conversation_limit ?? config.conversation_limit,
+          auto_push: project.auto_push ?? false,
         },
       })
       .run();

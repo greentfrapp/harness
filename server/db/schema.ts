@@ -7,6 +7,7 @@ export const projects = sqliteTable('projects', {
   target_branch: text('target_branch').notNull().default('main'),
   worktree_limit: integer('worktree_limit').notNull().default(3),
   conversation_limit: integer('conversation_limit').notNull().default(5),
+  auto_push: integer('auto_push', { mode: 'boolean' }).notNull().default(false),
   created_at: integer('created_at')
     .notNull()
     .$defaultFn(() => Date.now()),

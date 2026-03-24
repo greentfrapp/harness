@@ -75,7 +75,8 @@ const DEFAULT_CONFIG_TEMPLATE = `{
     // {
     //   "name": "my-app",
     //   "repo_path": "/home/user/projects/my-app",
-    //   "target_branch": "main"
+    //   "target_branch": "main",
+    //   "auto_push": true
     // }
   ]
 }
