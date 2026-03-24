@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import type { Task } from '@shared/types';
+import { api } from '../api';
 import TaskDetail from './TaskDetail.vue';
 
 const props = defineProps<{
@@ -23,6 +24,13 @@ const deleting = ref(false);
 const isTerminal = computed(() =>
   ['approved', 'rejected', 'cancelled'].includes(props.task.status),
 );
+
+const needsInput = computed(() =>
+  props.context === 'inbox' && (props.task.status === 'ready' || props.task.status === 'error'),
+);
+
+const collapsedApproving = ref(false);
+const collapsedRejecting = ref(false);
 
 function handleDelete(e: Event) {
   e.stopPropagation();
@@ -97,6 +105,33 @@ function handleReject(id: string) {
   expanded.value = false;
   emit('reject', id);
 }
+
+async function handleCollapsedApprove(e: Event) {
+  e.stopPropagation();
+  collapsedApproving.value = true;
+  try {
+    await api.tasks.approve(props.task.id);
+    emit('approve', props.task.id);
+  } finally {
+    collapsedApproving.value = false;
+  }
+}
+
+async function handleCollapsedReject(e: Event) {
+  e.stopPropagation();
+  collapsedRejecting.value = true;
+  try {
+    await api.tasks.reject(props.task.id);
+    emit('reject', props.task.id);
+  } finally {
+    collapsedRejecting.value = false;
+  }
+}
+
+function handleCollapsedDefer(e: Event) {
+  e.stopPropagation();
+  emit('defer', props.task.id);
+}
 </script>
 
 <template>
@@ -142,6 +177,30 @@ function handleReject(id: string) {
       >
         #{{ task.queue_position }}
       </span>
+
+      <!-- Action buttons (visible in collapsed state for tasks needing input) -->
+      <div v-if="needsInput && !expanded" class="flex items-center gap-1 shrink-0" @click.stop>
+        <button
+          class="px-2 py-1 text-xs font-medium rounded bg-green-900 hover:bg-green-800 text-green-300 transition-colors disabled:opacity-50"
+          :disabled="collapsedApproving"
+          @click="handleCollapsedApprove"
+        >
+          {{ collapsedApproving ? 'Merging...' : 'Accept' }}
+        </button>
+        <button
+          class="px-2 py-1 text-xs font-medium rounded bg-red-900 hover:bg-red-800 text-red-300 transition-colors disabled:opacity-50"
+          :disabled="collapsedRejecting"
+          @click="handleCollapsedReject"
+        >
+          {{ collapsedRejecting ? 'Rejecting...' : 'Reject' }}
+        </button>
+        <button
+          class="px-2 py-1 text-xs font-medium rounded bg-gray-800 hover:bg-gray-700 text-gray-400 transition-colors"
+          @click="handleCollapsedDefer"
+        >
+          Defer
+        </button>
+      </div>
 
       <!-- Delete button (visible in collapsed state for terminal tasks) -->
       <div v-if="isTerminal && !expanded" class="flex items-center gap-1 shrink-0" @click.stop>
