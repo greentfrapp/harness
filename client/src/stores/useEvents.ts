@@ -1,8 +1,9 @@
 import { defineStore } from 'pinia';
 import { ref } from 'vue';
-import type { Task } from '@shared/types';
+import type { Task, LogEntry } from '@shared/types';
 import { useOutbox } from './useOutbox';
 import { useInbox } from './useInbox';
+import { useLog } from './useLog';
 
 export const useEvents = defineStore('events', () => {
   const connected = ref(false);
@@ -57,6 +58,12 @@ export const useEvents = defineStore('events', () => {
       const inbox = useInbox();
       outbox.onTaskRemoved(id);
       inbox.onTaskRemoved(id);
+    });
+
+    eventSource.addEventListener('log:entry', (e) => {
+      const entry: LogEntry = JSON.parse(e.data);
+      const log = useLog();
+      log.onLogEntry(entry);
     });
 
     // Forward task:progress events as custom DOM events for SessionStream

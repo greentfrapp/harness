@@ -8,6 +8,7 @@ import type {
 import type { AgentAdapter, AgentProgressEvent } from './agents/index.ts';
 import type { AgentRegistry } from './agents/index.ts';
 import * as git from './git.ts';
+import { serverLog } from './log.ts';
 
 export interface AgentSessionData {
   session_id: string | null;
@@ -188,6 +189,8 @@ export class AgentPool {
       args.push(...agentConfig.extra_args);
     }
 
+    serverLog.info(`Spawning ${adapter.executable} agent in ${opts.cwd}`, task.id);
+
     const proc = spawn(adapter.executable, args, {
       cwd: opts.cwd,
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -206,6 +209,7 @@ export class AgentPool {
     // Handle spawn errors (e.g. CLI not found in PATH)
     proc.on('error', (err) => {
       this.agents.delete(task.id);
+      serverLog.error(`Failed to spawn ${adapter.executable}: ${err.message}`, task.id);
       this.pushToError(
         task.id,
         `Failed to spawn ${adapter.executable}: ${err.message}. Is the ${adapter.executable} CLI installed and in PATH?`,
@@ -303,6 +307,7 @@ export class AgentPool {
     project: Project,
     summary: string,
   ): void {
+    serverLog.info(`Agent completed successfully`, taskId);
     const task = this.deps.getTaskById(taskId);
     if (!task) return;
 
@@ -342,7 +347,10 @@ export class AgentPool {
     const errorMsg = stderr.trim().slice(0, 2000) ||
       `Agent exited with code ${exitCode}`;
 
+    serverLog.error(`Agent exited with code ${exitCode}`, taskId);
+
     if (task.retry_count < maxRetries && sessionId) {
+      serverLog.info(`Retrying (attempt ${task.retry_count + 1}/${maxRetries})`, taskId);
       // Retry with --resume
       this.deps.updateTask(taskId, {
         status: 'retrying',

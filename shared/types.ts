@@ -136,6 +136,14 @@ export interface UpdateTaskInput {
   error_message?: string;
 }
 
+// Server log entry
+export interface LogEntry {
+  timestamp: number;
+  level: 'info' | 'warn' | 'error';
+  message: string;
+  taskId?: string;
+}
+
 // SSE event types
 export type SSEEventType =
   | 'task:created'
@@ -143,7 +151,8 @@ export type SSEEventType =
   | 'task:removed'
   | 'task:progress'
   | 'inbox:new'
-  | 'inbox:updated';
+  | 'inbox:updated'
+  | 'log:entry';
 
 export interface SSEEvent<T = unknown> {
   type: SSEEventType;
