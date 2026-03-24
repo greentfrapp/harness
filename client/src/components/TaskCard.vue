@@ -53,7 +53,7 @@ const truncatedPrompt = computed(() => {
 </script>
 
 <template>
-  <div class="rounded-lg border border-gray-800 bg-gray-900 overflow-hidden">
+  <div class="rounded-lg border overflow-hidden" :class="task.status === 'approved' ? 'border-green-900/50 bg-gray-900/60 opacity-75' : 'border-gray-800 bg-gray-900'">
     <!-- Summary row -->
     <button
       class="w-full px-4 py-3 flex items-start gap-3 text-left hover:bg-gray-800/50 transition-colors"
@@ -70,6 +70,12 @@ const truncatedPrompt = computed(() => {
         <div class="flex items-center gap-2 mb-1">
           <span class="text-xs font-medium px-1.5 py-0.5 rounded bg-gray-800 text-gray-400">
             {{ task.type }}
+          </span>
+          <span
+            v-if="task.status === 'approved'"
+            class="text-xs font-medium px-1.5 py-0.5 rounded bg-green-900 text-green-300"
+          >
+            Accepted
           </span>
           <span
             v-if="task.priority === 'urgent'"

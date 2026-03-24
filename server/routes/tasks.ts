@@ -175,7 +175,7 @@ export function createTaskRoutes(ctx: AppContext) {
     });
     queries.createTaskEvent(id, 'approved', null);
     serverLog.info(`Task approved`, id);
-    sseManager.broadcast('task:removed', { id });
+    sseManager.broadcast('task:updated', updated);
 
     // Trigger dispatch — dependencies may now be satisfied
     dispatcher.tryDispatch();
