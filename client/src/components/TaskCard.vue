@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import type { Task } from '@shared/types';
 import TaskDetail from './TaskDetail.vue';
 
@@ -36,8 +36,21 @@ const statusConfig: Record<
 
 const status = computed(() => statusConfig[props.task.status] ?? statusConfig.queued);
 
+const now = ref(Date.now());
+let tickInterval: ReturnType<typeof setInterval> | null = null;
+
+onMounted(() => {
+  tickInterval = setInterval(() => {
+    now.value = Date.now();
+  }, 1000);
+});
+
+onBeforeUnmount(() => {
+  if (tickInterval) clearInterval(tickInterval);
+});
+
 const elapsed = computed(() => {
-  const ms = Date.now() - props.task.created_at;
+  const ms = now.value - props.task.created_at;
   const seconds = Math.floor(ms / 1000);
   if (seconds < 60) return `${seconds}s`;
   const minutes = Math.floor(seconds / 60);
