@@ -105,50 +105,29 @@ export function mergeBranch(
   const tmpDir = path.join(os.tmpdir(), `harness-merge-${Date.now()}`);
   try {
     // Use --detach so this works even when targetBranch is already checked out
-    serverLog.info(`[merge] Creating detached worktree at ${targetBranch}`);
     execSync(
       `git worktree add --detach ${JSON.stringify(tmpDir)} ${targetBranch}`,
       { cwd: repoPath, stdio: 'pipe' },
     );
-
-    const startRef = execSync('git rev-parse HEAD', { cwd: tmpDir, encoding: 'utf-8' }).trim();
-    serverLog.info(`[merge] Detached HEAD at ${startRef.slice(0, 10)}`);
-
     // Sync with remote before merging
     try {
       execSync(`git fetch origin ${targetBranch}`, { cwd: tmpDir, stdio: 'pipe' });
       execSync(`git merge origin/${targetBranch} --ff-only`, { cwd: tmpDir, stdio: 'pipe' });
-      const afterSync = execSync('git rev-parse HEAD', { cwd: tmpDir, encoding: 'utf-8' }).trim();
-      serverLog.info(`[merge] After remote sync: ${afterSync.slice(0, 10)}`);
     } catch {
-      serverLog.info(`[merge] Remote sync skipped (no remote or diverged)`);
+      // No remote configured or diverged — proceed with local state
     }
-
     execSync(
       `git merge ${branchName} --no-ff -m "Merge ${branchName}"`,
       { cwd: tmpDir, stdio: 'pipe' },
     );
-
+    // Capture the merge commit hash and update the target branch ref in the main repo
     const mergeCommit = execSync('git rev-parse HEAD', { cwd: tmpDir, encoding: 'utf-8' }).trim();
-    serverLog.info(`[merge] Merge commit: ${mergeCommit.slice(0, 10)}`);
-
-    // Check local ref BEFORE update-ref
-    const mainBefore = execSync(`git rev-parse ${targetBranch}`, { cwd: repoPath, encoding: 'utf-8' }).trim();
-    serverLog.info(`[merge] Local ${targetBranch} before update-ref: ${mainBefore.slice(0, 10)}`);
-
-    // Update the target branch ref in the main repo (not the worktree)
     execSync(
       `git update-ref refs/heads/${targetBranch} ${mergeCommit}`,
       { cwd: repoPath, stdio: 'pipe' },
     );
-
-    // Verify update-ref worked
-    const mainAfter = execSync(`git rev-parse ${targetBranch}`, { cwd: repoPath, encoding: 'utf-8' }).trim();
-    serverLog.info(`[merge] Local ${targetBranch} after update-ref: ${mainAfter.slice(0, 10)}`);
-
     if (opts?.push) {
       execSync(`git push origin ${targetBranch}`, { cwd: repoPath, stdio: 'pipe' });
-      serverLog.info(`[merge] Pushed to remote`);
     }
   } finally {
     try {
