@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue';
+import { ref, onMounted, nextTick } from 'vue';
 import type { Project, Task, Priority, CreateTaskInput } from '@shared/types';
 
 const props = defineProps<{
@@ -21,6 +21,12 @@ const priority = ref<Priority>('normal');
 const dependsOn = ref<string | null>(null);
 const submitting = ref(false);
 const error = ref('');
+const promptInput = ref<HTMLTextAreaElement | null>(null);
+
+onMounted(async () => {
+  await nextTick();
+  promptInput.value?.focus();
+});
 
 function onKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape') {
@@ -136,11 +142,11 @@ const priorities: { value: Priority; label: string }[] = [
           <div>
             <label class="block text-xs font-medium text-gray-400 mb-1">Prompt</label>
             <textarea
+              ref="promptInput"
               v-model="prompt"
               rows="5"
               class="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600 resize-y"
               placeholder="Describe the task..."
-              autofocus
             />
           </div>
 
