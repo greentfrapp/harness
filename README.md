@@ -53,24 +53,29 @@ Add your repositories to the `projects` array. Each project must point to a vali
 ## Architecture
 
 ```
-┌─────────────────────────────────────────┐
-│           Vue 3 Frontend                │
-│  ┌──────────────┐ ┌──────────────────┐  │
-│  │   Outbox     │ │     Inbox        │  │
-│  │  (Queue)     │ │    (Review)      │  │
-│  └──────────────┘ └──────────────────┘  │
-└──────────────┬──────────────────────────┘
-               │ SSE + REST
-┌──────────────┴──────────────────────────┐
-│           Hono Backend                  │
-│  ┌────────┐ ┌───────┐ ┌─────────────┐  │
-│  │ Queue  │ │  SSE  │ │   SQLite    │  │
-│  │Manager │ │Manager│ │ (Drizzle)   │  │
-│  └────────┘ └───────┘ └─────────────┘  │
-└─────────────────────────────────────────┘
+┌─────────────────────────────────────────────────┐
+│              Vue 3 Frontend                     │
+│  ┌──────────────┐ ┌─────────────────────────┐   │
+│  │   Outbox     │ │        Inbox            │   │
+│  │  (Queue +    │ │  (Review + Diff Viewer  │   │
+│  │   Session)   │ │   + Actions)            │   │
+│  └──────────────┘ └─────────────────────────┘   │
+└───────────────────┬─────────────────────────────┘
+                    │ SSE + REST
+┌───────────────────┴─────────────────────────────┐
+│              Hono Backend                       │
+│  ┌──────────┐ ┌────────────┐ ┌──────────────┐  │
+│  │  Queue   │ │ Dispatcher │ │  Agent Pool  │  │
+│  │  Manager │ │            │ │ (Claude Code) │  │
+│  └──────────┘ └────────────┘ └──────────────┘  │
+│  ┌──────────┐ ┌────────────┐ ┌──────────────┐  │
+│  │   SSE    │ │    Git     │ │    SQLite    │  │
+│  │ Manager  │ │ Worktrees  │ │  (Drizzle)   │  │
+│  └──────────┘ └────────────┘ └──────────────┘  │
+└─────────────────────────────────────────────────┘
 ```
 
-**Stack:** Hono, Vue 3, Tailwind, Pinia, SQLite (better-sqlite3), Drizzle ORM, SSE, Vitest
+**Stack:** Hono, Vue 3, Tailwind, Pinia, SQLite (better-sqlite3), Drizzle ORM, SSE, Vitest, diff2html
 
 ## Project Structure
 
@@ -81,7 +86,16 @@ harness/
 │   ├── config.ts             # ~/.harness/config.jsonc loader + validation
 │   ├── context.ts            # Typed AppContext for dependency injection
 │   ├── queue.ts              # Priority queue with dependency tracking
+│   ├── dispatcher.ts         # Slot-aware task dispatch scheduler
+│   ├── pool.ts               # Agent pool, process lifecycle management
+│   ├── git.ts                # Git worktree creation, branch management, merging
+│   ├── recovery.ts           # Crash recovery: stale tasks, orphaned processes
 │   ├── sse.ts                # SSE broadcast manager
+│   ├── log.ts                # Logging utilities
+│   ├── agents/
+│   │   ├── adapter.ts        # AgentAdapter interface
+│   │   ├── claude-code.ts    # Claude Code CLI adapter (spawn, stream, resume)
+│   │   └── index.ts          # Adapter registry
 │   ├── db/
 │   │   ├── schema.ts         # Drizzle ORM table definitions
 │   │   ├── index.ts          # Database initialization
@@ -97,11 +111,17 @@ harness/
 │   │   │   ├── InboxPanel.vue
 │   │   │   ├── TaskCard.vue
 │   │   │   ├── TaskDetail.vue
-│   │   │   └── NewTaskModal.vue
+│   │   │   ├── NewTaskModal.vue
+│   │   │   ├── DiffViewer.vue       # Diff display (diff2html)
+│   │   │   ├── SessionStream.vue    # Live agent session output
+│   │   │   ├── SettingsModal.vue    # Config editor UI
+│   │   │   └── ActivityLog.vue      # Task event history
 │   │   └── stores/
 │   │       ├── useOutbox.ts
 │   │       ├── useInbox.ts
-│   │       └── useEvents.ts  # SSE connection + reconnection
+│   │       ├── useEvents.ts         # SSE connection + reconnection
+│   │       ├── useLog.ts            # Activity log state
+│   │       └── taskArrayUtils.ts    # Shared array helpers
 │   └── vite.config.ts
 └── shared/
     └── types.ts              # TypeScript types shared by server + client
@@ -109,4 +129,9 @@ harness/
 
 ## Status
 
-Phase 1 (Foundation) is complete: project scaffolding, database, config, task queue, SSE real-time transport, two-column Vue UI with task creation, and critical tests. See `docs/design.md` for the full roadmap.
+Phase 1 (Foundation) and Phase 2 (Agent Integration + Basic Review) are complete.
+
+- **Phase 1:** Project scaffolding, database, config, task queue, SSE real-time transport, two-column Vue UI with task creation, and critical tests.
+- **Phase 2:** Claude Code agent pool with worktree isolation, task dispatch scheduler, live session streaming, diff review in inbox, approve/reject/cancel actions with branch merging, automatic retry via `--resume`, and crash recovery on startup.
+
+See `harness_design.md` for the full roadmap.
