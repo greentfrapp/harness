@@ -29,7 +29,9 @@ export const useOutbox = defineStore('outbox', () => {
   }
 
   async function createTask(input: CreateTaskInput): Promise<Task> {
-    return api.tasks.create(input);
+    const task = await api.tasks.create(input);
+    onTaskCreated(task);
+    return task;
   }
 
   async function cancelTask(id: string): Promise<void> {
