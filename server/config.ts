@@ -7,7 +7,7 @@ import type { HarnessConfig, ProjectConfig } from '../shared/types.ts';
 
 export const HARNESS_DIR = path.join(os.homedir(), '.harness');
 export const DB_PATH = path.join(HARNESS_DIR, 'harness.db');
-const CONFIG_PATH = path.join(HARNESS_DIR, 'config.jsonc');
+export const CONFIG_PATH = path.join(HARNESS_DIR, 'config.jsonc');
 
 const DEFAULT_DO_PROMPT = `You are working on a task in a git worktree branch. Your job is to complete the task described below.
 
@@ -111,6 +111,54 @@ export function validateConfig(config: HarnessConfig): void {
   for (const project of config.projects) {
     validateProject(project);
   }
+}
+
+/** Read the raw config file content. */
+export function readConfigRaw(): string {
+  if (!fs.existsSync(CONFIG_PATH)) {
+    return '';
+  }
+  return fs.readFileSync(CONFIG_PATH, 'utf-8');
+}
+
+/** Validate and save raw JSONC content to config file. Returns parsed config on success. */
+export function saveConfigRaw(
+  content: string,
+): { ok: true; config: HarnessConfig } | { ok: false; error: string } {
+  // Parse JSONC with error collection
+  const errors: { error: number; offset: number; length: number }[] = [];
+  const parsed = parseJsonc(content, errors);
+
+  if (errors.length > 0) {
+    return { ok: false, error: `Invalid JSONC syntax at offset ${errors[0].offset}` };
+  }
+
+  if (!parsed || typeof parsed !== 'object') {
+    return { ok: false, error: 'Config must be a JSON object' };
+  }
+
+  // Build a HarnessConfig from parsed content to validate
+  const config: HarnessConfig = {
+    worktree_limit: parsed.worktree_limit ?? DEFAULT_CONFIG.worktree_limit,
+    conversation_limit: parsed.conversation_limit ?? DEFAULT_CONFIG.conversation_limit,
+    task_types: {
+      ...DEFAULT_CONFIG.task_types,
+      ...(parsed.task_types ?? {}),
+    },
+    projects: parsed.projects ?? [],
+  };
+
+  // Validate semantics (project paths, branches)
+  try {
+    validateConfig(config);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { ok: false, error: msg };
+  }
+
+  // Write to disk
+  fs.writeFileSync(CONFIG_PATH, content, 'utf-8');
+  return { ok: true, config };
 }
 
 function validateProject(project: ProjectConfig): void {

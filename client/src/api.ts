@@ -30,6 +30,14 @@ export const api = {
   config: {
     get: () =>
       request<{ task_types: Record<string, unknown> }>('/api/config'),
+    getRaw: () =>
+      request<{ content: string; path: string }>('/api/config/raw'),
+    saveRaw: (content: string) =>
+      request<{ ok: boolean }>('/api/config/raw', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content }),
+      }),
   },
   tasks: {
     list: (statuses: string[]) =>

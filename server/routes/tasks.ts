@@ -3,6 +3,7 @@ import type { AppContext } from '../context.ts';
 import type { CreateTaskInput, UpdateTaskInput } from '../../shared/types.ts';
 import { OUTBOX_STATUSES, INBOX_STATUSES } from '../../shared/types.ts';
 import * as git from '../git.ts';
+import { readConfigRaw, saveConfigRaw, CONFIG_PATH } from '../config.ts';
 
 export function createTaskRoutes(ctx: AppContext) {
   const app = new Hono();
@@ -18,6 +19,32 @@ export function createTaskRoutes(ctx: AppContext) {
 
   app.get('/config', (c) => {
     return c.json({ task_types: config.task_types });
+  });
+
+  /** Read raw config.jsonc content for the settings editor. */
+  app.get('/config/raw', (c) => {
+    return c.json({ content: readConfigRaw(), path: CONFIG_PATH });
+  });
+
+  /** Validate and save raw config.jsonc content. */
+  app.put('/config/raw', async (c) => {
+    const body = await c.req.json<{ content: string }>();
+    if (typeof body.content !== 'string') {
+      return c.json({ error: 'content is required' }, 400);
+    }
+
+    const result = saveConfigRaw(body.content);
+    if (!result.ok) {
+      return c.json({ error: result.error }, 400);
+    }
+
+    // Reload config in the running context
+    Object.assign(ctx.config, result.config);
+
+    // Re-seed projects from updated config
+    queries.seedProjects(result.config);
+
+    return c.json({ ok: true });
   });
 
   // --- Tasks ---
