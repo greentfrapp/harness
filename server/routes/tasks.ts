@@ -81,6 +81,12 @@ export function createTaskRoutes(ctx: AppContext) {
       );
     }
 
+    // Resolve agent_type from task type config if not explicitly provided
+    if (!body.agent_type) {
+      const taskTypeConfig = config.task_types[body.type];
+      body.agent_type = taskTypeConfig?.agent ?? 'claude-code';
+    }
+
     const task = queries.createTask(body);
     taskQueue.recomputePositions(task.project_id);
     const updated = queries.getTaskById(task.id)!;

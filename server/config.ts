@@ -99,6 +99,7 @@ export function loadConfig(): HarnessConfig {
     worktree_limit: parsed.worktree_limit ?? DEFAULT_CONFIG.worktree_limit,
     conversation_limit:
       parsed.conversation_limit ?? DEFAULT_CONFIG.conversation_limit,
+    agents: parsed.agents ?? undefined,
     task_types: {
       ...DEFAULT_CONFIG.task_types,
       ...(parsed.task_types ?? {}),
@@ -141,6 +142,7 @@ export function saveConfigRaw(
   const config: HarnessConfig = {
     worktree_limit: parsed.worktree_limit ?? DEFAULT_CONFIG.worktree_limit,
     conversation_limit: parsed.conversation_limit ?? DEFAULT_CONFIG.conversation_limit,
+    agents: parsed.agents ?? undefined,
     task_types: {
       ...DEFAULT_CONFIG.task_types,
       ...(parsed.task_types ?? {}),

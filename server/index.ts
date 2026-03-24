@@ -8,6 +8,7 @@ import * as queries from './db/queries.ts';
 import { SSEManager } from './sse.ts';
 import { TaskQueue } from './queue.ts';
 import { AgentPool } from './pool.ts';
+import { AgentRegistry } from './agents/index.ts';
 import { Dispatcher } from './dispatcher.ts';
 import { recoverStaleTasks } from './recovery.ts';
 import { createTaskRoutes } from './routes/tasks.ts';
@@ -58,8 +59,11 @@ const taskQueue = new TaskQueue({
 
 let dispatcher: Dispatcher;
 
+const agentRegistry = new AgentRegistry();
+
 const pool = new AgentPool({
   config,
+  agentRegistry,
   getProjectById: queries.getProjectById,
   updateTask: queries.updateTask,
   createTaskEvent: queries.createTaskEvent,

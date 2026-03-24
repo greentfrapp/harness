@@ -1,6 +1,7 @@
 import { execSync } from 'node:child_process';
 import path from 'node:path';
 import fs from 'node:fs';
+import os from 'node:os';
 
 /**
  * Git operations for worktree management, diff capture, and branch merging.
@@ -91,20 +92,35 @@ export function getDiffStats(
   }
 }
 
-/** Merge a branch into the target branch (fast-forward if possible). */
+/** Merge a branch into the target branch using a temporary worktree.
+ *  This avoids touching the main repo's working tree, so uncommitted
+ *  changes in the user's checkout won't block the merge. */
 export function mergeBranch(
   repoPath: string,
   targetBranch: string,
   branchName: string,
 ): void {
-  execSync(`git checkout ${targetBranch}`, {
-    cwd: repoPath,
-    stdio: 'pipe',
-  });
-  execSync(`git merge ${branchName} --no-ff -m "Merge ${branchName}"`, {
-    cwd: repoPath,
-    stdio: 'pipe',
-  });
+  const tmpDir = path.join(os.tmpdir(), `harness-merge-${Date.now()}`);
+  try {
+    execSync(
+      `git worktree add ${JSON.stringify(tmpDir)} ${targetBranch}`,
+      { cwd: repoPath, stdio: 'pipe' },
+    );
+    execSync(
+      `git merge ${branchName} --no-ff -m "Merge ${branchName}"`,
+      { cwd: tmpDir, stdio: 'pipe' },
+    );
+  } finally {
+    try {
+      execSync(`git worktree remove ${JSON.stringify(tmpDir)} --force`, {
+        cwd: repoPath,
+        stdio: 'pipe',
+      });
+    } catch {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+      execSync('git worktree prune', { cwd: repoPath, stdio: 'pipe' });
+    }
+  }
 }
 
 /** List all worktrees for a repo. */
