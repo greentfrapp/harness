@@ -126,6 +126,17 @@ export function mergeBranch(
       `git update-ref refs/heads/${targetBranch} ${mergeCommit}`,
       { cwd: repoPath, stdio: 'pipe' },
     );
+    // If the target branch is currently checked out, sync the working directory
+    try {
+      const currentBranch = execSync('git rev-parse --abbrev-ref HEAD', {
+        cwd: repoPath, encoding: 'utf-8',
+      }).trim();
+      if (currentBranch === targetBranch) {
+        execSync('git read-tree -um HEAD', { cwd: repoPath, stdio: 'pipe' });
+      }
+    } catch {
+      // Non-critical — working tree sync is best-effort
+    }
     if (opts?.push) {
       execSync(`git push origin ${targetBranch}`, { cwd: repoPath, stdio: 'pipe' });
     }
