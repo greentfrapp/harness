@@ -17,6 +17,29 @@ const emit = defineEmits<{
 }>();
 
 const expanded = ref(false);
+const confirmingDelete = ref(false);
+const deleting = ref(false);
+
+const isTerminal = computed(() =>
+  ['approved', 'rejected', 'cancelled'].includes(props.task.status),
+);
+
+function handleDelete(e: Event) {
+  e.stopPropagation();
+  if (!confirmingDelete.value) {
+    confirmingDelete.value = true;
+    return;
+  }
+  deleting.value = true;
+  emit('delete', props.task.id);
+  deleting.value = false;
+  confirmingDelete.value = false;
+}
+
+function cancelDelete(e: Event) {
+  e.stopPropagation();
+  confirmingDelete.value = false;
+}
 
 const statusConfig: Record<
   string,
@@ -119,6 +142,27 @@ function handleReject(id: string) {
       >
         #{{ task.queue_position }}
       </span>
+
+      <!-- Delete button (visible in collapsed state for terminal tasks) -->
+      <div v-if="isTerminal && !expanded" class="flex items-center gap-1 shrink-0" @click.stop>
+        <button
+          class="px-2 py-1 text-xs font-medium rounded transition-colors disabled:opacity-50"
+          :class="confirmingDelete
+            ? 'bg-red-800 hover:bg-red-700 text-red-200'
+            : 'bg-gray-800 hover:bg-gray-700 text-gray-500 hover:text-red-400'"
+          :disabled="deleting"
+          @click="handleDelete"
+        >
+          {{ deleting ? 'Deleting...' : confirmingDelete ? 'Confirm' : 'Delete' }}
+        </button>
+        <button
+          v-if="confirmingDelete && !deleting"
+          class="px-2 py-1 text-xs font-medium rounded bg-gray-800 hover:bg-gray-700 text-gray-500 transition-colors"
+          @click="cancelDelete"
+        >
+          ✕
+        </button>
+      </div>
 
       <!-- Expand chevron -->
       <svg
