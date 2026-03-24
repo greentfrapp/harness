@@ -14,6 +14,9 @@ importers:
       better-sqlite3:
         specifier: ^11.9.1
         version: 11.10.0
+      diff2html:
+        specifier: ^3.4.48
+        version: 3.4.56
       drizzle-orm:
         specifier: ^0.39.3
         version: 0.39.3(@types/better-sqlite3@7.6.13)(better-sqlite3@11.10.0)
@@ -566,6 +569,10 @@ packages:
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
 
+  '@profoundlogic/hogan@3.0.4':
+    resolution: {integrity: sha512-pmNVGuooS30Mm7YbZd5T7E5zYVO6D5Ct91sn4T39mUvMUc3sCGridcnhAufL1/Bz2QzAtzEn0agNrdk3+5yWzw==}
+    hasBin: true
+
   '@rollup/rollup-android-arm-eabi@4.60.0':
     resolution: {integrity: sha512-WOhNW9K8bR3kf4zLxbfg6Pxu2ybOUbB2AjMDHSQx86LIF4rH4Ft7vmMwNt0loO0eonglSNy4cpD3MKXXKQu0/A==}
     cpu: [arm]
@@ -910,6 +917,9 @@ packages:
   '@vue/shared@3.5.30':
     resolution: {integrity: sha512-YXgQ7JjaO18NeK2K9VTbDHaFy62WrObMa6XERNfNOkAhD1F1oDSf3ZJ7K6GqabZ0BvSDHajp8qfS5Sa2I9n8uQ==}
 
+  abbrev@1.1.1:
+    resolution: {integrity: sha512-nne9/IiQ/hzIhY6pdDnbBtz7DjPTKrY00P/zvPSm5pOFkl6xuGrGnXn/VtTNNfNtAfZ9/1RtehkszU9qcTii0Q==}
+
   alien-signals@1.0.13:
     resolution: {integrity: sha512-OGj9yyTnJEttvzhTUWuscOvtqxq5vrhF7vL9oS0xJ2mK0ItPYP1/y+vCFebfxoEyAz0++1AIwJ5CMr+Fk3nDmg==}
 
@@ -1003,6 +1013,14 @@ packages:
   detect-libc@2.1.2:
     resolution: {integrity: sha512-Btj2BOOO83o3WyH59e8MgXsxEQVcarkUOpEYrubB0urwnN10yQ364rsiByU11nZlqWYZm05i/of7io4mzihBtQ==}
     engines: {node: '>=8'}
+
+  diff2html@3.4.56:
+    resolution: {integrity: sha512-u9gfn+BlbHcyO7vItCIC4z49LJDUt31tODzOfAuJ5R1E7IdlRL6KjugcB9zOpejD+XiR+dDZbsnHSQ3g6A/u8A==}
+    engines: {node: '>=12'}
+
+  diff@8.0.4:
+    resolution: {integrity: sha512-DPi0FmjiSU5EvQV0++GFDOJ9ASQUVFh5kD+OzOnYdi7n3Wpm9hWWGfB/O2blfHcMVTL5WkQXSnRiK9makhrcnw==}
+    engines: {node: '>=0.3.1'}
 
   drizzle-kit@0.31.10:
     resolution: {integrity: sha512-7OZcmQUrdGI+DUNNsKBn1aW8qSoKuTH7d0mYgSP8bAzdFzKoovxEFnoGQp2dVs82EOJeYycqRtciopszwUf8bw==}
@@ -1185,6 +1203,10 @@ packages:
     resolution: {integrity: sha512-F/1DnUGPopORZi0ni+CvrCgHQ5FyEAHRLSApuYWMmrbSwoN2Mn/7k+Gl38gJnR7yyDZk6WLXwiGod1JOWNDKGw==}
     hasBin: true
 
+  highlight.js@11.11.1:
+    resolution: {integrity: sha512-Xwwo44whKBVCYoliBQwaPvtd/2tYFkRQtXDWj1nackaV2JPXx3L0+Jvd8/qCJ2p+ML0/XVkJ2q+Mr+UVdpJK5w==}
+    engines: {node: '>=12.0.0'}
+
   hono@4.12.9:
     resolution: {integrity: sha512-wy3T8Zm2bsEvxKZM5w21VdHDDcwVS1yUFFY6i8UobSsKfFceT7TOwhbhfKsDyx7tYQlmRM5FLpIuYvNFyjctiA==}
     engines: {node: '>=16.9.0'}
@@ -1324,6 +1346,10 @@ packages:
   node-abi@3.89.0:
     resolution: {integrity: sha512-6u9UwL0HlAl21+agMN3YAMXcKByMqwGx+pq+P76vii5f7hTPtKDp08/H9py6DY+cfDw7kQNTGEj/rly3IgbNQA==}
     engines: {node: '>=10'}
+
+  nopt@1.0.10:
+    resolution: {integrity: sha512-NWmpvLSqUrgrAC9HCuxEvb+PSloHpqVu+FqcO4eeF2h5qYRhA7ev6KvelyQAKtegUbC6RypJnlEOhd8vloNKYg==}
+    hasBin: true
 
   obug@2.1.1:
     resolution: {integrity: sha512-uTqF9MuPraAQ+IsnPf366RG4cP9RtUi7MLO1N3KEc+wb0a6yKpeL0lmk2IB1jY5KHPAlTc6T/JRdC/YqxHNwkQ==}
@@ -1912,6 +1938,10 @@ snapshots:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.5.5
 
+  '@profoundlogic/hogan@3.0.4':
+    dependencies:
+      nopt: 1.0.10
+
   '@rollup/rollup-android-arm-eabi@4.60.0':
     optional: true
 
@@ -2222,6 +2252,8 @@ snapshots:
 
   '@vue/shared@3.5.30': {}
 
+  abbrev@1.1.1: {}
+
   alien-signals@1.0.13: {}
 
   ansi-regex@5.0.1: {}
@@ -2311,6 +2343,15 @@ snapshots:
   deep-extend@0.6.0: {}
 
   detect-libc@2.1.2: {}
+
+  diff2html@3.4.56:
+    dependencies:
+      '@profoundlogic/hogan': 3.0.4
+      diff: 8.0.4
+    optionalDependencies:
+      highlight.js: 11.11.1
+
+  diff@8.0.4: {}
 
   drizzle-kit@0.31.10:
     dependencies:
@@ -2459,6 +2500,9 @@ snapshots:
 
   he@1.2.0: {}
 
+  highlight.js@11.11.1:
+    optional: true
+
   hono@4.12.9: {}
 
   hookable@5.5.3: {}
@@ -2551,6 +2595,10 @@ snapshots:
   node-abi@3.89.0:
     dependencies:
       semver: 7.7.4
+
+  nopt@1.0.10:
+    dependencies:
+      abbrev: 1.1.1
 
   obug@2.1.1: {}
 

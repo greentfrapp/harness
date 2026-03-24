@@ -19,6 +19,7 @@
     "better-sqlite3": "^11.9.1",
     "drizzle-orm": "^0.39.3",
     "hono": "^4.7.6",
+    "diff2html": "^3.4.48",
     "jsonc-parser": "^3.3.1"
   },
   "pnpm": {

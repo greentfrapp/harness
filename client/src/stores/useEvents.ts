@@ -51,6 +51,18 @@ export const useEvents = defineStore('events', () => {
       inbox.onTaskUpdated(task);
     });
 
+    // Forward task:progress events as custom DOM events for SessionStream
+    eventSource.addEventListener('task:progress', (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        window.dispatchEvent(
+          new CustomEvent('task:progress', { detail: data }),
+        );
+      } catch {
+        // Ignore parse errors
+      }
+    });
+
     eventSource.onerror = () => {
       connected.value = false;
       eventSource?.close();

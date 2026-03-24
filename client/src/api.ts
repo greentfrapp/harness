@@ -46,6 +46,18 @@ export const api = {
       }),
     cancel: (id: string) =>
       request<Task>(`/api/tasks/${id}`, { method: 'DELETE' }),
+    approve: (id: string) =>
+      request<Task & { blocked_dependents?: Array<{ id: string; prompt: string; status: string }> }>(
+        `/api/tasks/${id}/approve`,
+        { method: 'POST' },
+      ),
+    reject: (id: string) =>
+      request<Task & { blocked_dependents?: Array<{ id: string; prompt: string; status: string }> }>(
+        `/api/tasks/${id}/reject`,
+        { method: 'POST' },
+      ),
+    diff: (id: string) =>
+      request<{ diff: string; stats: string }>(`/api/tasks/${id}/diff`),
     events: (id: string) =>
       request<TaskEvent[]>(`/api/tasks/${id}/events`),
   },

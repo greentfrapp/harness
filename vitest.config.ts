@@ -9,5 +9,7 @@ export default defineConfig({
   },
   test: {
     include: ['server/**/*.test.ts'],
+    fileParallelism: false,
+    teardownTimeout: 3000,
   },
 });

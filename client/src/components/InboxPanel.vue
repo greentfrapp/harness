@@ -4,12 +4,15 @@ import TaskCard from './TaskCard.vue';
 
 const inbox = useInbox();
 
-async function handleApprove(id: string) {
-  await inbox.updateTaskStatus(id, 'approved');
+async function handleApprove(_id: string) {
+  // Approve is now handled by TaskDetail directly via api.tasks.approve()
+  // The SSE event will update the store. We just need to refetch to be safe.
+  await inbox.fetchItems();
 }
 
-async function handleReject(id: string) {
-  await inbox.updateTaskStatus(id, 'rejected');
+async function handleReject(_id: string) {
+  // Reject is now handled by TaskDetail directly via api.tasks.reject()
+  await inbox.fetchItems();
 }
 
 async function handleDefer(id: string) {

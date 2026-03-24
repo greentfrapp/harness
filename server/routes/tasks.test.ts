@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createTaskRoutes } from './tasks.ts';
 import type { AppContext } from '../context.ts';
-import type { Task, TaskEvent } from '../../shared/types.ts';
+import type { Task, TaskEvent, Project } from '../../shared/types.ts';
 
 function makeTask(overrides: Partial<Task> = {}): Task {
   return {
@@ -27,6 +27,18 @@ function makeTask(overrides: Partial<Task> = {}): Task {
   };
 }
 
+function makeProject(): Project {
+  return {
+    id: 'proj-1',
+    name: 'test',
+    repo_path: '/tmp/test',
+    target_branch: 'main',
+    worktree_limit: 3,
+    conversation_limit: 5,
+    created_at: 1000,
+  };
+}
+
 function makeContext(): AppContext {
   return {
     config: {
@@ -40,9 +52,11 @@ function makeContext(): AppContext {
     },
     sseManager: { addClient: vi.fn(), removeClient: vi.fn(), broadcast: vi.fn(), clientCount: 0 } as any,
     taskQueue: { recomputePositions: vi.fn(), getNextReady: vi.fn(), dispatch: vi.fn(), isDependencySatisfied: vi.fn() } as any,
+    pool: { killAgent: vi.fn().mockReturnValue(false), hasAgent: vi.fn().mockReturnValue(false) } as any,
+    dispatcher: { tryDispatch: vi.fn() } as any,
     queries: {
       getAllProjects: vi.fn().mockReturnValue([{ id: 'proj-1', name: 'test' }]),
-      getProjectById: vi.fn(),
+      getProjectById: vi.fn().mockReturnValue(makeProject()),
       seedProjects: vi.fn(),
       createTask: vi.fn().mockImplementation((input) => makeTask({ ...input, id: 'new-1' })),
       getTaskById: vi.fn(),
@@ -106,7 +120,7 @@ describe('Task Routes', () => {
   });
 
   describe('POST /tasks', () => {
-    it('creates a task and returns 201', async () => {
+    it('creates a task, broadcasts, and triggers dispatch', async () => {
       const created = makeTask({ id: 'new-1' });
       (ctx.queries.createTask as any).mockReturnValue(created);
       (ctx.queries.getTaskById as any).mockReturnValue(created);
@@ -122,6 +136,7 @@ describe('Task Routes', () => {
       expect(body.id).toBe('new-1');
       expect(ctx.taskQueue.recomputePositions).toHaveBeenCalledWith('proj-1');
       expect(ctx.sseManager.broadcast).toHaveBeenCalledWith('task:created', created);
+      expect(ctx.dispatcher.tryDispatch).toHaveBeenCalled();
     });
 
     it('returns 400 when prompt is missing', async () => {
@@ -165,37 +180,82 @@ describe('Task Routes', () => {
 
       expect(ctx.sseManager.broadcast).toHaveBeenCalledWith('inbox:new', updated);
     });
-
-    it('returns 404 for unknown task', async () => {
-      (ctx.queries.getTaskById as any).mockReturnValue(undefined);
-      const res = await app.request('/tasks/nope', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: 'ready' }),
-      });
-      expect(res.status).toBe(404);
-    });
   });
 
-  describe('DELETE /tasks/:id', () => {
-    it('cancels task and broadcasts', async () => {
-      const existing = makeTask();
-      const cancelled = makeTask({ status: 'cancelled' });
+  describe('DELETE /tasks/:id (cancel)', () => {
+    it('kills agent, cancels task, broadcasts, and triggers dispatch', async () => {
+      const existing = makeTask({ status: 'in_progress' });
+      const cancelled = makeTask({ status: 'cancelled', worktree_path: null });
       (ctx.queries.getTaskById as any).mockReturnValue(existing);
       (ctx.queries.updateTask as any).mockReturnValue(cancelled);
 
       const res = await app.request('/tasks/task-1', { method: 'DELETE' });
 
       expect(res.status).toBe(200);
-      expect(ctx.queries.updateTask).toHaveBeenCalledWith('task-1', { status: 'cancelled' });
+      expect(ctx.pool.killAgent).toHaveBeenCalledWith('task-1');
       expect(ctx.queries.createTaskEvent).toHaveBeenCalledWith('task-1', 'cancelled', null);
-      expect(ctx.sseManager.broadcast).toHaveBeenCalledWith('task:updated', cancelled);
+      expect(ctx.dispatcher.tryDispatch).toHaveBeenCalled();
     });
 
     it('returns 404 for unknown task', async () => {
       (ctx.queries.getTaskById as any).mockReturnValue(undefined);
       const res = await app.request('/tasks/nope', { method: 'DELETE' });
       expect(res.status).toBe(404);
+    });
+  });
+
+  describe('POST /tasks/:id/approve', () => {
+    it('returns 404 for unknown task', async () => {
+      (ctx.queries.getTaskById as any).mockReturnValue(undefined);
+      const res = await app.request('/tasks/nope/approve', { method: 'POST' });
+      expect(res.status).toBe(404);
+    });
+
+    it('returns 400 for task not in approvable status', async () => {
+      (ctx.queries.getTaskById as any).mockReturnValue(makeTask({ status: 'queued' }));
+      const res = await app.request('/tasks/task-1/approve', { method: 'POST' });
+      expect(res.status).toBe(400);
+    });
+
+    it('approves a ready task without branch (discuss task)', async () => {
+      const task = makeTask({ status: 'ready', branch_name: null });
+      (ctx.queries.getTaskById as any).mockReturnValue(task);
+      (ctx.queries.updateTask as any).mockReturnValue(makeTask({ status: 'approved' }));
+
+      const res = await app.request('/tasks/task-1/approve', { method: 'POST' });
+      expect(res.status).toBe(200);
+      expect(ctx.queries.updateTask).toHaveBeenCalledWith(
+        'task-1',
+        expect.objectContaining({ status: 'approved' }),
+      );
+      expect(ctx.dispatcher.tryDispatch).toHaveBeenCalled();
+    });
+  });
+
+  describe('POST /tasks/:id/reject', () => {
+    it('rejects a ready task and reports blocked dependents', async () => {
+      const task = makeTask({ status: 'ready' });
+      const dependent = makeTask({ id: 'dep-1', depends_on: 'task-1', status: 'queued' });
+      (ctx.queries.getTaskById as any).mockReturnValue(task);
+      (ctx.queries.updateTask as any).mockReturnValue(makeTask({ status: 'rejected' }));
+      (ctx.queries.getTasksByStatus as any).mockReturnValue([dependent]);
+
+      const res = await app.request('/tasks/task-1/reject', { method: 'POST' });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.blocked_dependents).toHaveLength(1);
+      expect(body.blocked_dependents[0].id).toBe('dep-1');
+    });
+  });
+
+  describe('GET /tasks/:id/diff', () => {
+    it('returns empty diff for task without branch', async () => {
+      (ctx.queries.getTaskById as any).mockReturnValue(makeTask({ branch_name: null }));
+
+      const res = await app.request('/tasks/task-1/diff');
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.diff).toBe('');
     });
   });
 });
