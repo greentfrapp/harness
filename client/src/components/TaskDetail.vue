@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue';
 import type { Task, TaskEvent } from '@shared/types';
+import { marked } from 'marked';
 import { api } from '../api';
 import SessionStream from './SessionStream.vue';
 import DiffViewer from './DiffViewer.vue';
@@ -38,6 +39,11 @@ const showSessionStream = computed(() =>
 const showDiffViewer = computed(() =>
   props.context === 'inbox' && props.task.branch_name && (props.task.status === 'ready' || props.task.status === 'error'),
 );
+
+const renderedSummary = computed(() => {
+  if (!props.task.agent_summary) return '';
+  return marked.parse(props.task.agent_summary, { async: false }) as string;
+});
 
 async function handleApprove() {
   approving.value = true;
@@ -105,7 +111,7 @@ function formatTime(ts: number): string {
     <!-- Agent summary -->
     <div v-if="task.agent_summary">
       <h4 class="text-xs font-medium text-gray-500 uppercase mb-1">Agent Summary</h4>
-      <p class="text-sm text-gray-300 whitespace-pre-wrap">{{ task.agent_summary }}</p>
+      <div class="text-sm text-gray-300 prose prose-invert prose-sm max-w-none" v-html="renderedSummary"></div>
     </div>
 
     <!-- Diff viewer for completed Do tasks in inbox -->
