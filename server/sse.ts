@@ -1,9 +1,9 @@
+import type { SSEStreamingApi } from 'hono/streaming';
 import type { SSEEventType } from '../shared/types.ts';
 
 interface SSEClient {
   id: string;
-  write: (data: string) => void;
-  close: () => void;
+  stream: SSEStreamingApi;
 }
 
 export class SSEManager {
@@ -18,13 +18,12 @@ export class SSEManager {
   }
 
   broadcast(event: SSEEventType, data: unknown): void {
-    const message = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
     for (const [id, client] of this.clients) {
-      try {
-        client.write(message);
-      } catch {
-        this.clients.delete(id);
-      }
+      client.stream
+        .writeSSE({ event, data: JSON.stringify(data) })
+        .catch(() => {
+          this.clients.delete(id);
+        });
     }
   }
 

@@ -2,7 +2,12 @@ import { describe, it, expect, vi } from 'vitest';
 import { SSEManager } from './sse.ts';
 
 function makeClient(id = 'c1') {
-  return { id, write: vi.fn(), close: vi.fn() };
+  return {
+    id,
+    stream: {
+      writeSSE: vi.fn().mockResolvedValue(undefined),
+    } as any,
+  };
 }
 
 describe('SSEManager', () => {
@@ -38,24 +43,25 @@ describe('SSEManager', () => {
 
     mgr.broadcast('task:created', { id: '123' });
 
-    const expected = 'event: task:created\ndata: {"id":"123"}\n\n';
-    expect(c1.write).toHaveBeenCalledWith(expected);
-    expect(c2.write).toHaveBeenCalledWith(expected);
+    const expected = { event: 'task:created', data: '{"id":"123"}' };
+    expect(c1.stream.writeSSE).toHaveBeenCalledWith(expected);
+    expect(c2.stream.writeSSE).toHaveBeenCalledWith(expected);
   });
 
-  it('silently removes clients that throw on write', () => {
+  it('silently removes clients that reject on write', async () => {
     const mgr = new SSEManager();
     const bad = makeClient('bad');
-    bad.write.mockImplementation(() => {
-      throw new Error('closed');
-    });
+    bad.stream.writeSSE.mockRejectedValue(new Error('closed'));
     const good = makeClient('good');
     mgr.addClient(bad);
     mgr.addClient(good);
 
     mgr.broadcast('task:updated', { id: '1' });
 
+    // Wait for the rejected promise to be handled
+    await new Promise((r) => setTimeout(r, 0));
+
     expect(mgr.clientCount).toBe(1);
-    expect(good.write).toHaveBeenCalled();
+    expect(good.stream.writeSSE).toHaveBeenCalled();
   });
 });

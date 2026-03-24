@@ -9,7 +9,7 @@ import * as git from './git.ts';
 
 /**
  * Claude Code JSON output message types (subset we care about).
- * CC --json emits one JSON object per line on stdout.
+ * CC --output-format stream-json --verbose emits one JSON object per line on stdout.
  */
 interface CCMessage {
   type: string; // 'assistant', 'tool_use', 'tool_result', 'result', 'system', etc.
@@ -401,7 +401,7 @@ function buildCCArgs(opts: {
   resumeSessionId: string | null;
   usesWorktree: boolean;
 }): string[] {
-  const args: string[] = ['--json'];
+  const args: string[] = ['--output-format', 'stream-json', '--verbose'];
 
   if (opts.resumeSessionId) {
     args.push('--resume', opts.resumeSessionId);

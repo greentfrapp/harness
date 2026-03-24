@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { serve } from '@hono/node-server';
 import { serveStatic } from '@hono/node-server/serve-static';
+import { streamSSE } from 'hono/streaming';
 import { ensureHarnessDir, loadConfig, validateConfig } from './config.ts';
 import { initDatabase } from './db/index.ts';
 import * as queries from './db/queries.ts';
@@ -100,54 +101,32 @@ const app = new Hono();
 app.get('/events', (c) => {
   const clientId = crypto.randomUUID();
 
-  return new Response(
-    new ReadableStream({
-      start(controller) {
-        const encoder = new TextEncoder();
-        const client = {
-          id: clientId,
-          write: (data: string) => {
-            try {
-              controller.enqueue(encoder.encode(data));
-            } catch {
-              sseManager.removeClient(clientId);
-            }
-          },
-          close: () => controller.close(),
-        };
+  return streamSSE(c, async (stream) => {
+    sseManager.addClient({ id: clientId, stream });
 
-        sseManager.addClient(client);
+    // Send initial connection event
+    await stream.writeSSE({
+      event: 'connected',
+      data: JSON.stringify({ clientId }),
+    });
 
-        // Send initial connection event
-        client.write(
-          `event: connected\ndata: ${JSON.stringify({ clientId })}\n\n`,
-        );
+    // Keep-alive every 30s
+    const keepAlive = setInterval(() => {
+      stream.writeSSE({ data: '' }).catch(() => {
+        clearInterval(keepAlive);
+        sseManager.removeClient(clientId);
+      });
+    }, 30_000);
 
-        // Keep-alive every 30s
-        const keepAlive = setInterval(() => {
-          try {
-            client.write(': keepalive\n\n');
-          } catch {
-            clearInterval(keepAlive);
-            sseManager.removeClient(clientId);
-          }
-        }, 30_000);
-
-        // Cleanup on abort
-        c.req.raw.signal.addEventListener('abort', () => {
-          clearInterval(keepAlive);
-          sseManager.removeClient(clientId);
-        });
-      },
-    }),
-    {
-      headers: {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        Connection: 'keep-alive',
-      },
-    },
-  );
+    // Keep stream open until client disconnects
+    await new Promise<void>((resolve) => {
+      c.req.raw.signal.addEventListener('abort', () => {
+        clearInterval(keepAlive);
+        sseManager.removeClient(clientId);
+        resolve();
+      });
+    });
+  });
 });
 
 // API routes
