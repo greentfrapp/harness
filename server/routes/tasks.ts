@@ -207,6 +207,49 @@ export function createTaskRoutes(ctx: AppContext) {
     return c.json(updated);
   });
 
+  /** Bulk delete: permanently remove tasks by status. */
+  app.delete('/tasks', (c) => {
+    const statusParam = c.req.query('status');
+    if (!statusParam) {
+      return c.json({ error: 'status query parameter is required' }, 400);
+    }
+    const statuses = statusParam.split(',').filter(Boolean);
+
+    // Get tasks before deletion for cleanup
+    const tasksToDelete = queries.getTasksByStatus(statuses);
+
+    // Kill running agents and clean up worktrees/branches
+    let hadRunning = false;
+    for (const task of tasksToDelete) {
+      if (task.status === 'in_progress' || task.status === 'retrying') {
+        pool.killAgent(task.id);
+        hadRunning = true;
+      }
+      const project = queries.getProjectById(task.project_id);
+      if (project) {
+        if (task.worktree_path) {
+          git.removeWorktree(project.repo_path, task.worktree_path);
+        }
+        if (task.branch_name) {
+          git.deleteBranch(project.repo_path, task.branch_name);
+        }
+      }
+    }
+
+    const deleted = queries.deleteTasksByStatus(statuses);
+    const ids = deleted.map((t) => t.id);
+
+    for (const id of ids) {
+      sseManager.broadcast('task:removed', { id });
+    }
+
+    if (hadRunning) {
+      dispatcher.tryDispatch();
+    }
+
+    return c.json({ deleted: ids });
+  });
+
   /** Cancel: kill agent, destroy worktree + branch, mark cancelled. */
   app.delete('/tasks/:id', (c) => {
     const id = c.req.param('id');

@@ -207,14 +207,25 @@ export class AgentPool {
     };
     this.agents.set(task.id, agent);
 
-    // Store PID immediately
-    const sessionData: AgentSessionData = {
-      session_id: opts.resumeSessionId,
-      pid: proc.pid!,
-    };
-    this.deps.updateTask(task.id, {
-      agent_session_data: JSON.stringify(sessionData),
+    // Handle spawn errors (e.g. claude not found in PATH)
+    proc.on('error', (err) => {
+      this.agents.delete(task.id);
+      this.pushToError(
+        task.id,
+        `Failed to spawn claude: ${err.message}. Is the claude CLI installed and in PATH?`,
+      );
     });
+
+    // Store PID immediately (pid is undefined if spawn fails)
+    if (proc.pid) {
+      const sessionData: AgentSessionData = {
+        session_id: opts.resumeSessionId,
+        pid: proc.pid,
+      };
+      this.deps.updateTask(task.id, {
+        agent_session_data: JSON.stringify(sessionData),
+      });
+    }
 
     // Collect stdout for parsing
     let buffer = '';
