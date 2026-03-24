@@ -19,6 +19,7 @@ const CREATE_TABLES_SQL = `
     target_branch TEXT NOT NULL DEFAULT 'main',
     worktree_limit INTEGER NOT NULL DEFAULT 3,
     conversation_limit INTEGER NOT NULL DEFAULT 5,
+    auto_push INTEGER NOT NULL DEFAULT 0,
     created_at INTEGER NOT NULL
   );
 
@@ -73,6 +74,12 @@ export function initDatabase(): void {
   sqlite.pragma('journal_mode = WAL');
   sqlite.pragma('foreign_keys = ON');
   sqlite.exec(CREATE_TABLES_SQL);
+  // Migrations for existing databases
+  try {
+    sqlite.exec('ALTER TABLE projects ADD COLUMN auto_push INTEGER NOT NULL DEFAULT 0');
+  } catch {
+    // Column already exists
+  }
   db = drizzle(sqlite, { schema });
 }
 
