@@ -58,6 +58,11 @@ export const useInbox = defineStore('inbox', () => {
     items.value = items.value.filter((t) => t.id !== id);
   }
 
+  async function deleteTask(id: string): Promise<void> {
+    await api.tasks.delete(id);
+    items.value = items.value.filter((t) => t.id !== id);
+  }
+
   async function clearAll() {
     await api.tasks.clearAll([...INBOX_STATUSES]);
     items.value = [];
@@ -71,6 +76,7 @@ export const useInbox = defineStore('inbox', () => {
     hasPermissionRequests,
     fetchItems,
     updateTaskStatus,
+    deleteTask,
     onInboxNew,
     onTaskUpdated,
     onTaskRemoved,

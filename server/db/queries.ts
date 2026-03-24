@@ -160,6 +160,22 @@ export function getTaskEvents(taskId: string): TaskEvent[] {
     .all() as TaskEvent[];
 }
 
+export function deleteTaskById(id: string): Task | undefined {
+  const db = getDb();
+  const task = db
+    .select()
+    .from(tasks)
+    .where(eq(tasks.id, id))
+    .get() as Task | undefined;
+  if (!task) return undefined;
+  db.delete(subtaskProposals)
+    .where(eq(subtaskProposals.task_id, id))
+    .run();
+  db.delete(taskEvents).where(eq(taskEvents.task_id, id)).run();
+  db.delete(tasks).where(eq(tasks.id, id)).run();
+  return task;
+}
+
 export function deleteTasksByStatus(statusList: string[]): Task[] {
   const db = getDb();
   const toDelete = db

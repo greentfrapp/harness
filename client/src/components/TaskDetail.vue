@@ -16,12 +16,15 @@ const emit = defineEmits<{
   approve: [id: string];
   reject: [id: string];
   defer: [id: string];
+  delete: [id: string];
 }>();
 
 const events = ref<TaskEvent[]>([]);
 const approving = ref(false);
 const rejecting = ref(false);
 const actionError = ref('');
+const deleting = ref(false);
+const confirmingDelete = ref(false);
 const blockedDependents = ref<Array<{ id: string; prompt: string; status: string }>>([]);
 
 onMounted(async () => {
@@ -74,6 +77,25 @@ async function handleReject() {
     actionError.value = e instanceof Error ? e.message : 'Reject failed';
   } finally {
     rejecting.value = false;
+  }
+}
+
+const isTerminal = computed(() =>
+  ['approved', 'rejected', 'cancelled'].includes(props.task.status),
+);
+
+async function handleDelete() {
+  if (!confirmingDelete.value) {
+    confirmingDelete.value = true;
+    return;
+  }
+  deleting.value = true;
+  actionError.value = '';
+  try {
+    emit('delete', props.task.id);
+  } finally {
+    deleting.value = false;
+    confirmingDelete.value = false;
   }
 }
 
@@ -190,6 +212,27 @@ function formatTime(ts: number): string {
           @click="emit('defer', task.id)"
         >
           Defer
+        </button>
+      </template>
+      <!-- Delete button for terminal-state tasks -->
+      <template v-if="isTerminal">
+        <span class="flex-1" />
+        <button
+          class="px-3 py-1.5 text-xs font-medium rounded transition-colors disabled:opacity-50"
+          :class="confirmingDelete
+            ? 'bg-red-800 hover:bg-red-700 text-red-200'
+            : 'bg-gray-800 hover:bg-gray-700 text-gray-500 hover:text-red-400'"
+          :disabled="deleting"
+          @click="handleDelete"
+        >
+          {{ deleting ? 'Deleting...' : confirmingDelete ? 'Confirm Delete' : 'Delete' }}
+        </button>
+        <button
+          v-if="confirmingDelete && !deleting"
+          class="px-3 py-1.5 text-xs font-medium rounded bg-gray-800 hover:bg-gray-700 text-gray-500 transition-colors"
+          @click="confirmingDelete = false"
+        >
+          Cancel
         </button>
       </template>
     </div>

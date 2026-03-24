@@ -25,6 +25,10 @@ async function handleReject(_id: string) {
 async function handleDefer(id: string) {
   await inbox.updateTaskStatus(id, 'deferred');
 }
+
+async function handleDelete(id: string) {
+  await inbox.deleteTask(id);
+}
 </script>
 
 <template>
@@ -70,6 +74,7 @@ async function handleDefer(id: string) {
         @approve="handleApprove"
         @reject="handleReject"
         @defer="handleDefer"
+        @delete="handleDelete"
       />
       <div
         v-if="!inbox.sortedItems.length && !inbox.loading"

@@ -55,6 +55,8 @@ export const api = {
       }),
     cancel: (id: string) =>
       request<Task>(`/api/tasks/${id}`, { method: 'DELETE' }),
+    delete: (id: string) =>
+      request<{ deleted: string }>(`/api/tasks/${id}?permanent=true`, { method: 'DELETE' }),
     clearAll: (statuses: string[]) =>
       request<{ deleted: string[] }>(`/api/tasks?status=${statuses.join(',')}`, { method: 'DELETE' }),
     approve: (id: string) =>
