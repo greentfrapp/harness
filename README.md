@@ -1,7 +1,5 @@
 # Harness
 
-**Version: 0.1.0**
-
 Harness is a local web application that coordinates coding agents around a task queue. Developers dispatch tasks to agents via an outbox, then batch-review completed results in an inbox — optimizing for flow during review rather than during writing.
 
 ## Quick Start

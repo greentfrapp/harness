@@ -59,7 +59,7 @@ const DEFAULT_CONFIG_TEMPLATE = `{
   // Task types — "do" and "discuss" are built-in, custom types can be added
   "task_types": {
     "do": {
-      "prompt_template": "You are working on a task in a git worktree branch. Make your changes and commit them when done.\\n\\nTask:\\n{user_prompt}",
+      "prompt_template": "You are working on a task in a git worktree branch. Make your changes and commit them when done. Use conventional commits style for commit messages (e.g. feat:, fix:, refactor:, docs:).\\n\\nTask:\\n{user_prompt}",
       "needs_worktree": true,
       "default_priority": "normal"
     },
