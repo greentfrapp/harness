@@ -103,13 +103,15 @@ export function mergeBranch(
 ): void {
   const tmpDir = path.join(os.tmpdir(), `harness-merge-${Date.now()}`);
   try {
+    // Use --detach so this works even when targetBranch is already checked out
     execSync(
-      `git worktree add ${JSON.stringify(tmpDir)} ${targetBranch}`,
+      `git worktree add --detach ${JSON.stringify(tmpDir)} ${targetBranch}`,
       { cwd: repoPath, stdio: 'pipe' },
     );
     // Sync with remote before merging
     try {
-      execSync('git pull --ff-only', { cwd: tmpDir, stdio: 'pipe' });
+      execSync(`git fetch origin ${targetBranch}`, { cwd: tmpDir, stdio: 'pipe' });
+      execSync(`git merge origin/${targetBranch} --ff-only`, { cwd: tmpDir, stdio: 'pipe' });
     } catch {
       // No remote configured or diverged — proceed with local state
     }
@@ -117,8 +119,13 @@ export function mergeBranch(
       `git merge ${branchName} --no-ff -m "Merge ${branchName}"`,
       { cwd: tmpDir, stdio: 'pipe' },
     );
+    // Advance the target branch ref to the merge commit
+    execSync(
+      `git update-ref refs/heads/${targetBranch} HEAD`,
+      { cwd: tmpDir, stdio: 'pipe' },
+    );
     if (opts?.push) {
-      execSync('git push', { cwd: tmpDir, stdio: 'pipe' });
+      execSync(`git push origin ${targetBranch}`, { cwd: repoPath, stdio: 'pipe' });
     }
   } finally {
     try {

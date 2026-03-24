@@ -4,6 +4,7 @@ import type { CreateTaskInput, UpdateTaskInput } from '../../shared/types.ts';
 import { OUTBOX_STATUSES, INBOX_STATUSES } from '../../shared/types.ts';
 import * as git from '../git.ts';
 import { readConfigRaw, saveConfigRaw, CONFIG_PATH } from '../config.ts';
+import { serverLog } from '../log.ts';
 
 export function createTaskRoutes(ctx: AppContext) {
   const app = new Hono();
@@ -143,18 +144,23 @@ export function createTaskRoutes(ctx: AppContext) {
     // Merge branch if it exists
     if (task.branch_name) {
       try {
+        serverLog.info(`Merging ${task.branch_name} into ${project.target_branch}`, id);
         git.mergeBranch(project.repo_path, project.target_branch, task.branch_name, {
           push: !!project.auto_push,
         });
+        serverLog.info(`Merge successful${project.auto_push ? ' (pushed to remote)' : ''}`, id);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
+        serverLog.error(`Merge failed: ${msg}`, id);
         return c.json({ error: `Merge failed: ${msg}` }, 409);
       }
 
       // Clean up worktree and branch
       if (task.worktree_path) {
+        serverLog.info(`Removing worktree ${task.worktree_path}`, id);
         git.removeWorktree(project.repo_path, task.worktree_path);
       }
+      serverLog.info(`Deleting branch ${task.branch_name}`, id);
       git.deleteBranch(project.repo_path, task.branch_name);
     }
 
@@ -163,7 +169,8 @@ export function createTaskRoutes(ctx: AppContext) {
       worktree_path: null,
     });
     queries.createTaskEvent(id, 'approved', null);
-    sseManager.broadcast('task:updated', updated);
+    serverLog.info(`Task approved`, id);
+    sseManager.broadcast('task:removed', { id });
 
     // Trigger dispatch — dependencies may now be satisfied
     dispatcher.tryDispatch();
@@ -185,9 +192,11 @@ export function createTaskRoutes(ctx: AppContext) {
 
     // Clean up worktree and branch
     if (task.worktree_path) {
+      serverLog.info(`Removing worktree ${task.worktree_path}`, id);
       git.removeWorktree(project.repo_path, task.worktree_path);
     }
     if (task.branch_name) {
+      serverLog.info(`Deleting branch ${task.branch_name}`, id);
       git.deleteBranch(project.repo_path, task.branch_name);
     }
 
@@ -196,7 +205,8 @@ export function createTaskRoutes(ctx: AppContext) {
       worktree_path: null,
     });
     queries.createTaskEvent(id, 'rejected', null);
-    sseManager.broadcast('task:updated', updated);
+    serverLog.info(`Task rejected`, id);
+    sseManager.broadcast('task:removed', { id });
 
     // Check for dependent tasks
     const dependents = getDependentTasks(queries, id);

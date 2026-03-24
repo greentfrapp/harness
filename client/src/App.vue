@@ -9,10 +9,13 @@ import OutboxPanel from './components/OutboxPanel.vue';
 import InboxPanel from './components/InboxPanel.vue';
 import NewTaskModal from './components/NewTaskModal.vue';
 import SettingsModal from './components/SettingsModal.vue';
+import ActivityLog from './components/ActivityLog.vue';
+import { useLog } from './stores/useLog';
 
 const events = useEvents();
 const outbox = useOutbox();
 const inbox = useInbox();
+const log = useLog();
 
 const showNewTask = ref(false);
 const showSettings = ref(false);
@@ -59,6 +62,7 @@ onMounted(async () => {
   await Promise.all([
     outbox.fetchTasks(),
     inbox.fetchItems(),
+    log.fetchRecent(),
     refreshConfig(),
   ]);
 });
@@ -107,6 +111,9 @@ onUnmounted(() => {
       <OutboxPanel />
       <InboxPanel />
     </main>
+
+    <!-- Activity Log -->
+    <ActivityLog />
 
     <!-- New Task Modal -->
     <NewTaskModal

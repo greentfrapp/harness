@@ -13,6 +13,7 @@ import { Dispatcher } from './dispatcher.ts';
 import { recoverStaleTasks } from './recovery.ts';
 import { createTaskRoutes } from './routes/tasks.ts';
 import type { AppContext } from './context.ts';
+import { serverLog } from './log.ts';
 
 // --- Startup ---
 
@@ -44,6 +45,11 @@ if (recovered > 0) {
 // --- Dependency wiring ---
 
 const sseManager = new SSEManager();
+
+// Stream server log entries to connected clients
+serverLog.onEntry((entry) => {
+  sseManager.broadcast('log:entry', entry);
+});
 
 const taskQueue = new TaskQueue({
   getTaskById: queries.getTaskById,
@@ -131,6 +137,11 @@ app.get('/events', (c) => {
       });
     });
   });
+});
+
+// Log endpoint
+app.get('/api/log', (c) => {
+  return c.json(serverLog.getRecent());
 });
 
 // API routes
