@@ -5,26 +5,9 @@ import type {
   HarnessConfig,
   SSEEventType,
 } from '../shared/types.ts';
+import type { AgentAdapter, AgentProgressEvent } from './agents/index.ts';
+import type { AgentRegistry } from './agents/index.ts';
 import * as git from './git.ts';
-
-/**
- * Claude Code JSON output message types (subset we care about).
- * CC --output-format stream-json --verbose emits one JSON object per line on stdout.
- */
-interface CCMessage {
-  type: string; // 'assistant', 'tool_use', 'tool_result', 'result', 'system', etc.
-  session_id?: string;
-  message?: string;
-  content?: unknown;
-  tool?: string;
-  subtype?: string;
-  cost_usd?: number;
-  duration_ms?: number;
-  duration_api_ms?: number;
-  is_error?: boolean;
-  result?: string;
-  [key: string]: unknown;
-}
 
 export interface AgentSessionData {
   session_id: string | null;
@@ -41,6 +24,7 @@ interface ActiveAgent {
 
 interface PoolDeps {
   config: HarnessConfig;
+  agentRegistry: AgentRegistry;
   getProjectById: (id: string) => Project | undefined;
   updateTask: (
     id: string,
@@ -76,7 +60,7 @@ export class AgentPool {
     return this.agents.has(taskId);
   }
 
-  /** Dispatch a Do task: create worktree, spawn CC, handle lifecycle. */
+  /** Dispatch a Do task: create worktree, spawn agent, handle lifecycle. */
   async dispatchDoTask(task: Task, project: Project): Promise<void> {
     const branchName = git.makeBranchName(task.id, task.prompt);
     const wtPath = git.worktreePath(project.repo_path, branchName);
@@ -102,7 +86,7 @@ export class AgentPool {
       ? taskTypeConfig.prompt_template.replace('{user_prompt}', task.prompt)
       : task.prompt;
 
-    // Spawn Claude Code
+    // Spawn agent
     this.spawnAgent(task, project, {
       cwd: wtPath,
       systemPrompt,
@@ -185,14 +169,26 @@ export class AgentPool {
       resumeSessionId: string | null;
     },
   ): void {
-    const args = buildCCArgs({
-      prompt: task.prompt,
-      systemPrompt: opts.systemPrompt,
-      resumeSessionId: opts.resumeSessionId,
-      usesWorktree: opts.usesWorktree,
-    });
+    const adapter = this.deps.agentRegistry.getOrDefault(task.agent_type);
 
-    const proc = spawn('claude', args, {
+    const args = opts.resumeSessionId
+      ? adapter.buildResumeArgs({
+          prompt: task.prompt,
+          sessionId: opts.resumeSessionId,
+        })
+      : adapter.buildArgs({
+          prompt: task.prompt,
+          systemPrompt: opts.systemPrompt,
+          usesWorktree: opts.usesWorktree,
+        });
+
+    // Append extra_args from config if defined
+    const agentConfig = this.deps.config.agents?.[task.agent_type];
+    if (agentConfig?.extra_args) {
+      args.push(...agentConfig.extra_args);
+    }
+
+    const proc = spawn(adapter.executable, args, {
       cwd: opts.cwd,
       stdio: ['pipe', 'pipe', 'pipe'],
       env: { ...process.env },
@@ -207,12 +203,12 @@ export class AgentPool {
     };
     this.agents.set(task.id, agent);
 
-    // Handle spawn errors (e.g. claude not found in PATH)
+    // Handle spawn errors (e.g. CLI not found in PATH)
     proc.on('error', (err) => {
       this.agents.delete(task.id);
       this.pushToError(
         task.id,
-        `Failed to spawn claude: ${err.message}. Is the claude CLI installed and in PATH?`,
+        `Failed to spawn ${adapter.executable}: ${err.message}. Is the ${adapter.executable} CLI installed and in PATH?`,
       );
     });
 
@@ -238,28 +234,27 @@ export class AgentPool {
 
       for (const line of lines) {
         if (!line.trim()) continue;
-        try {
-          const msg: CCMessage = JSON.parse(line);
-          this.handleCCMessage(task.id, agent, msg);
 
-          // Capture session_id
-          if (msg.session_id && !agent.sessionId) {
-            agent.sessionId = msg.session_id;
-            const updated: AgentSessionData = {
-              session_id: msg.session_id,
-              pid: proc.pid!,
-            };
-            this.deps.updateTask(task.id, {
-              agent_session_data: JSON.stringify(updated),
-            });
-          }
+        const event = adapter.parseMessage(line);
+        if (!event) continue;
 
-          // Capture agent summary from result message
-          if (msg.type === 'result' && typeof msg.result === 'string') {
-            lastSummary = msg.result;
-          }
-        } catch {
-          // Not valid JSON, skip
+        this.handleAgentEvent(task.id, agent, event);
+
+        // Capture session_id
+        if (event.sessionId && !agent.sessionId) {
+          agent.sessionId = event.sessionId;
+          const updated: AgentSessionData = {
+            session_id: event.sessionId,
+            pid: proc.pid!,
+          };
+          this.deps.updateTask(task.id, {
+            agent_session_data: JSON.stringify(updated),
+          });
+        }
+
+        // Capture agent summary from result event
+        if (event.type === 'result' && event.summary) {
+          lastSummary = event.summary;
         }
       }
     });
@@ -291,15 +286,15 @@ export class AgentPool {
     });
   }
 
-  private handleCCMessage(
+  private handleAgentEvent(
     taskId: string,
-    agent: ActiveAgent,
-    msg: CCMessage,
+    _agent: ActiveAgent,
+    event: AgentProgressEvent,
   ): void {
     // Forward as progress event
     this.deps.broadcast('task:progress', {
       task_id: taskId,
-      message: msg,
+      message: event.raw,
     });
   }
 
@@ -392,34 +387,6 @@ export class AgentPool {
     this.deps.broadcast('inbox:new', updated);
     this.deps.onTaskCompleted(taskId);
   }
-}
-
-/** Build Claude Code CLI arguments. */
-function buildCCArgs(opts: {
-  prompt: string;
-  systemPrompt: string | null;
-  resumeSessionId: string | null;
-  usesWorktree: boolean;
-}): string[] {
-  const args: string[] = ['--output-format', 'stream-json', '--verbose'];
-
-  if (opts.resumeSessionId) {
-    args.push('--resume', opts.resumeSessionId);
-  }
-
-  if (opts.systemPrompt) {
-    args.push('--system-prompt', opts.systemPrompt);
-  }
-
-  if (!opts.usesWorktree) {
-    // Discuss tasks / plan mode — read-only
-    args.push('--allowedTools', 'Read,Glob,Grep,WebSearch,WebFetch');
-  }
-
-  // The prompt is passed via -p for non-interactive mode
-  args.push('-p', opts.prompt);
-
-  return args;
 }
 
 function parseSessionData(raw: string | null): AgentSessionData | null {

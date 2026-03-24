@@ -32,10 +32,16 @@ export const INBOX_STATUSES: TaskStatus[] = [
 ];
 
 // Config types
+export interface AgentConfig {
+  adapter: string; // references AgentAdapter.id
+  extra_args?: string[]; // appended to adapter's buildArgs output
+}
+
 export interface TaskTypeConfig {
   prompt_template: string;
   needs_worktree: boolean;
   default_priority: Priority;
+  agent?: string; // key into HarnessConfig.agents
 }
 
 export interface ProjectConfig {
@@ -49,6 +55,7 @@ export interface ProjectConfig {
 export interface HarnessConfig {
   worktree_limit: number;
   conversation_limit: number;
+  agents?: Record<string, AgentConfig>;
   task_types: Record<string, TaskTypeConfig>;
   projects: ProjectConfig[];
 }
@@ -112,6 +119,7 @@ export interface CreateTaskInput {
   prompt: string;
   priority?: Priority;
   depends_on?: string | null;
+  agent_type?: string;
 }
 
 export interface UpdateTaskInput {
