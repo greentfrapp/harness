@@ -14,6 +14,10 @@ async function handleClear() {
 async function handleCancel(id: string) {
   await outbox.cancelTask(id);
 }
+
+async function handleDelete(id: string) {
+  await outbox.deleteTask(id);
+}
 </script>
 
 <template>
@@ -52,6 +56,7 @@ async function handleCancel(id: string) {
         :task="task"
         context="outbox"
         @cancel="handleCancel"
+        @delete="handleDelete"
       />
       <div
         v-if="!outbox.sortedTasks.length && !outbox.loading"

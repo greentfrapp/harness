@@ -38,6 +38,11 @@ export const useOutbox = defineStore('outbox', () => {
     await api.tasks.cancel(id);
   }
 
+  async function deleteTask(id: string): Promise<void> {
+    await api.tasks.delete(id);
+    tasks.value = tasks.value.filter((t) => t.id !== id);
+  }
+
   // SSE handlers
   function onTaskCreated(task: Task) {
     upsertOrRemove(tasks, task, OUTBOX_STATUSES);
@@ -63,6 +68,7 @@ export const useOutbox = defineStore('outbox', () => {
     fetchTasks,
     createTask,
     cancelTask,
+    deleteTask,
     onTaskCreated,
     onTaskUpdated,
     onTaskRemoved,

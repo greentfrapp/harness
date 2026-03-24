@@ -13,6 +13,7 @@ const emit = defineEmits<{
   approve: [id: string];
   reject: [id: string];
   defer: [id: string];
+  delete: [id: string];
 }>();
 
 const expanded = ref(false);
@@ -130,6 +131,7 @@ const truncatedPrompt = computed(() => {
       @approve="emit('approve', $event)"
       @reject="emit('reject', $event)"
       @defer="emit('defer', $event)"
+      @delete="emit('delete', $event)"
     />
   </div>
 </template>

@@ -273,13 +273,48 @@ export function createTaskRoutes(ctx: AppContext) {
     return c.json({ deleted: ids });
   });
 
-  /** Cancel: kill agent, destroy worktree + branch, mark cancelled. */
+  /** Cancel or permanently delete a task.
+   *  - Terminal states (approved, rejected, cancelled): permanently deletes from DB.
+   *  - Active states: cancels the task (kills agent, cleans up, marks cancelled).
+   *  - Use ?permanent=true to force permanent deletion regardless of state.
+   */
   app.delete('/tasks/:id', (c) => {
     const id = c.req.param('id');
     const existing = queries.getTaskById(id);
     if (!existing) return c.json({ error: 'Task not found' }, 404);
 
-    // Kill running agent if any
+    const terminalStatuses = ['approved', 'rejected', 'cancelled'];
+    const forcePermanent = c.req.query('permanent') === 'true';
+    const isTerminal = terminalStatuses.includes(existing.status);
+
+    if (isTerminal || forcePermanent) {
+      // Kill running agent if any (relevant when force-deleting active tasks)
+      pool.killAgent(id);
+
+      // Clean up worktree and branch
+      const project = queries.getProjectById(existing.project_id);
+      if (project) {
+        if (existing.worktree_path) {
+          git.removeWorktree(project.repo_path, existing.worktree_path);
+        }
+        if (existing.branch_name) {
+          git.deleteBranch(project.repo_path, existing.branch_name);
+        }
+      }
+
+      // Permanently delete from database
+      queries.deleteTaskById(id);
+      serverLog.info(`Task permanently deleted`, id);
+      sseManager.broadcast('task:removed', { id });
+
+      if (!isTerminal) {
+        dispatcher.tryDispatch();
+      }
+
+      return c.json({ deleted: id });
+    }
+
+    // Active task — cancel (soft delete)
     pool.killAgent(id);
 
     // Clean up worktree and branch
