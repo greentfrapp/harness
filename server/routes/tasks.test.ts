@@ -3,6 +3,16 @@ import { createTaskRoutes } from './tasks.ts';
 import type { AppContext } from '../context.ts';
 import type { Task, TaskEvent, Project } from '../../shared/types.ts';
 
+vi.mock('../config.ts', () => ({
+  readConfigRaw: vi.fn(),
+  saveConfigRaw: vi.fn(),
+  CONFIG_PATH: '/mock/.harness/config.jsonc',
+}));
+
+import { readConfigRaw, saveConfigRaw } from '../config.ts';
+const mockReadConfigRaw = readConfigRaw as ReturnType<typeof vi.fn>;
+const mockSaveConfigRaw = saveConfigRaw as ReturnType<typeof vi.fn>;
+
 function makeTask(overrides: Partial<Task> = {}): Task {
   return {
     id: 'task-1',
@@ -95,6 +105,77 @@ describe('Task Routes', () => {
       const body = await res.json();
       expect(body.task_types).toHaveProperty('do');
       expect(body.task_types).toHaveProperty('discuss');
+    });
+  });
+
+  describe('GET /config/raw', () => {
+    it('returns raw config content and path', async () => {
+      mockReadConfigRaw.mockReturnValue('{ "worktree_limit": 3 }');
+
+      const res = await app.request('/config/raw');
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.content).toBe('{ "worktree_limit": 3 }');
+      expect(body.path).toBe('/mock/.harness/config.jsonc');
+    });
+  });
+
+  describe('PUT /config/raw', () => {
+    it('saves valid config and re-seeds projects', async () => {
+      const newConfig = { worktree_limit: 5, conversation_limit: 5, task_types: {}, projects: [] };
+      mockSaveConfigRaw.mockReturnValue({ ok: true, config: newConfig });
+
+      const res = await app.request('/config/raw', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: '{ "worktree_limit": 5 }' }),
+      });
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.ok).toBe(true);
+      expect(mockSaveConfigRaw).toHaveBeenCalledWith('{ "worktree_limit": 5 }');
+      expect(ctx.queries.seedProjects).toHaveBeenCalled();
+    });
+
+    it('returns 400 when content is missing', async () => {
+      const res = await app.request('/config/raw', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toMatch(/content/i);
+    });
+
+    it('returns 400 for invalid JSONC syntax', async () => {
+      mockSaveConfigRaw.mockReturnValue({ ok: false, error: 'Invalid JSONC syntax at offset 5' });
+
+      const res = await app.request('/config/raw', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: '{ bad' }),
+      });
+
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toMatch(/JSONC syntax/);
+    });
+
+    it('returns 400 for invalid project config', async () => {
+      mockSaveConfigRaw.mockReturnValue({ ok: false, error: 'Project "foo": repo_path does not exist' });
+
+      const res = await app.request('/config/raw', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: '{ "projects": [{"name":"foo"}] }' }),
+      });
+
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toMatch(/repo_path/);
     });
   });
 
