@@ -53,8 +53,8 @@ function makeDeps() {
   const pool = {
     activeWorktreeCount: 0,
     activeConversationCount: 0,
-    dispatchDoTask: vi.fn().mockResolvedValue(undefined),
-    dispatchDiscussTask: vi.fn().mockResolvedValue(undefined),
+    dispatchDoTask: vi.fn().mockImplementation(async () => { pool.activeWorktreeCount++; }),
+    dispatchDiscussTask: vi.fn().mockImplementation(async () => { pool.activeConversationCount++; }),
   };
 
   return {
@@ -134,9 +134,9 @@ describe('Dispatcher', () => {
 
   it('marks task as error when dispatch fails', async () => {
     const task = makeTask();
-    deps.getQueuedTasks.mockReturnValue([task]);
+    deps.getQueuedTasks.mockReturnValueOnce([task]);
     deps.getTaskById.mockReturnValue(task);
-    deps.pool.dispatchDoTask.mockRejectedValue(new Error('spawn failed'));
+    deps.pool.dispatchDoTask.mockRejectedValueOnce(new Error('spawn failed'));
 
     await dispatcher.tryDispatch();
 
@@ -148,7 +148,7 @@ describe('Dispatcher', () => {
 
   it('marks task as error when project not found', async () => {
     const task = makeTask();
-    deps.getQueuedTasks.mockReturnValue([task]);
+    deps.getQueuedTasks.mockReturnValueOnce([task]);
     deps.getProjectById.mockReturnValue(undefined);
 
     await dispatcher.tryDispatch();
