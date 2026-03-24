@@ -119,10 +119,15 @@ export function mergeBranch(
       `git merge ${branchName} --no-ff -m "Merge ${branchName}"`,
       { cwd: tmpDir, stdio: 'pipe' },
     );
-    // Advance the target branch ref to the merge commit
+    // Capture the merge commit hash from the detached worktree
+    const mergeCommit = execSync('git rev-parse HEAD', {
+      cwd: tmpDir,
+      encoding: 'utf-8',
+    }).trim();
+    // Update the target branch ref in the main repo (not the worktree)
     execSync(
-      `git update-ref refs/heads/${targetBranch} HEAD`,
-      { cwd: tmpDir, stdio: 'pipe' },
+      `git update-ref refs/heads/${targetBranch} ${mergeCommit}`,
+      { cwd: repoPath, stdio: 'pipe' },
     );
     if (opts?.push) {
       execSync(`git push origin ${targetBranch}`, { cwd: repoPath, stdio: 'pipe' });
