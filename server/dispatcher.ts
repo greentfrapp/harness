@@ -28,6 +28,7 @@ interface DispatcherDeps {
 export class Dispatcher {
   private deps: DispatcherDeps;
   private dispatching = false;
+  private pendingDispatch = false;
 
   constructor(deps: DispatcherDeps) {
     this.deps = deps;
@@ -35,13 +36,19 @@ export class Dispatcher {
 
   /** Check the queue and dispatch tasks if slots are available. */
   async tryDispatch(): Promise<void> {
-    // Prevent concurrent dispatch runs
-    if (this.dispatching) return;
+    // If already dispatching, flag a re-run so we don't miss queued tasks
+    if (this.dispatching) {
+      this.pendingDispatch = true;
+      return;
+    }
     this.dispatching = true;
 
     try {
-      await this.dispatchDoTasks();
-      await this.dispatchDiscussTasks();
+      do {
+        this.pendingDispatch = false;
+        await this.dispatchDoTasks();
+        await this.dispatchDiscussTasks();
+      } while (this.pendingDispatch);
     } finally {
       this.dispatching = false;
     }
