@@ -373,6 +373,7 @@ tasks (
   prompt        TEXT NOT NULL,          -- user's original prompt (+ revise feedback appended)
   priority      TEXT DEFAULT 'normal',  -- 'urgent' | 'normal' | 'low'
   depends_on    TEXT REFERENCES tasks(id),  -- nullable, user-declared dependency
+  parent_task_id TEXT,                      -- nullable, links follow-up tasks to their parent (lineage only, not a dependency)
   agent_type    TEXT DEFAULT 'claude-code',  -- which agent adapter to use
   agent_session_data TEXT,              -- agent-specific session state (JSON, nullable until dispatched)
   worktree_path TEXT,                   -- absolute path (nullable, worktree types only)
@@ -421,6 +422,7 @@ subtask_proposals (
 - **Agent-agnostic fields**: `agent_type` identifies which adapter to use. `agent_session_data` is a JSON blob each adapter interprets (CC stores a session ID, Codex might store a thread ID, etc.).
 - **`subtask_proposals` as a separate table**: Clean separation from the task lifecycle. Links back to both the source Discuss task and the spawned Do task (if approved).
 - **Diff storage**: Only the summary (files changed, line counts) is stored in SQLite. The full diff is read from the git worktree on demand.
+- **`parent_task_id` for lineage**: Follow-up tasks link to their parent via `parent_task_id` (separate from `depends_on`). This is purely for provenance/UI display — not a dispatch dependency. When a parent is deleted/rejected/cancelled, `clearParentReferences()` nulls out both `depends_on` and `parent_task_id` on children.
 - **Custom types**: The `type` column accepts any string, not just 'do'/'discuss'. Task type definitions (including whether a worktree is needed) live in `config.jsonc`.
 
 ---
@@ -696,10 +698,10 @@ harness/
 - [ ] Store proposals in `subtask_proposals` table, link to source Discuss task and spawned Do task
 
 **Revise flow**
-- [ ] Revise action on inbox Do tasks: user adds feedback text
-- [ ] `--resume` with stored session ID in full mode (not plan mode), append feedback to prompt
-- [ ] Task returns to outbox with status `in_progress`, preserving worktree and branch
-- [ ] Log `task_event` with `event_type = 'revised'` and feedback in `data`
+- [x] Revise action on inbox Do tasks: user adds feedback text — *`POST /tasks/:id/revise` endpoint, purple "Revise" button in `TaskDetail.vue`*
+- [x] `--resume` with stored session ID in full mode (not plan mode), feedback replaces prompt — *`agent_session_data` preserved; pool.ts:92-101 detects session ID and spawns with `--resume`*
+- [x] Task returns to outbox with status `queued`, preserving worktree and branch — *changed from `in_progress` to `queued` so dispatcher handles it normally*
+- [x] Log `task_event` with `event_type = 'revised'` and feedback in `data`
 
 **Defer**
 - [x] Defer action on inbox items: set status to `deferred`, move to bottom of inbox
@@ -707,7 +709,7 @@ harness/
 - [x] User can un-defer (restore to `ready`) — *via `PATCH /api/tasks/:id`*
 
 **Cancel cascading**
-- [ ] On cancel: check for dependent tasks (other tasks with `depends_on` pointing to cancelled task)
+- [x] On cancel/reject/delete: clear `depends_on` and `parent_task_id` on children — *`clearParentReferences()` in `queries.ts`, called from reject, cancel, and all delete paths*
 - [ ] Show confirmation dialog listing all tasks in cascade chain
 - [ ] Confirm cascade: cancel all dependents recursively
 - [ ] Move to inbox: send dependents to inbox for individual review/editing
@@ -726,7 +728,9 @@ harness/
 
 These features were implemented during development but weren't tracked in the original phase plan:
 
-- **Follow-up flow**: `POST /tasks/:id/follow-up` creates a continuation task with the parent's session ID, enabling conversation continuity. This is an alternative to the designed "Revise" flow — it creates a *new* task rather than moving the original back to outbox.
+- **Revise flow**: `POST /tasks/:id/revise` returns a `ready` or `error` task to the outbox with new feedback, preserving `agent_session_data`, `worktree_path`, and `branch_name`. The agent resumes via `--resume` in the same worktree with full conversation context. This is the primary pre-approval feedback mechanism.
+- **Follow-up flow**: `POST /tasks/:id/follow-up` creates a continuation task from an `approved` parent, carrying forward the session ID for `--resume` in a fresh worktree. Uses `parent_task_id` for lineage (not `depends_on`). Guarded against concurrent follow-ups on the same parent (409).
+- **Orphan cleanup**: `clearParentReferences()` nulls out `depends_on` and `parent_task_id` on children when a parent task is rejected, cancelled, or deleted — preventing orphaned tasks from being blocked forever on unsatisfiable dependencies.
 - **Fix flow**: `POST /tasks/:id/fix` re-queues a task with `[MERGE CONFLICT FIX]` context prepended to the prompt, cleaning up the old worktree/branch. Used when merge fails on approve.
 - **Bulk operations**: `POST /tasks/bulk-delete` (delete by IDs) and `DELETE /tasks?status=...` (delete by status filter) with multi-select UI in `InboxPanel.vue`.
 - **Activity log**: `ActivityLog.vue` + `useLog.ts` + `server/log.ts` — server-side activity log streamed via SSE `log:entry` events, capped at 200 entries.
@@ -751,15 +755,15 @@ These features were implemented during development but weren't tracked in the or
 - **Conversational mode**: Any task (not just Discuss) can transition into a conversation via `--resume`. Capped at 5 concurrent sessions to bound API cost. Allows quick Q&A on Do task results without formal revision.
 - **Error handling**: Retry via `--resume` with history preservation, max 3 retries, then push to inbox with error for user decision.
 - **Worktree lifecycle**: Fresh worktrees created per Do task, destroyed after approval/rejection/cancellation. No reuse — reliability over marginal speed. Discuss tasks don't use worktrees.
-- **Revise behavior**: Uses `--resume` with stored session ID to continue the prior Claude Code session. Preserves worktree branch and all prior work. Completed (approved) tasks cannot be revised.
+- **Revise behavior**: Two mechanisms depending on task state. **Pre-approval** (Revise): `POST /tasks/:id/revise` returns the same task to the outbox with `queued` status, preserving worktree, branch, and session data. The agent resumes via `--resume` in the same worktree. **Post-approval** (Follow-up): `POST /tasks/:id/follow-up` creates a new task with the parent's session ID and a `parent_task_id` link, dispatching immediately with a fresh worktree from the updated target branch. Only one active follow-up per parent task is allowed.
 - **Session resumption**: All human-in-the-loop interactions (revise, conversational mode, retries) use `--resume`. Full conversation is replayed to the model. Claude Code has automatic context compaction for long conversations.
 - **Context accumulation**: Deferred to future work. Claude Code handles automatic compaction internally. If this proves insufficient, Harness can add explicit summarization later.
 - **Batch approve**: Dry-merge all branches against target branch first. Re-check after each sequential merge. Highlight conflicts before executing. Clean items proceed; conflicting items flagged.
 - **Dry merge timing**: Cheap operation (milliseconds). Re-run automatically whenever target branch updates.
 - **Target branch**: Configurable per-project in `config.json`. Defaults to the repo's default branch. All worktree branches are created from and merged back into this branch.
 - **No classifier in v1**: User selects task type (Do/Discuss) and priority manually. Removes the only external API dependency from the critical path, enabling fully offline operation.
-- **Cancel behavior**: Kills CC process, destroys worktree, deletes branch. Cascades to dependent tasks with user confirmation — user can confirm cascade or move dependents to inbox for individual review.
-- **Reject with dependents**: User is notified of blocked dependents. Options: cancel them, revise them (remove dependency), or leave them queued.
+- **Cancel behavior**: Kills CC process, destroys worktree, deletes branch. Children's `depends_on` and `parent_task_id` are nulled out via `clearParentReferences()`, unblocking them. Full cascade UI (confirmation dialog, recursive cancel) is not yet implemented.
+- **Reject with dependents**: User is notified of blocked dependents in the response. Children's `depends_on` and `parent_task_id` are nulled out automatically. Options: cancel them, revise them, or leave them queued (now unblocked).
 - **Live progress**: Outbox shows task status at summary level (state indicator, elapsed time). Clicking a task opens accordion detail with live CC session stream; expand button opens modal for more space.
 - **Subtask spawning**: JSON format with `title`, `prompt`, `priority`, `depends_on` fields. Max 3 format retries; fallback to raw text with manual task creation. User approves or dismisses each proposal.
 - **Claude Code permissions**: Tool permission requests surface as priority inbox items with red badge. User approves or denies. Agent continues or adapts accordingly.
