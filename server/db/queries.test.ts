@@ -63,7 +63,7 @@ describe('DB Queries', () => {
 
       expect(task.id).toBeDefined();
       expect(task.status).toBe('queued');
-      expect(task.priority).toBe('normal');
+      expect(task.priority).toBe('P2');
       expect(task.retry_count).toBe(0);
       expect(task.agent_type).toBe('claude-code');
     });
@@ -87,9 +87,9 @@ describe('DB Queries', () => {
         project_id: projectId,
         type: 'do',
         prompt: 'urgent work',
-        priority: 'urgent',
+        priority: 'P0',
       });
-      expect(task.priority).toBe('urgent');
+      expect(task.priority).toBe('P0');
     });
   });
 

@@ -159,9 +159,10 @@ export class Dispatcher {
 }
 
 const PRIORITY_ORDER: Record<string, number> = {
-  urgent: 0,
-  normal: 1,
-  low: 2,
+  P0: 0,
+  P1: 1,
+  P2: 2,
+  P3: 3,
 };
 
 function comparePriority(a: Task, b: Task): number {

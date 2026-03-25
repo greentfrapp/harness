@@ -26,7 +26,7 @@ Rules:
 - Structure your response as: (1) Problem statement, (2) Relevant code references, (3) Proposed approaches with tradeoffs.
 - If you identify concrete implementation tasks, propose them as subtasks using this JSON format:
 
-  {"subtasks": [{"title": "...", "prompt": "...", "priority": "normal", "depends_on": null}]}
+  {"subtasks": [{"title": "...", "prompt": "...", "priority": "P2", "depends_on": null}]}
 
 - Only propose subtasks when you have a clear, actionable recommendation. Not every discussion needs subtasks.
 
@@ -40,12 +40,12 @@ const DEFAULT_CONFIG: HarnessConfig = {
     do: {
       prompt_template: DEFAULT_DO_PROMPT,
       needs_worktree: true,
-      default_priority: 'normal',
+      default_priority: 'P2',
     },
     discuss: {
       prompt_template: DEFAULT_DISCUSS_PROMPT,
       needs_worktree: false,
-      default_priority: 'normal',
+      default_priority: 'P2',
     },
   },
   projects: [],
@@ -61,12 +61,12 @@ const DEFAULT_CONFIG_TEMPLATE = `{
     "do": {
       "prompt_template": "You are working on a task in a git worktree branch. Make your changes and commit them when done. Use conventional commits style for commit messages (e.g. feat:, fix:, refactor:, docs:).\\n\\nTask:\\n{user_prompt}",
       "needs_worktree": true,
-      "default_priority": "normal"
+      "default_priority": "P2"
     },
     "discuss": {
       "prompt_template": "You are in research/plan mode...\\n\\nTopic:\\n{user_prompt}",
       "needs_worktree": false,
-      "default_priority": "normal"
+      "default_priority": "P2"
     }
   },
 

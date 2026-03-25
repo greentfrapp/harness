@@ -240,10 +240,15 @@ function handleRetry(id: string) {
             follow-up
           </span>
           <span
-            v-if="task.priority === 'urgent'"
-            class="text-xs font-medium px-1.5 py-0.5 rounded bg-red-900 text-red-300"
+            class="text-xs font-medium px-1.5 py-0.5 rounded"
+            :class="{
+              'bg-red-900 text-red-300': task.priority === 'P0',
+              'bg-orange-900 text-orange-300': task.priority === 'P1',
+              'bg-gray-800 text-gray-400': task.priority === 'P2',
+              'bg-gray-800 text-gray-500': task.priority === 'P3',
+            }"
           >
-            urgent
+            {{ task.priority }}
           </span>
           <span class="text-xs text-gray-600 ml-auto">{{ elapsed }}</span>
         </div>

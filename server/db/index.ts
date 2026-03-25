@@ -29,7 +29,7 @@ const CREATE_TABLES_SQL = `
     type TEXT NOT NULL,
     status TEXT NOT NULL,
     prompt TEXT NOT NULL,
-    priority TEXT NOT NULL DEFAULT 'normal',
+    priority TEXT NOT NULL DEFAULT 'P2',
     depends_on TEXT REFERENCES tasks(id),
     parent_task_id TEXT,
     agent_type TEXT NOT NULL DEFAULT 'claude-code',
@@ -58,7 +58,7 @@ const CREATE_TABLES_SQL = `
     task_id TEXT NOT NULL REFERENCES tasks(id),
     title TEXT NOT NULL,
     prompt TEXT NOT NULL,
-    priority TEXT NOT NULL DEFAULT 'normal',
+    priority TEXT NOT NULL DEFAULT 'P2',
     depends_on_title TEXT,
     status TEXT NOT NULL DEFAULT 'pending',
     spawned_task_id TEXT REFERENCES tasks(id),
@@ -85,6 +85,29 @@ export function initDatabase(): void {
     sqlite.exec('ALTER TABLE tasks ADD COLUMN parent_task_id TEXT');
   } catch {
     // Column already exists
+  }
+  // Migrate old priority values to new P0-P3 format
+  try {
+    sqlite.exec(`
+      UPDATE tasks SET priority = CASE priority
+        WHEN 'urgent' THEN 'P0'
+        WHEN 'normal' THEN 'P2'
+        WHEN 'low' THEN 'P3'
+        ELSE priority
+      END
+      WHERE priority IN ('urgent', 'normal', 'low')
+    `);
+    sqlite.exec(`
+      UPDATE subtask_proposals SET priority = CASE priority
+        WHEN 'urgent' THEN 'P0'
+        WHEN 'normal' THEN 'P2'
+        WHEN 'low' THEN 'P3'
+        ELSE priority
+      END
+      WHERE priority IN ('urgent', 'normal', 'low')
+    `);
+  } catch {
+    // Migration already applied or tables empty
   }
   db = drizzle(sqlite, { schema });
 }

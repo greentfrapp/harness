@@ -9,7 +9,7 @@ function makeTask(overrides: Partial<Task> = {}): Task {
     type: 'do',
     status: 'queued',
     prompt: 'test',
-    priority: 'normal',
+    priority: 'P2',
     depends_on: null,
     agent_type: 'claude-code',
     agent_session_data: null,
@@ -43,8 +43,8 @@ const config: HarnessConfig = {
   worktree_limit: 3,
   conversation_limit: 5,
   task_types: {
-    do: { prompt_template: '...', needs_worktree: true, default_priority: 'normal' },
-    discuss: { prompt_template: '...', needs_worktree: false, default_priority: 'normal' },
+    do: { prompt_template: '...', needs_worktree: true, default_priority: 'P2' },
+    discuss: { prompt_template: '...', needs_worktree: false, default_priority: 'P2' },
   },
   projects: [],
 };

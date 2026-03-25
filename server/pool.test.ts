@@ -45,7 +45,7 @@ function makeTask(overrides: Partial<Task> = {}): Task {
     type: 'do',
     prompt: 'Fix the bug',
     status: 'in_progress',
-    priority: 'normal',
+    priority: 'P2',
     created_at: Date.now(),
     updated_at: Date.now(),
     agent_type: 'claude-code',

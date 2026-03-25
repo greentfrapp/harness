@@ -69,7 +69,7 @@ export function createTask(input: CreateTaskInput): Task {
     type: input.type,
     status: 'queued',
     prompt: input.prompt,
-    priority: input.priority ?? 'normal',
+    priority: input.priority ?? 'P2',
     depends_on: input.depends_on ?? null,
     agent_type: input.agent_type ?? 'claude-code',
     retry_count: 0,
