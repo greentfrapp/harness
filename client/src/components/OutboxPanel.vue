@@ -68,15 +68,43 @@ async function handleDelete(id: string) {
   <div class="flex flex-col h-full overflow-hidden">
     <div class="px-4 py-3 border-b border-gray-800 flex items-center justify-between">
       <div class="flex items-center gap-2">
-        <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wider">
-          Outbox
-        </h2>
-        <span
-          v-if="outbox.sortedTasks.length"
-          class="text-xs bg-gray-800 text-gray-400 px-2 py-0.5 rounded-full"
-        >
-          {{ outbox.sortedTasks.length }}
-        </span>
+        <template v-if="hasSelection">
+          <template v-if="confirmingBulkDelete">
+            <span class="text-xs text-gray-400">Delete {{ selectedCount }} task{{ selectedCount > 1 ? 's' : '' }}?</span>
+            <button
+              class="px-2 py-1 text-xs font-medium rounded bg-red-800 hover:bg-red-700 text-red-200 transition-colors disabled:opacity-50"
+              :disabled="bulkDeleting"
+              @click="handleBulkDelete()"
+            >
+              {{ bulkDeleting ? 'Deleting...' : 'Confirm' }}
+            </button>
+            <button
+              class="px-2 py-1 text-xs font-medium rounded bg-gray-800 hover:bg-gray-700 text-gray-400 transition-colors"
+              @click="cancelBulkDelete()"
+            >
+              Cancel
+            </button>
+          </template>
+          <template v-else>
+            <button
+              class="px-2 py-1 text-xs font-medium rounded bg-red-900 hover:bg-red-800 text-red-300 transition-colors"
+              @click="handleBulkDelete()"
+            >
+              Delete Selected
+            </button>
+          </template>
+        </template>
+        <template v-else>
+          <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wider">
+            Outbox
+          </h2>
+          <span
+            v-if="outbox.sortedTasks.length"
+            class="text-xs bg-gray-800 text-gray-400 px-2 py-0.5 rounded-full"
+          >
+            {{ outbox.sortedTasks.length }}
+          </span>
+        </template>
       </div>
       <div v-if="outbox.sortedTasks.length" class="flex items-center gap-2 text-xs">
         <template v-if="hasSelection">
@@ -109,37 +137,6 @@ async function handleDelete(id: string) {
           </button>
         </template>
       </div>
-    </div>
-
-    <!-- Bulk action bar -->
-    <div
-      v-if="hasSelection"
-      class="px-4 py-2 border-b border-gray-800 bg-gray-900/80 flex items-center gap-2"
-    >
-      <template v-if="confirmingBulkDelete">
-        <span class="text-xs text-gray-400">Delete {{ selectedCount }} task{{ selectedCount > 1 ? 's' : '' }}?</span>
-        <button
-          class="px-2 py-1 text-xs font-medium rounded bg-red-800 hover:bg-red-700 text-red-200 transition-colors disabled:opacity-50"
-          :disabled="bulkDeleting"
-          @click="handleBulkDelete()"
-        >
-          {{ bulkDeleting ? 'Deleting...' : 'Confirm' }}
-        </button>
-        <button
-          class="px-2 py-1 text-xs font-medium rounded bg-gray-800 hover:bg-gray-700 text-gray-400 transition-colors"
-          @click="cancelBulkDelete()"
-        >
-          Cancel
-        </button>
-      </template>
-      <template v-else>
-        <button
-          class="px-2 py-1 text-xs font-medium rounded bg-red-900 hover:bg-red-800 text-red-300 transition-colors"
-          @click="handleBulkDelete()"
-        >
-          Delete Selected
-        </button>
-      </template>
     </div>
 
     <div class="flex-1 overflow-y-auto p-3 space-y-2">
