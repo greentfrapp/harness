@@ -302,7 +302,7 @@ export function cleanupCheckoutBranches(repoPath: string): void {
       encoding: 'utf-8',
     });
     for (const line of output.split('\n')) {
-      const branch = line.trim();
+      const branch = line.trim().replace(/^\*\s*/, '');
       if (branch) {
         try {
           execSync(`git branch -D ${branch}`, { cwd: repoPath, stdio: 'pipe' });
