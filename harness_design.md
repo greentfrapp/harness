@@ -646,32 +646,7 @@ harness/
 
 **Verification**: Submit a Do task, watch it dispatch to CC, see live session stream in accordion. Task completes, diff appears in inbox. Approve merges to target branch. Reject discards. Cancel kills process. Server restart recovers stale tasks.
 
-### Phase 3: Batching + Merging
-
-**Inbox batcher**
-- [ ] `server/batcher.ts`: on task completion, compute directory-level grouping from actual diff data
-- [ ] Group inbox items touching the same directories into review batches (no transitive closure)
-- [ ] Assign batch IDs to grouped tasks, emit grouping info over SSE
-- [ ] Dependency-aware holding: if task B depends on unapproved task A, set B to `held`
-- [ ] On task A approval/rejection: release or re-evaluate held dependents
-
-**Merger**
-- [ ] `server/merger.ts`: dry-merge implementation (`git merge --no-commit --no-ff` in temp area)
-- [ ] Single-item dry merge: test branch against current target branch before approve
-- [ ] Batch dry merge: test all branches against target + each other's cumulative changes
-- [ ] Re-run dry merge automatically when target branch advances (after any approval)
-- [ ] Surface conflict results to frontend via SSE event
-
-**Frontend — batching + merge UX**
-- [ ] `InboxBatch.vue`: grouped review items with shared header ("3 tasks modified src/auth/")
-- [ ] Conflict indicators: visual flag on items with dry-merge conflicts
-- [ ] Batch approve button: approve all clean items in a group, flag conflicting items
-- [ ] Batch reject button: reject all items in a group
-- [ ] Merge conflict → auto-create Do task in outbox (with conflict context in prompt)
-
-**Verification**: Submit 3 Do tasks touching overlapping directories. Verify they're grouped in inbox. Batch approve — confirm sequential merge with re-check after each. Introduce a conflict — verify it's flagged before merge. Approve conflicting items — verify auto-created conflict-resolution task.
-
-### Phase 4: Conversation + Advanced Review
+### Phase 3: Conversation + Interactive Review
 
 **Conversational mode**
 - [ ] `ChatUI.vue`: chat interface component — message list, input field, send button
@@ -697,6 +672,17 @@ harness/
 - [ ] On user approve: create Do task in outbox with proposed title, prompt, priority, depends_on
 - [ ] Store proposals in `subtask_proposals` table, link to source Discuss task and spawned Do task
 
+**Task checkout (manual testing before accept)**
+- [ ] "Checkout" button on inbox Do tasks — lets the user load a task's changes into the relevant repo's working tree for manual testing before accepting
+- [ ] `POST /api/tasks/:id/checkout`: determines the task's repo (from its project config), merges the task's branch into a temporary branch (`harness/checkout-{task-id}`) based on the target branch, then checks it out in that repo
+- [ ] Per-repo checkout tracking: each repo can have at most one task checked out at a time — enforce server-side with a map of `repo_path → checked_out_task_id`; return 409 if the same repo already has a checkout active
+- [ ] Multiple repos can have independent checkouts simultaneously (e.g., task A checked out in repo-frontend, task B checked out in repo-backend)
+- [ ] UI shows a prominent "Checked Out" banner at the top of the inbox (or globally) listing all currently checked-out tasks and their repos, each with a "Return" button
+- [ ] `POST /api/tasks/:id/return`: checks the task's repo back to its target branch, deletes the temporary checkout branch, clears that repo's checkout state
+- [ ] Auto-return safety: if the user attempts to Accept/Reject/Checkout a task in a repo that already has a checkout active, prompt to return the existing checkout first
+- [ ] After returning, the user can Accept or Reject as normal — checkout does not modify the task's actual branch or status
+- [ ] SSE events `task:checked_out` and `task:returned` (include `repo_path` in payload) to keep all clients in sync
+
 **Revise flow**
 - [x] Revise action on inbox Do tasks: user adds feedback text — *`POST /tasks/:id/revise` endpoint, purple "Revise" button in `TaskDetail.vue`*
 - [x] `--resume` with stored session ID in full mode (not plan mode), feedback replaces prompt — *`agent_session_data` preserved; pool.ts:92-101 detects session ID and spawns with `--resume`*
@@ -707,6 +693,31 @@ harness/
 - [x] Defer action on inbox items: set status to `deferred`, move to bottom of inbox
 - [x] Deferred items remain visible but deprioritized — *sorted to bottom in `useInbox.ts` `sortedItems` computed*
 - [x] User can un-defer (restore to `ready`) — *via `PATCH /api/tasks/:id`*
+
+**Verification**: Open chat on a completed Do task — verify plan mode (read-only, no file changes). Create a Discuss task — verify research runs, chat opens in inbox, subtask proposals render. Approve a subtask — verify Do task appears in outbox. Checkout a Do task — verify branch is loaded in main repo, banner shows, other checkouts blocked. Return — verify main repo reverts to target branch. Revise a Do task — verify it returns to outbox with feedback.
+
+### Phase 4: Batching + Merging + Advanced Operations
+
+**Inbox batcher**
+- [ ] `server/batcher.ts`: on task completion, compute directory-level grouping from actual diff data
+- [ ] Group inbox items touching the same directories into review batches (no transitive closure)
+- [ ] Assign batch IDs to grouped tasks, emit grouping info over SSE
+- [ ] Dependency-aware holding: if task B depends on unapproved task A, set B to `held`
+- [ ] On task A approval/rejection: release or re-evaluate held dependents
+
+**Merger**
+- [ ] `server/merger.ts`: dry-merge implementation (`git merge --no-commit --no-ff` in temp area)
+- [ ] Single-item dry merge: test branch against current target branch before approve
+- [ ] Batch dry merge: test all branches against target + each other's cumulative changes
+- [ ] Re-run dry merge automatically when target branch advances (after any approval)
+- [ ] Surface conflict results to frontend via SSE event
+
+**Frontend — batching + merge UX**
+- [ ] `InboxBatch.vue`: grouped review items with shared header ("3 tasks modified src/auth/")
+- [ ] Conflict indicators: visual flag on items with dry-merge conflicts
+- [ ] Batch approve button: approve all clean items in a group, flag conflicting items
+- [ ] Batch reject button: reject all items in a group
+- [ ] Merge conflict → auto-create Do task in outbox (with conflict context in prompt)
 
 **Cancel cascading**
 - [x] On cancel/reject/delete: clear `depends_on` and `parent_task_id` on children — *`clearParentReferences()` in `queries.ts`, called from reject, cancel, and all delete paths*
@@ -722,7 +733,7 @@ harness/
 - [ ] Approve: send approval back to CC process stdin, agent continues
 - [ ] Deny: send denial, agent adapts
 
-**Verification**: Open chat on a completed Do task — verify plan mode (read-only, no file changes). Create a Discuss task — verify research runs, chat opens in inbox, subtask proposals render. Approve a subtask — verify Do task appears in outbox. Revise a Do task — verify it returns to outbox with feedback. Cancel a task with dependents — verify cascade warning. Permission request — verify red badge, approve/deny flow.
+**Verification**: Submit 3 Do tasks touching overlapping directories. Verify they're grouped in inbox. Batch approve — confirm sequential merge with re-check after each. Introduce a conflict — verify it's flagged before merge. Approve conflicting items — verify auto-created conflict-resolution task. Cancel a task with dependents — verify cascade warning. Permission request — verify red badge, approve/deny flow.
 
 ### Additional Implemented Features (not in original phases)
 
