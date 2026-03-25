@@ -234,6 +234,12 @@ function handleRetry(id: string) {
             Accepted
           </span>
           <span
+            v-if="task.parent_task_id"
+            class="text-xs font-medium px-1.5 py-0.5 rounded bg-blue-900 text-blue-300"
+          >
+            follow-up
+          </span>
+          <span
             v-if="task.priority === 'urgent'"
             class="text-xs font-medium px-1.5 py-0.5 rounded bg-red-900 text-red-300"
           >

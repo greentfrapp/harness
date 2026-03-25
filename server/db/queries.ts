@@ -160,6 +160,18 @@ export function getTaskEvents(taskId: string): TaskEvent[] {
     .all() as TaskEvent[];
 }
 
+export function clearParentReferences(parentId: string): void {
+  const db = getDb();
+  db.update(tasks)
+    .set({ depends_on: null, updated_at: Date.now() })
+    .where(eq(tasks.depends_on, parentId))
+    .run();
+  db.update(tasks)
+    .set({ parent_task_id: null, updated_at: Date.now() })
+    .where(eq(tasks.parent_task_id, parentId))
+    .run();
+}
+
 export function deleteTaskById(id: string): Task | undefined {
   const db = getDb();
   const task = db
@@ -168,6 +180,7 @@ export function deleteTaskById(id: string): Task | undefined {
     .where(eq(tasks.id, id))
     .get() as Task | undefined;
   if (!task) return undefined;
+  clearParentReferences(id);
   db.delete(subtaskProposals)
     .where(eq(subtaskProposals.task_id, id))
     .run();
@@ -184,6 +197,7 @@ export function deleteTasksByIds(ids: string[]): Task[] {
     .where(inArray(tasks.id, ids))
     .all() as Task[];
   if (!toDelete.length) return [];
+  for (const id of ids) clearParentReferences(id);
   db.delete(subtaskProposals)
     .where(inArray(subtaskProposals.task_id, ids))
     .run();
@@ -201,6 +215,7 @@ export function deleteTasksByStatus(statusList: string[]): Task[] {
     .all() as Task[];
   if (!toDelete.length) return [];
   const ids = toDelete.map((t) => t.id);
+  for (const id of ids) clearParentReferences(id);
   db.delete(subtaskProposals)
     .where(inArray(subtaskProposals.task_id, ids))
     .run();

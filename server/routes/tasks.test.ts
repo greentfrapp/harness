@@ -22,6 +22,7 @@ function makeTask(overrides: Partial<Task> = {}): Task {
     prompt: 'test task',
     priority: 'normal',
     depends_on: null,
+    parent_task_id: null,
     agent_type: 'claude-code',
     agent_session_data: null,
     worktree_path: null,
@@ -45,6 +46,7 @@ function makeProject(): Project {
     target_branch: 'main',
     worktree_limit: 3,
     conversation_limit: 5,
+    auto_push: false,
     created_at: 1000,
   };
 }
@@ -76,6 +78,7 @@ function makeContext(): AppContext {
       updateTask: vi.fn().mockImplementation((id, updates) => makeTask({ id, ...updates })),
       createTaskEvent: vi.fn(),
       getTaskEvents: vi.fn().mockReturnValue([]),
+      clearParentReferences: vi.fn(),
     } as any,
   };
 }
@@ -337,6 +340,155 @@ describe('Task Routes', () => {
       expect(res.status).toBe(200);
       const body = await res.json();
       expect(body.diff).toBe('');
+    });
+  });
+
+  describe('POST /tasks/:id/revise', () => {
+    it('revises a ready task preserving session data and worktree', async () => {
+      const task = makeTask({
+        status: 'ready',
+        agent_session_data: '{"session_id":"sess-1","pid":123}',
+        worktree_path: '/tmp/wt',
+        branch_name: 'harness/abc-test',
+      });
+      (ctx.queries.getTaskById as any).mockReturnValue(task);
+      (ctx.queries.updateTask as any).mockImplementation((id: string, updates: any) =>
+        makeTask({ id, ...updates }),
+      );
+
+      const res = await app.request('/tasks/task-1/revise', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: 'Fix the tests please' }),
+      });
+      expect(res.status).toBe(200);
+
+      // Should update with new prompt and queued status, but NOT clear session data/worktree
+      expect(ctx.queries.updateTask).toHaveBeenCalledWith('task-1', {
+        status: 'queued',
+        prompt: 'Fix the tests please',
+        error_message: null,
+        agent_summary: null,
+        diff_summary: null,
+      });
+      expect(ctx.queries.createTaskEvent).toHaveBeenCalledWith(
+        'task-1',
+        'revised',
+        expect.stringContaining('Fix the tests please'),
+      );
+      expect(ctx.sseManager.broadcast).toHaveBeenCalledWith('task:updated', expect.anything());
+      expect(ctx.dispatcher.tryDispatch).toHaveBeenCalled();
+    });
+
+    it('rejects revise on non-ready/error task', async () => {
+      (ctx.queries.getTaskById as any).mockReturnValue(makeTask({ status: 'approved' }));
+
+      const res = await app.request('/tasks/task-1/revise', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: 'test' }),
+      });
+      expect(res.status).toBe(400);
+    });
+
+    it('revises an error task', async () => {
+      const task = makeTask({
+        status: 'error',
+        agent_session_data: '{"session_id":"sess-1","pid":0}',
+        worktree_path: '/tmp/wt',
+        branch_name: 'harness/abc-test',
+        error_message: 'agent crashed',
+      });
+      (ctx.queries.getTaskById as any).mockReturnValue(task);
+      (ctx.queries.updateTask as any).mockImplementation((id: string, updates: any) =>
+        makeTask({ id, ...updates }),
+      );
+
+      const res = await app.request('/tasks/task-1/revise', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: 'Use pnpm not npm' }),
+      });
+      expect(res.status).toBe(200);
+    });
+  });
+
+  describe('POST /tasks/:id/follow-up', () => {
+    it('blocks concurrent follow-ups on the same parent', async () => {
+      const parent = makeTask({
+        id: 'parent-1',
+        status: 'approved',
+        agent_session_data: '{"session_id":"sess-1","pid":0}',
+      });
+      const existingFollowUp = makeTask({
+        id: 'followup-1',
+        parent_task_id: 'parent-1',
+        status: 'in_progress',
+      });
+      (ctx.queries.getTaskById as any).mockReturnValue(parent);
+      (ctx.queries.getTasksByStatus as any).mockReturnValue([existingFollowUp]);
+
+      const res = await app.request('/tasks/parent-1/follow-up', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: 'do more' }),
+      });
+      expect(res.status).toBe(409);
+      const body = await res.json();
+      expect(body.active_follow_up_id).toBe('followup-1');
+    });
+
+    it('creates follow-up with parent_task_id instead of depends_on', async () => {
+      const parent = makeTask({
+        id: 'parent-1',
+        status: 'approved',
+        agent_session_data: '{"session_id":"sess-1","pid":0}',
+      });
+      (ctx.queries.getTaskById as any)
+        .mockReturnValueOnce(parent)  // initial lookup
+        .mockReturnValue(makeTask({ id: 'new-1', parent_task_id: 'parent-1' }));  // after update
+      (ctx.queries.getTasksByStatus as any).mockReturnValue([]);  // no active follow-ups
+      (ctx.queries.createTask as any).mockReturnValue(makeTask({ id: 'new-1' }));
+
+      const res = await app.request('/tasks/parent-1/follow-up', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: 'add logging' }),
+      });
+      expect(res.status).toBe(201);
+
+      // Should NOT set depends_on
+      expect(ctx.queries.createTask).toHaveBeenCalledWith(
+        expect.not.objectContaining({ depends_on: 'parent-1' }),
+      );
+      // Should set parent_task_id via updateTask
+      expect(ctx.queries.updateTask).toHaveBeenCalledWith(
+        'new-1',
+        expect.objectContaining({ parent_task_id: 'parent-1' }),
+      );
+    });
+  });
+
+  describe('reject clears parent references', () => {
+    it('calls clearParentReferences on reject', async () => {
+      const task = makeTask({ status: 'ready' });
+      (ctx.queries.getTaskById as any).mockReturnValue(task);
+      (ctx.queries.updateTask as any).mockReturnValue(makeTask({ status: 'rejected' }));
+      (ctx.queries.getTasksByStatus as any).mockReturnValue([]);
+
+      await app.request('/tasks/task-1/reject', { method: 'POST' });
+      expect(ctx.queries.clearParentReferences).toHaveBeenCalledWith('task-1');
+    });
+  });
+
+  describe('cancel clears parent references', () => {
+    it('calls clearParentReferences on cancel', async () => {
+      const task = makeTask({ status: 'in_progress' });
+      (ctx.queries.getTaskById as any).mockReturnValue(task);
+      (ctx.queries.updateTask as any).mockReturnValue(makeTask({ status: 'cancelled' }));
+
+      await app.request('/tasks/task-1', { method: 'DELETE' });
+      expect(ctx.queries.clearParentReferences).toHaveBeenCalledWith('task-1');
     });
   });
 });
