@@ -174,6 +174,56 @@ Final message when the session completes. Contains summary, cost, and duration.
 }
 ```
 
+### Permission request (tool blocked)
+
+When `--permission-mode default` is active and a tool requires approval, the CLI does **not** emit a special permission event. Instead, the tool result is returned as an error. The wording varies by tool:
+
+**Format 1 — Bash and similar tools:**
+```json
+{
+  "type": "user",
+  "message": {
+    "role": "user",
+    "content": [
+      {
+        "type": "tool_result",
+        "content": "This command requires approval",
+        "is_error": true,
+        "tool_use_id": "toolu_01VEtj6LusjYDzCWYq7CnALj"
+      }
+    ]
+  },
+  "tool_use_result": "Error: This command requires approval",
+  "session_id": "...",
+  "uuid": "...",
+  "timestamp": "..."
+}
+```
+
+**Format 2 — WebSearch, WebFetch, and deferred tools:**
+```json
+{
+  "type": "user",
+  "message": {
+    "role": "user",
+    "content": [
+      {
+        "type": "tool_result",
+        "content": "Claude requested permissions to use WebSearch, but you haven't granted it yet.",
+        "is_error": true,
+        "tool_use_id": "toolu_014DxoQmHMKg4AUBY6eJAmZp"
+      }
+    ]
+  },
+  "tool_use_result": "Error: Claude requested permissions to use WebSearch, but you haven't granted it yet.",
+  "session_id": "...",
+  "uuid": "...",
+  "timestamp": "..."
+}
+```
+
+Harness detects both by checking `msg.type === 'user'` and `msg.tool_use_result` containing `"requires approval"` or `"haven't granted"`. The tool name can be extracted from the `"to use <Tool>"` pattern in format 2.
+
 ## Key Facts
 
 - **No top-level `tool_use` or `tool_result` messages** — these are always content blocks inside `assistant` and `user` messages respectively.

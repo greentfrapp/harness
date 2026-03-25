@@ -75,6 +75,55 @@ describe('ClaudeCodeAdapter', () => {
       expect(args[idx + 1]).toBe('Read,Glob,Grep,WebSearch,WebFetch');
       expect(args).not.toContain('--permission-mode');
     });
+
+    it('uses permissionMode from config when provided', () => {
+      const args = adapter.buildArgs({
+        prompt: 'test',
+        systemPrompt: null,
+        usesWorktree: true,
+        permissionMode: 'plan',
+      });
+      const idx = args.indexOf('--permission-mode');
+      expect(idx).toBeGreaterThan(-1);
+      expect(args[idx + 1]).toBe('plan');
+    });
+
+    it('permissionMode overrides default for non-worktree tasks', () => {
+      const args = adapter.buildArgs({
+        prompt: 'test',
+        systemPrompt: null,
+        usesWorktree: false,
+        permissionMode: 'bypassPermissions',
+      });
+      const idx = args.indexOf('--permission-mode');
+      expect(idx).toBeGreaterThan(-1);
+      expect(args[idx + 1]).toBe('bypassPermissions');
+      expect(args).not.toContain('--allowedTools');
+    });
+
+    it('appends --allowedTools for granted tools with non-bypass permission mode', () => {
+      const args = adapter.buildArgs({
+        prompt: 'test',
+        systemPrompt: null,
+        usesWorktree: true,
+        permissionMode: 'default',
+        allowedTools: ['Bash', 'Write'],
+      });
+      expect(args).toContain('--allowedTools');
+      const idx = args.lastIndexOf('--allowedTools');
+      expect(args[idx + 1]).toBe('Bash,Write');
+    });
+
+    it('skips --allowedTools when bypassPermissions is active', () => {
+      const args = adapter.buildArgs({
+        prompt: 'test',
+        systemPrompt: null,
+        usesWorktree: true,
+        allowedTools: ['Bash'],
+      });
+      // Default for worktree is bypassPermissions — allowedTools should be skipped
+      expect(args).not.toContain('--allowedTools');
+    });
   });
 
   describe('buildResumeArgs', () => {
@@ -124,6 +173,31 @@ describe('ClaudeCodeAdapter', () => {
       expect(args).toContain('--allowedTools');
       expect(args).not.toContain('--permission-mode');
     });
+
+    it('uses permissionMode from config when provided on resume', () => {
+      const args = adapter.buildResumeArgs({
+        prompt: 'continue',
+        sessionId: 'sess-123',
+        usesWorktree: true,
+        permissionMode: 'plan',
+      });
+      const idx = args.indexOf('--permission-mode');
+      expect(idx).toBeGreaterThan(-1);
+      expect(args[idx + 1]).toBe('plan');
+    });
+
+    it('appends --allowedTools for granted tools on resume', () => {
+      const args = adapter.buildResumeArgs({
+        prompt: 'continue',
+        sessionId: 'sess-123',
+        usesWorktree: true,
+        permissionMode: 'default',
+        allowedTools: ['Bash(curl:*)', 'WebSearch'],
+      });
+      const idx = args.lastIndexOf('--allowedTools');
+      expect(idx).toBeGreaterThan(-1);
+      expect(args[idx + 1]).toBe('Bash(curl:*),WebSearch');
+    });
   });
 
   describe('parseMessage', () => {
@@ -147,17 +221,45 @@ describe('ClaudeCodeAdapter', () => {
       expect(event!.costUsd).toBe(0.05);
     });
 
-    it('parses a permission_request message', () => {
+    it('parses a permission request from "requires approval" format', () => {
       const msg = JSON.stringify({
-        type: 'assistant',
-        subtype: 'permission_request',
+        type: 'user',
+        message: {
+          role: 'user',
+          content: [{
+            type: 'tool_result',
+            content: 'This command requires approval',
+            is_error: true,
+            tool_use_id: 'toolu_01VEtj6LusjYDzCWYq7CnALj',
+          }],
+        },
+        tool_use_result: 'Error: This command requires approval',
         session_id: 'sess-1',
-        tool: 'Write',
       });
       const event = adapter.parseMessage(msg);
       expect(event).not.toBeNull();
       expect(event!.type).toBe('permission_request');
-      expect(event!.toolName).toBe('Write');
+    });
+
+    it('parses a permission request from "haven\'t granted" format and extracts tool name', () => {
+      const msg = JSON.stringify({
+        type: 'user',
+        message: {
+          role: 'user',
+          content: [{
+            type: 'tool_result',
+            content: "Claude requested permissions to use WebSearch, but you haven't granted it yet.",
+            is_error: true,
+            tool_use_id: 'toolu_014DxoQmHMKg4AUBY6eJAmZp',
+          }],
+        },
+        tool_use_result: "Error: Claude requested permissions to use WebSearch, but you haven't granted it yet.",
+        session_id: 'sess-1',
+      });
+      const event = adapter.parseMessage(msg);
+      expect(event).not.toBeNull();
+      expect(event!.type).toBe('permission_request');
+      expect(event!.toolName).toBe('WebSearch');
     });
 
     it('parses an error message', () => {

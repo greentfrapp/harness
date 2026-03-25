@@ -496,6 +496,80 @@ describe('Task Routes', () => {
     });
   });
 
+  describe('POST /tasks/:id/grant-permission', () => {
+    it('rejects non-permission tasks', async () => {
+      (ctx.queries.getTaskById as any).mockReturnValue(makeTask({ status: 'ready' }));
+      const res = await app.request('/tasks/task-1/grant-permission', { method: 'POST' });
+      expect(res.status).toBe(400);
+    });
+
+    it('adds tool to granted_tools and re-queues', async () => {
+      const task = makeTask({
+        status: 'permission',
+        error_message: 'Tool requiring permission: WebSearch',
+        agent_session_data: JSON.stringify({
+          session_id: 'sess-1',
+          pid: 123,
+          pending_tool: 'WebSearch',
+          pending_tool_input: null,
+        }),
+      });
+      (ctx.queries.getTaskById as any).mockReturnValue(task);
+
+      const res = await app.request('/tasks/task-1/grant-permission', { method: 'POST' });
+      expect(res.status).toBe(200);
+
+      const updateCall = (ctx.queries.updateTask as any).mock.calls[0];
+      expect(updateCall[1].status).toBe('queued');
+      expect(updateCall[1].error_message).toBeNull();
+      const sessionData = JSON.parse(updateCall[1].agent_session_data);
+      expect(sessionData.granted_tools).toContain('WebSearch');
+      expect(sessionData.pending_tool).toBeUndefined();
+    });
+
+    it('uses command-level pattern for Bash grants', async () => {
+      const task = makeTask({
+        status: 'permission',
+        agent_session_data: JSON.stringify({
+          session_id: 'sess-1',
+          pid: 123,
+          pending_tool: 'Bash',
+          pending_tool_input: { command: 'curl example.com', description: 'Fetch example.com' },
+        }),
+      });
+      (ctx.queries.getTaskById as any).mockReturnValue(task);
+
+      const res = await app.request('/tasks/task-1/grant-permission', { method: 'POST' });
+      expect(res.status).toBe(200);
+
+      const updateCall = (ctx.queries.updateTask as any).mock.calls[0];
+      const sessionData = JSON.parse(updateCall[1].agent_session_data);
+      expect(sessionData.granted_tools).toContain('Bash(curl:*)');
+      expect(sessionData.granted_tools).not.toContain('Bash');
+    });
+
+    it('accumulates grants across multiple permission cycles', async () => {
+      const task = makeTask({
+        status: 'permission',
+        agent_session_data: JSON.stringify({
+          session_id: 'sess-1',
+          pid: 123,
+          granted_tools: ['Bash(curl:*)'],
+          pending_tool: 'WebSearch',
+          pending_tool_input: null,
+        }),
+      });
+      (ctx.queries.getTaskById as any).mockReturnValue(task);
+
+      const res = await app.request('/tasks/task-1/grant-permission', { method: 'POST' });
+      expect(res.status).toBe(200);
+
+      const updateCall = (ctx.queries.updateTask as any).mock.calls[0];
+      const sessionData = JSON.parse(updateCall[1].agent_session_data);
+      expect(sessionData.granted_tools).toEqual(['Bash(curl:*)', 'WebSearch']);
+    });
+  });
+
   describe('POST /tasks/:id/follow-up', () => {
     it('blocks concurrent follow-ups on the same parent', async () => {
       const parent = makeTask({

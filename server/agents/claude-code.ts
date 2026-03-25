@@ -27,6 +27,8 @@ export class ClaudeCodeAdapter implements AgentAdapter {
     prompt: string;
     systemPrompt: string | null;
     usesWorktree: boolean;
+    permissionMode?: string;
+    allowedTools?: string[];
   }): string[] {
     const args: string[] = ['--output-format', 'stream-json', '--verbose'];
 
@@ -34,13 +36,7 @@ export class ClaudeCodeAdapter implements AgentAdapter {
       args.push('--system-prompt', opts.systemPrompt);
     }
 
-    if (opts.usesWorktree) {
-      // Do tasks run in isolated worktrees — grant full permissions
-      args.push('--permission-mode', 'bypassPermissions');
-    } else {
-      // Discuss tasks / plan mode — read-only
-      args.push('--allowedTools', 'Read,Glob,Grep,WebSearch,WebFetch');
-    }
+    this.applyPermissionArgs(args, opts.usesWorktree, opts.permissionMode, opts.allowedTools);
 
     // The prompt is passed via -p for non-interactive mode
     args.push('-p', opts.prompt);
@@ -48,18 +44,35 @@ export class ClaudeCodeAdapter implements AgentAdapter {
     return args;
   }
 
-  buildResumeArgs(opts: { prompt: string; sessionId: string; usesWorktree: boolean }): string[] {
+  buildResumeArgs(opts: { prompt: string; sessionId: string; usesWorktree: boolean; permissionMode?: string; allowedTools?: string[] }): string[] {
     const args: string[] = ['--output-format', 'stream-json', '--verbose'];
 
-    if (opts.usesWorktree) {
-      args.push('--permission-mode', 'bypassPermissions');
-    } else {
-      args.push('--allowedTools', 'Read,Glob,Grep,WebSearch,WebFetch');
-    }
+    this.applyPermissionArgs(args, opts.usesWorktree, opts.permissionMode, opts.allowedTools);
 
     args.push('--resume', opts.sessionId);
     args.push('-p', opts.prompt);
     return args;
+  }
+
+  /** Apply permission flags based on config override or default behavior. */
+  private applyPermissionArgs(args: string[], usesWorktree: boolean, permissionMode?: string, allowedTools?: string[]): void {
+    if (permissionMode) {
+      // Explicit config override
+      args.push('--permission-mode', permissionMode);
+    } else if (usesWorktree) {
+      // Default: Do tasks in isolated worktrees get full permissions
+      args.push('--permission-mode', 'bypassPermissions');
+    } else {
+      // Default: Discuss tasks / plan mode — read-only
+      args.push('--allowedTools', 'Read,Glob,Grep,WebSearch,WebFetch');
+    }
+
+    // Pre-approve specific granted tools (works alongside permission mode).
+    // Skip if bypassPermissions since everything is already allowed.
+    const effectiveMode = permissionMode ?? (usesWorktree ? 'bypassPermissions' : undefined);
+    if (allowedTools?.length && effectiveMode !== 'bypassPermissions') {
+      args.push('--allowedTools', allowedTools.join(','));
+    }
   }
 
   parseMessage(line: string): AgentProgressEvent | null {
@@ -87,8 +100,19 @@ export class ClaudeCodeAdapter implements AgentAdapter {
       };
     }
 
-    if (msg.subtype === 'permission_request') {
-      return { ...base, type: 'permission_request' };
+    // Detect permission denial: in -p mode, the CLI returns a user message with
+    // a tool_result error when a tool needs permission. Known formats:
+    //   Bash:      "Error: This command requires approval"
+    //   WebSearch: "Error: Claude requested permissions to use WebSearch, but you haven't granted it yet."
+    if (
+      msg.type === 'user' &&
+      typeof msg.tool_use_result === 'string' &&
+      (msg.tool_use_result.includes('requires approval') ||
+       msg.tool_use_result.includes("haven't granted"))
+    ) {
+      // Extract tool name from "to use <Tool>," pattern when present
+      const toolMatch = (msg.tool_use_result as string).match(/to use (\w+)/);
+      return { ...base, type: 'permission_request', toolName: toolMatch?.[1] ?? base.toolName };
     }
 
     if (msg.is_error) {

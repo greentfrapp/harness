@@ -89,7 +89,11 @@ const fakeAdapter: AgentAdapter = {
         content: msg.content,
         raw: msg,
       };
-      if (msg.subtype === 'permission_request') {
+      if (
+        msg.type === 'user' &&
+        typeof msg.tool_use_result === 'string' &&
+        msg.tool_use_result.includes('requires approval')
+      ) {
         return { ...base, type: 'permission_request' as const };
       }
       return {
@@ -313,29 +317,63 @@ describe('AgentPool progress broadcasting', () => {
     createTaskEvent.mockClear();
     broadcast.mockClear();
 
-    // Emit a permission_request event
-    const permMsg = {
+    // First, emit an assistant message with a tool_use block (to track tool name)
+    const toolUseMsg = {
       type: 'assistant',
-      subtype: 'permission_request',
+      message: {
+        role: 'assistant',
+        content: [{
+          type: 'tool_use',
+          id: 'toolu_01VEtj6LusjYDzCWYq7CnALj',
+          name: 'Bash',
+          input: { command: 'curl example.com' },
+        }],
+      },
       session_id: 'sess-1',
-      tool: 'Write',
     };
+    spawnedProc.stdout.emit('data', Buffer.from(JSON.stringify(toolUseMsg) + '\n'));
+
+    // Then emit the permission_request event (real CLI format)
+    const permMsg = {
+      type: 'user',
+      message: {
+        role: 'user',
+        content: [{
+          type: 'tool_result',
+          content: 'This command requires approval',
+          is_error: true,
+          tool_use_id: 'toolu_01VEtj6LusjYDzCWYq7CnALj',
+        }],
+      },
+      tool_use_result: 'Error: This command requires approval',
+      session_id: 'sess-1',
+    };
+
+    // Clear again after the tool_use progress broadcast
+    updateTask.mockClear();
+    createTaskEvent.mockClear();
+    broadcast.mockClear();
+
     spawnedProc.stdout.emit('data', Buffer.from(JSON.stringify(permMsg) + '\n'));
 
     // Should have killed the agent
     expect(spawnedProc.kill).toHaveBeenCalledWith('SIGTERM');
 
-    // Should have updated status to permission
+    // Should have updated status to permission with tool name, command, and pending_tool_input
     expect(updateTask).toHaveBeenCalledWith('task-1', {
       status: 'permission',
-      error_message: 'Tool requiring permission: Write',
+      error_message: 'Tool requiring permission: Bash — curl example.com',
+      agent_session_data: expect.stringContaining('"pending_tool":"Bash"'),
     });
+    // Verify pending_tool_input is stored in session data
+    const sessionArg = JSON.parse(updateTask.mock.calls[0][1].agent_session_data);
+    expect(sessionArg.pending_tool_input).toEqual({ command: 'curl example.com' });
 
-    // Should have created a task event
+    // Should have created a task event with the tool name
     expect(createTaskEvent).toHaveBeenCalledWith(
       'task-1',
       'permission_requested',
-      JSON.stringify({ tool: 'Write' }),
+      JSON.stringify({ tool: 'Bash' }),
     );
 
     // Should have broadcast to inbox
@@ -346,5 +384,48 @@ describe('AgentPool progress broadcasting', () => {
 
     // Should NOT have broadcast as task:progress
     expect(broadcast).not.toHaveBeenCalledWith('task:progress', expect.anything());
+  });
+
+  it('preserves granted_tools in session data across spawn cycles', async () => {
+    const taskWithGrants = makeTask({
+      agent_session_data: JSON.stringify({
+        session_id: 'sess-1',
+        pid: 111,
+        granted_tools: ['Bash(curl:*)', 'WebSearch'],
+      }),
+      worktree_path: '/existing/wt',
+      branch_name: 'harness/test-branch',
+    });
+
+    const updateTask = vi.fn(() => taskWithGrants);
+    const config: HarnessConfig = {
+      projects: [],
+      task_types: {
+        do: { prompt_template: '{user_prompt}', uses_worktree: true },
+      },
+      concurrency: { max_worktrees: 2, max_conversations: 2 },
+    } as any;
+
+    const preservePool = new AgentPool({
+      config,
+      agentRegistry: fakeRegistry,
+      getProjectById: () => makeProject(),
+      updateTask,
+      createTaskEvent: vi.fn(),
+      broadcast,
+      getTaskById: () => taskWithGrants,
+      onTaskCompleted: vi.fn(),
+    });
+
+    await preservePool.dispatchDoTask(taskWithGrants, makeProject());
+
+    // The PID update should preserve granted_tools
+    const pidUpdateCall = updateTask.mock.calls.find(
+      (call: any) => call[1].agent_session_data && call[1].agent_session_data.includes('granted_tools'),
+    );
+    expect(pidUpdateCall).toBeTruthy();
+    const sessionData = JSON.parse(pidUpdateCall![1].agent_session_data);
+    expect(sessionData.granted_tools).toEqual(['Bash(curl:*)', 'WebSearch']);
+    expect(sessionData.session_id).toBe('sess-1');
   });
 });

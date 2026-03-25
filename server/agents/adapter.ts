@@ -27,10 +27,12 @@ export interface AgentAdapter {
     prompt: string;
     systemPrompt: string | null;
     usesWorktree: boolean;
+    permissionMode?: string;
+    allowedTools?: string[];
   }): string[];
 
   /** Build CLI args for resuming a previously failed task. */
-  buildResumeArgs(opts: { prompt: string; sessionId: string; usesWorktree: boolean }): string[];
+  buildResumeArgs(opts: { prompt: string; sessionId: string; usesWorktree: boolean; permissionMode?: string; allowedTools?: string[] }): string[];
 
   /** Parse a single stdout line into a structured event, or null to skip. */
   parseMessage(line: string): AgentProgressEvent | null;

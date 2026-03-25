@@ -47,6 +47,7 @@ export interface TaskTypeConfig {
   needs_worktree: boolean;
   default_priority: Priority;
   agent?: string; // key into HarnessConfig.agents
+  permission_mode?: string; // e.g. 'bypassPermissions'; omit to use adapter default
 }
 
 export interface TagConfig {

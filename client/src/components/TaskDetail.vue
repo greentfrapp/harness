@@ -43,9 +43,34 @@ const revising = ref(false);
 const showRevise = ref(false);
 const checkingOut = ref(false);
 const returning = ref(false);
+const granting = ref(false);
 const checkoutsStore = useCheckouts();
 
 const isTaskCheckedOut = computed(() => checkoutsStore.isCheckedOut(props.task.id));
+
+const permissionToolInput = computed(() => {
+  if (props.task.status !== 'permission' || !props.task.agent_session_data) return null;
+  try {
+    const data = JSON.parse(props.task.agent_session_data);
+    const input = data.pending_tool_input;
+    if (!input) return null;
+    // For Bash, show the command directly
+    if (data.pending_tool === 'Bash' && input.command) return input.command;
+    // For other tools, show formatted JSON
+    return JSON.stringify(input, null, 2);
+  } catch {
+    return null;
+  }
+});
+
+async function handleGrant() {
+  granting.value = true;
+  try {
+    await api.tasks.grantPermission(props.task.id);
+  } finally {
+    granting.value = false;
+  }
+}
 
 onMounted(async () => {
   try {
@@ -265,8 +290,32 @@ function formatTime(ts: number): string {
       <p class="text-xs text-zinc-400 font-mono whitespace-pre overflow-y-auto" style="max-height: 40vh;">{{ task.diff_summary }}</p>
     </div>
 
-    <!-- Error -->
-    <div v-if="task.error_message" class="rounded bg-red-950 border border-red-900 p-3">
+    <!-- Permission request detail -->
+    <div v-if="task.status === 'permission'" class="rounded bg-red-950 border border-red-900 p-3 space-y-3">
+      <h4 class="text-xs font-medium text-red-400 uppercase">Permission Required</h4>
+      <p class="text-sm text-red-300">{{ task.error_message }}</p>
+      <div v-if="permissionToolInput" class="rounded bg-zinc-900 border border-zinc-800 p-2">
+        <pre class="text-xs text-zinc-300 whitespace-pre-wrap break-all font-mono">{{ permissionToolInput }}</pre>
+      </div>
+      <div class="flex gap-2">
+        <button
+          class="px-3 py-1.5 text-xs font-medium rounded bg-green-900 hover:bg-green-800 text-green-300 transition-colors disabled:opacity-50"
+          :disabled="granting"
+          @click="handleGrant"
+        >
+          {{ granting ? 'Granting...' : 'Grant' }}
+        </button>
+        <button
+          class="px-3 py-1.5 text-xs font-medium rounded bg-red-900 hover:bg-red-800 text-red-300 transition-colors"
+          @click="emit('reject', task.id)"
+        >
+          Reject
+        </button>
+      </div>
+    </div>
+
+    <!-- Error (non-permission) -->
+    <div v-if="task.error_message && task.status !== 'permission'" class="rounded bg-red-950 border border-red-900 p-3">
       <h4 class="text-xs font-medium text-red-400 uppercase mb-1">Error</h4>
       <p class="text-sm text-red-300">{{ task.error_message }}</p>
     </div>
