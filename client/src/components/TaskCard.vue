@@ -7,7 +7,7 @@ import TaskDetail from './TaskDetail.vue';
 const props = defineProps<{
   task: Task;
   context: 'outbox' | 'inbox';
-  selectionMode?: boolean;
+  hasSelection?: boolean;
   selected?: boolean;
 }>();
 
@@ -180,18 +180,18 @@ function handleRetry(id: string) {
 </script>
 
 <template>
-  <div class="rounded-lg border overflow-hidden" :class="[
+  <div class="group rounded-lg border overflow-hidden" :class="[
     task.status === 'approved' ? 'border-green-900/50 bg-gray-900/60 opacity-75' : 'border-gray-800 bg-gray-900',
     selected ? 'ring-1 ring-blue-500/60 border-blue-500/40' : ''
   ]">
     <!-- Summary row -->
     <button
       class="w-full px-4 py-3 flex items-start gap-3 text-left hover:bg-gray-800/50 transition-colors"
-      @click="selectionMode ? emit('toggleSelect', task.id) : (expanded = !expanded)"
+      @click="hasSelection ? emit('toggleSelect', task.id) : (expanded = !expanded)"
     >
-      <!-- Selection checkbox -->
+      <!-- Selection checkbox (visible on hover or when selected/hasSelection) -->
       <span
-        v-if="selectionMode"
+        v-if="selected || hasSelection"
         class="mt-1 w-4 h-4 rounded border shrink-0 flex items-center justify-center transition-colors cursor-pointer"
         :class="selected
           ? 'bg-blue-600 border-blue-500 text-white'
@@ -203,10 +203,17 @@ function handleRetry(id: string) {
         </svg>
       </span>
 
-      <!-- Status dot -->
+      <!-- Hover checkbox (hidden by default, shown on group hover when no selection active) -->
       <span
-        v-if="!selectionMode"
-        class="mt-1 w-2.5 h-2.5 rounded-full shrink-0"
+        v-if="!selected && !hasSelection"
+        class="mt-1 w-4 h-4 rounded border shrink-0 items-center justify-center transition-colors cursor-pointer border-gray-600 bg-gray-800 hover:border-gray-400 hidden group-hover:flex"
+        @click.stop="emit('toggleSelect', task.id)"
+      />
+
+      <!-- Status dot (hidden on hover when no selection active) -->
+      <span
+        v-if="!selected && !hasSelection"
+        class="mt-1 w-2.5 h-2.5 rounded-full shrink-0 group-hover:hidden"
         :class="[status.color, status.pulse ? 'animate-pulse' : '']"
       />
 

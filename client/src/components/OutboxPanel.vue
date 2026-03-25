@@ -7,15 +7,12 @@ import TaskCard from './TaskCard.vue';
 const outbox = useOutbox();
 const confirming = ref(false);
 const {
-  selectionMode,
   selectedCount,
   hasSelection,
   toggle,
   isSelected,
   selectAll,
   clearSelection,
-  exitSelectionMode,
-  enterSelectionMode,
 } = useTaskSelection();
 
 const confirmingBulkDelete = ref(false);
@@ -42,7 +39,7 @@ async function handleBulkDelete() {
   try {
     const ids = [...new Set(outbox.sortedTasks.filter((t) => isSelected(t.id)).map((t) => t.id))];
     await outbox.bulkDelete(ids);
-    exitSelectionMode();
+    clearSelection();
   } finally {
     bulkDeleting.value = false;
     confirmingBulkDelete.value = false;
@@ -82,28 +79,22 @@ async function handleDelete(id: string) {
         </span>
       </div>
       <div v-if="outbox.sortedTasks.length" class="flex items-center gap-2 text-xs">
-        <template v-if="selectionMode">
+        <template v-if="hasSelection">
           <button
             class="text-gray-400 hover:text-gray-200 transition-colors"
             @click="toggleSelectAll()"
           >
             {{ allSelected ? 'Deselect All' : 'Select All' }}
           </button>
-          <span v-if="hasSelection" class="text-gray-500">{{ selectedCount }} selected</span>
+          <span class="text-gray-500">{{ selectedCount }} selected</span>
           <button
             class="text-gray-500 hover:text-gray-300 transition-colors"
-            @click="exitSelectionMode()"
+            @click="clearSelection()"
           >
             Cancel
           </button>
         </template>
         <template v-else>
-          <button
-            class="text-gray-500 hover:text-gray-300 transition-colors"
-            @click="enterSelectionMode()"
-          >
-            Select
-          </button>
           <template v-if="confirming">
             <span class="text-gray-400">Clear all?</span>
             <button class="text-red-400 hover:text-red-300 font-medium" @click="handleClear()">Yes</button>
@@ -122,7 +113,7 @@ async function handleDelete(id: string) {
 
     <!-- Bulk action bar -->
     <div
-      v-if="selectionMode && hasSelection"
+      v-if="hasSelection"
       class="px-4 py-2 border-b border-gray-800 bg-gray-900/80 flex items-center gap-2"
     >
       <template v-if="confirmingBulkDelete">
@@ -157,7 +148,7 @@ async function handleDelete(id: string) {
         :key="task.id"
         :task="task"
         context="outbox"
-        :selectionMode="selectionMode"
+        :hasSelection="hasSelection"
         :selected="isSelected(task.id)"
         @cancel="handleCancel"
         @delete="handleDelete"
