@@ -103,7 +103,7 @@ onUnmounted(() => {
 <template>
   <div class="h-screen flex flex-col overflow-hidden">
     <!-- Header -->
-    <header class="border-b border-gray-800 bg-gray-900 px-6 py-3 flex items-center justify-between">
+    <header class="border-b border-zinc-800 bg-zinc-900 px-6 py-3 flex items-center justify-between">
       <div class="flex items-center gap-4">
         <h1 class="text-lg font-semibold tracking-tight">Harness</h1>
         <div
@@ -114,7 +114,7 @@ onUnmounted(() => {
       </div>
       <div class="flex items-center gap-2">
         <button
-          class="p-1.5 text-gray-400 hover:text-gray-200 transition-colors rounded-md hover:bg-gray-800"
+          class="p-1.5 text-zinc-400 hover:text-zinc-200 transition-colors rounded-md hover:bg-zinc-800"
           title="Settings (⌘,)"
           @click="showSettings = true"
         >
@@ -149,7 +149,7 @@ onUnmounted(() => {
     </div>
 
     <!-- Main two-column layout -->
-    <main class="flex-1 min-h-0 grid grid-cols-2 divide-x divide-gray-800 overflow-hidden">
+    <main class="flex-1 min-h-0 grid grid-cols-2 divide-x divide-zinc-800 overflow-hidden">
       <OutboxPanel />
       <InboxPanel />
     </main>

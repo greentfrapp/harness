@@ -36,7 +36,7 @@ function levelColor(level: string): string {
   switch (level) {
     case 'error': return 'text-red-400';
     case 'warn': return 'text-yellow-400';
-    default: return 'text-gray-500';
+    default: return 'text-zinc-500';
   }
 }
 
@@ -46,10 +46,10 @@ function formatTime(ts: number): string {
 </script>
 
 <template>
-  <div class="border-t border-gray-800 bg-gray-900">
+  <div class="border-t border-zinc-800 bg-zinc-900">
     <!-- Toggle bar -->
     <button
-      class="w-full px-4 py-1.5 flex items-center justify-between text-xs text-gray-400 hover:text-gray-200 hover:bg-gray-800/50 transition-colors"
+      class="w-full px-4 py-1.5 flex items-center justify-between text-xs text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/50 transition-colors"
       @click="toggle"
     >
       <span class="flex items-center gap-2">
@@ -68,16 +68,16 @@ function formatTime(ts: number): string {
           {{ unreadCount }}
         </span>
       </span>
-      <span class="text-gray-600">{{ entries.length }} entries</span>
+      <span class="text-zinc-600">{{ entries.length }} entries</span>
     </button>
 
     <!-- Log entries -->
     <div
       v-if="expanded"
       ref="containerRef"
-      class="overflow-y-auto max-h-64 font-mono text-xs space-y-0.5 px-4 py-2 bg-gray-950"
+      class="overflow-y-auto max-h-64 font-mono text-xs space-y-0.5 px-4 py-2 bg-zinc-950"
     >
-      <div v-if="entries.length === 0" class="text-gray-600 text-center py-4">
+      <div v-if="entries.length === 0" class="text-zinc-600 text-center py-4">
         No log entries yet
       </div>
       <div
@@ -85,15 +85,15 @@ function formatTime(ts: number): string {
         :key="i"
         class="flex gap-2 leading-relaxed"
       >
-        <span class="text-gray-600 shrink-0">{{ formatTime(entry.timestamp) }}</span>
+        <span class="text-zinc-600 shrink-0">{{ formatTime(entry.timestamp) }}</span>
         <span
           class="uppercase font-bold w-10 shrink-0"
           :class="levelColor(entry.level)"
         >
           {{ entry.level }}
         </span>
-        <span class="text-gray-300">
-          <span v-if="entry.taskId" class="text-gray-600">[{{ entry.taskId.slice(0, 8) }}]</span>
+        <span class="text-zinc-300">
+          <span v-if="entry.taskId" class="text-zinc-600">[{{ entry.taskId.slice(0, 8) }}]</span>
           {{ entry.message }}
         </span>
       </div>

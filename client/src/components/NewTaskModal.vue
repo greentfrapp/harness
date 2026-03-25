@@ -10,7 +10,8 @@ const TAG_COLORS: Record<string, { bg: string; text: string; activeBg: string }>
   purple: { bg: 'bg-purple-900/40', text: 'text-purple-400', activeBg: 'bg-purple-900' },
   orange: { bg: 'bg-orange-900/40', text: 'text-orange-400', activeBg: 'bg-orange-900' },
   pink: { bg: 'bg-pink-900/40', text: 'text-pink-400', activeBg: 'bg-pink-900' },
-  gray: { bg: 'bg-gray-800/40', text: 'text-gray-500', activeBg: 'bg-gray-800' },
+  zinc: { bg: 'bg-zinc-800/40', text: 'text-zinc-500', activeBg: 'bg-zinc-800' },
+  gray: { bg: 'bg-zinc-800/40', text: 'text-zinc-500', activeBg: 'bg-zinc-800' },
   cyan: { bg: 'bg-cyan-900/40', text: 'text-cyan-400', activeBg: 'bg-cyan-900' },
   indigo: { bg: 'bg-indigo-900/40', text: 'text-indigo-400', activeBg: 'bg-indigo-900' },
   teal: { bg: 'bg-teal-900/40', text: 'text-teal-400', activeBg: 'bg-teal-900' },
@@ -58,8 +59,8 @@ function toggleTag(tag: string) {
 
 function getTagClasses(tag: string, active: boolean): string {
   const config = props.tagConfigs?.[tag];
-  const colorName = config?.color ?? 'gray';
-  const colors = TAG_COLORS[colorName] ?? TAG_COLORS.gray;
+  const colorName = config?.color ?? 'zinc';
+  const colors = TAG_COLORS[colorName] ?? TAG_COLORS.zinc;
   return active
     ? `${colors.activeBg} ${colors.text} ring-1 ring-current`
     : `${colors.bg} ${colors.text} hover:opacity-80`;
@@ -150,20 +151,20 @@ const priorities: { value: Priority; label: string }[] = [
       />
 
       <!-- Modal -->
-      <div class="relative bg-gray-900 border border-gray-700 rounded-xl shadow-2xl w-full max-w-lg mx-4">
-        <div class="px-6 py-4 border-b border-gray-800">
+      <div class="relative bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl w-full max-w-lg mx-4">
+        <div class="px-6 py-4 border-b border-zinc-800">
           <h2 class="text-lg font-semibold">New Task</h2>
         </div>
 
         <!-- Empty state: no projects configured -->
         <div v-if="!projects.length" class="px-6 py-8 text-center space-y-3">
-          <p class="text-sm text-gray-400">
+          <p class="text-sm text-zinc-400">
             No projects configured. Add at least one project in Settings to create tasks.
           </p>
           <div class="flex justify-center gap-2">
             <button
               type="button"
-              class="px-4 py-2 text-sm text-gray-400 hover:text-gray-200 transition-colors"
+              class="px-4 py-2 text-sm text-zinc-400 hover:text-zinc-200 transition-colors"
               @click="emit('close')"
             >
               Cancel
@@ -181,10 +182,10 @@ const priorities: { value: Priority; label: string }[] = [
         <form v-else class="px-6 py-4 space-y-4" @submit.prevent="handleSubmit">
           <!-- Project -->
           <div>
-            <label class="block text-xs font-medium text-gray-400 mb-1">Project</label>
+            <label class="block text-xs font-medium text-zinc-400 mb-1">Project</label>
             <select
               v-model="projectId"
-              class="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
+              class="w-full bg-zinc-800 border border-zinc-700 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
             >
               <option v-for="p in projects" :key="p.id" :value="p.id">
                 {{ p.name }}
@@ -194,10 +195,10 @@ const priorities: { value: Priority; label: string }[] = [
 
           <!-- Task Type -->
           <div>
-            <label class="block text-xs font-medium text-gray-400 mb-1">Type</label>
+            <label class="block text-xs font-medium text-zinc-400 mb-1">Type</label>
             <select
               v-model="taskType"
-              class="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
+              class="w-full bg-zinc-800 border border-zinc-700 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
             >
               <option v-for="t in taskTypes" :key="t" :value="t">
                 {{ t }}
@@ -207,19 +208,19 @@ const priorities: { value: Priority; label: string }[] = [
 
           <!-- Prompt -->
           <div>
-            <label class="block text-xs font-medium text-gray-400 mb-1">Prompt</label>
+            <label class="block text-xs font-medium text-zinc-400 mb-1">Prompt</label>
             <textarea
               ref="promptInput"
               v-model="prompt"
               rows="5"
-              class="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600 resize-y"
+              class="w-full bg-zinc-800 border border-zinc-700 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600 resize-y"
               placeholder="Describe the task..."
             />
           </div>
 
           <!-- Priority -->
           <div>
-            <label class="block text-xs font-medium text-gray-400 mb-1">Priority</label>
+            <label class="block text-xs font-medium text-zinc-400 mb-1">Priority</label>
             <div class="flex gap-1">
               <button
                 v-for="p in priorities"
@@ -229,7 +230,7 @@ const priorities: { value: Priority; label: string }[] = [
                 :class="
                   priority === p.value
                     ? 'bg-blue-600 text-white'
-                    : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+                    : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
                 "
                 @click="priority = p.value"
               >
@@ -240,7 +241,7 @@ const priorities: { value: Priority; label: string }[] = [
 
           <!-- Tags -->
           <div v-if="availableTags.length">
-            <label class="block text-xs font-medium text-gray-400 mb-1">Tags</label>
+            <label class="block text-xs font-medium text-zinc-400 mb-1">Tags</label>
             <div class="flex flex-wrap gap-1">
               <button
                 v-for="tag in availableTags"
@@ -258,12 +259,12 @@ const priorities: { value: Priority; label: string }[] = [
 
           <!-- Dependency -->
           <div v-if="existingTasks.length">
-            <label class="block text-xs font-medium text-gray-400 mb-1">
+            <label class="block text-xs font-medium text-zinc-400 mb-1">
               Depends on (optional)
             </label>
             <select
               v-model="dependsOn"
-              class="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
+              class="w-full bg-zinc-800 border border-zinc-700 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
             >
               <option :value="null">None</option>
               <option
@@ -283,7 +284,7 @@ const priorities: { value: Priority; label: string }[] = [
           <div class="flex justify-end gap-2 pt-2">
             <button
               type="button"
-              class="px-4 py-2 text-sm text-gray-400 hover:text-gray-200 transition-colors"
+              class="px-4 py-2 text-sm text-zinc-400 hover:text-zinc-200 transition-colors"
               @click="emit('close')"
             >
               Cancel
@@ -291,7 +292,7 @@ const priorities: { value: Priority; label: string }[] = [
             <button
               type="button"
               :disabled="submitting"
-              class="px-4 py-2 text-sm font-medium bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-md transition-colors disabled:opacity-50"
+              class="px-4 py-2 text-sm font-medium bg-zinc-700 hover:bg-zinc-600 text-zinc-300 rounded-md transition-colors disabled:opacity-50"
               @click="handleSaveDraft"
             >
               Save Draft
