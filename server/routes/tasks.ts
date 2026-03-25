@@ -334,6 +334,33 @@ export function createTaskRoutes(ctx: AppContext) {
     return c.json(updated);
   });
 
+  /** Grant permission: re-queue a permission task so it resumes with bypassPermissions. */
+  app.post('/tasks/:id/grant-permission', (c) => {
+    const id = c.req.param('id');
+    const task = queries.getTaskById(id);
+    if (!task) return c.json({ error: 'Task not found' }, 404);
+    if (task.status !== 'permission') {
+      return c.json({ error: 'Only permission tasks can be granted' }, 400);
+    }
+
+    const project = queries.getProjectById(task.project_id);
+    if (!project) return c.json({ error: 'Project not found' }, 404);
+
+    // Re-queue preserving worktree, branch, and session for --resume
+    const updated = queries.updateTask(id, {
+      status: 'queued',
+      error_message: null,
+    });
+    queries.createTaskEvent(id, 'permission_granted', null);
+    serverLog.info(`Permission granted, task re-queued`, id);
+
+    taskQueue.recomputePositions(task.project_id);
+    sseManager.broadcast('task:updated', updated);
+    dispatcher.tryDispatch();
+
+    return c.json(updated);
+  });
+
   /** Retry: clean up old worktree/branch, re-queue for a fresh run. */
   app.post('/tasks/:id/retry', (c) => {
     const id = c.req.param('id');

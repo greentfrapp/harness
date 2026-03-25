@@ -77,6 +77,8 @@ export const api = {
       request<Task>(`/api/tasks/${id}/retry`, { method: 'POST' }),
     fix: (id: string) =>
       request<Task>(`/api/tasks/${id}/fix`, { method: 'POST' }),
+    grantPermission: (id: string) =>
+      request<Task>(`/api/tasks/${id}/grant-permission`, { method: 'POST' }),
     revise: (id: string, prompt: string) =>
       request<Task>(`/api/tasks/${id}/revise`, json({ prompt })),
     followUp: (id: string, prompt: string) =>

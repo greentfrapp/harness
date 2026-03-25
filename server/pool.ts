@@ -205,6 +205,7 @@ export class AgentPool {
       ? adapter.buildResumeArgs({
           prompt: task.prompt,
           sessionId: opts.resumeSessionId,
+          usesWorktree: opts.usesWorktree,
         })
       : adapter.buildArgs({
           prompt: task.prompt,
@@ -304,7 +305,7 @@ export class AgentPool {
       this.progressBuffers.delete(task.id);
 
       const currentTask = this.deps.getTaskById(task.id);
-      if (!currentTask || currentTask.status === 'cancelled') return;
+      if (!currentTask || currentTask.status === 'cancelled' || currentTask.status === 'permission') return;
 
       if (code === 0) {
         this.handleAgentSuccess(task.id, project, lastSummary);
@@ -325,6 +326,33 @@ export class AgentPool {
     _agent: ActiveAgent,
     event: AgentProgressEvent,
   ): void {
+    // Handle permission_request: kill agent, move task to inbox
+    if (event.type === 'permission_request') {
+      serverLog.warn(
+        `Permission requested for tool: ${event.toolName ?? 'unknown'}`,
+        taskId,
+      );
+
+      this.killAgent(taskId);
+
+      const toolInfo = event.toolName
+        ? `Tool requiring permission: ${event.toolName}`
+        : 'Agent requested permission for a tool';
+      this.deps.updateTask(taskId, {
+        status: 'permission',
+        error_message: toolInfo,
+      });
+      this.deps.createTaskEvent(
+        taskId,
+        'permission_requested',
+        JSON.stringify({ tool: event.toolName ?? null }),
+      );
+      const updated = this.deps.getTaskById(taskId);
+      this.deps.broadcast('inbox:new', updated);
+      this.deps.onTaskCompleted(taskId);
+      return;
+    }
+
     // Buffer the message for late-joining clients
     let buffer = this.progressBuffers.get(taskId);
     if (!buffer) {
