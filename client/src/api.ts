@@ -75,6 +75,8 @@ export const api = {
       request<Task>(`/api/tasks/${id}/retry`, { method: 'POST' }),
     fix: (id: string) =>
       request<Task>(`/api/tasks/${id}/fix`, { method: 'POST' }),
+    followUp: (id: string, prompt: string) =>
+      request<Task>(`/api/tasks/${id}/follow-up`, json({ prompt })),
     diff: (id: string) =>
       request<{ diff: string; stats: string }>(`/api/tasks/${id}/diff`),
     events: (id: string) =>

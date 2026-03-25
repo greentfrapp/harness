@@ -19,6 +19,7 @@ const emit = defineEmits<{
   defer: [id: string];
   delete: [id: string];
   toggleSelect: [id: string];
+  followUp: [id: string];
 }>();
 
 const expanded = ref(false);
@@ -298,8 +299,15 @@ function handleRetry(id: string) {
         </button>
       </div>
 
-      <!-- Delete button (visible in collapsed state for terminal tasks) -->
+      <!-- Follow Up + Delete buttons (visible in collapsed state for terminal tasks) -->
       <div v-if="isTerminal && !expanded" class="flex items-center gap-1 shrink-0" @click.stop>
+        <button
+          v-if="task.status === 'approved'"
+          class="px-2 py-1 text-xs font-medium rounded bg-blue-900 hover:bg-blue-800 text-blue-300 transition-colors"
+          @click="(e: Event) => { e.stopPropagation(); expanded = true; }"
+        >
+          Follow Up
+        </button>
         <button
           class="px-2 py-1 text-xs font-medium rounded transition-colors disabled:opacity-50"
           :class="confirmingDelete
@@ -342,6 +350,7 @@ function handleRetry(id: string) {
       @retry="handleRetry($event)"
       @defer="emit('defer', $event)"
       @delete="emit('delete', $event)"
+      @follow-up="emit('followUp', $event)"
     />
   </div>
 </template>

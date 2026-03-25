@@ -18,6 +18,7 @@ const emit = defineEmits<{
   retry: [id: string];
   defer: [id: string];
   delete: [id: string];
+  followUp: [id: string];
 }>();
 
 const events = ref<TaskEvent[]>([]);
@@ -30,6 +31,9 @@ const isMergeError = ref(false);
 const deleting = ref(false);
 const confirmingDelete = ref(false);
 const blockedDependents = ref<Array<{ id: string; prompt: string; status: string }>>([]);
+const followUpPrompt = ref('');
+const followingUp = ref(false);
+const showFollowUp = ref(false);
 
 onMounted(async () => {
   try {
@@ -132,6 +136,22 @@ async function handleDelete() {
   }
 }
 
+async function handleFollowUp() {
+  if (!followUpPrompt.value.trim()) return;
+  followingUp.value = true;
+  actionError.value = '';
+  try {
+    await api.tasks.followUp(props.task.id, followUpPrompt.value.trim());
+    followUpPrompt.value = '';
+    showFollowUp.value = false;
+    emit('followUp', props.task.id);
+  } catch (e) {
+    actionError.value = e instanceof Error ? e.message : 'Follow-up failed';
+  } finally {
+    followingUp.value = false;
+  }
+}
+
 function formatTime(ts: number): string {
   return new Date(ts).toLocaleTimeString();
 }
@@ -221,6 +241,47 @@ function formatTime(ts: number): string {
         >
           <span class="text-gray-600 font-mono">{{ formatTime(event.created_at) }}</span>
           <span class="text-gray-400">{{ event.event_type }}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Follow-up for approved tasks -->
+    <div v-if="task.status === 'approved'" class="space-y-2">
+      <div v-if="!showFollowUp">
+        <button
+          class="px-3 py-1.5 text-xs font-medium rounded bg-blue-900 hover:bg-blue-800 text-blue-300 transition-colors"
+          @click="showFollowUp = true"
+        >
+          Follow Up
+        </button>
+      </div>
+      <div v-else class="space-y-2">
+        <h4 class="text-xs font-medium text-gray-500 uppercase">Continue Conversation</h4>
+        <textarea
+          v-model="followUpPrompt"
+          class="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-200 placeholder-gray-500 focus:border-blue-600 focus:outline-none resize-y"
+          rows="3"
+          placeholder="Enter your follow-up request..."
+          :disabled="followingUp"
+          @keydown.meta.enter="handleFollowUp"
+          @keydown.ctrl.enter="handleFollowUp"
+        />
+        <div class="flex gap-2">
+          <button
+            class="px-3 py-1.5 text-xs font-medium rounded bg-blue-900 hover:bg-blue-800 text-blue-300 transition-colors disabled:opacity-50"
+            :disabled="followingUp || !followUpPrompt.trim()"
+            @click="handleFollowUp"
+          >
+            {{ followingUp ? 'Sending...' : 'Send Follow-Up' }}
+          </button>
+          <button
+            class="px-3 py-1.5 text-xs font-medium rounded bg-gray-800 hover:bg-gray-700 text-gray-400 transition-colors"
+            :disabled="followingUp"
+            @click="showFollowUp = false; followUpPrompt = ''"
+          >
+            Cancel
+          </button>
+          <span class="text-xs text-gray-600 self-center ml-auto">Cmd+Enter to send</span>
         </div>
       </div>
     </div>

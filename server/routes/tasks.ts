@@ -481,6 +481,62 @@ export function createTaskRoutes(ctx: AppContext) {
     return c.json(updated);
   });
 
+  /** Follow up: create a new task that resumes the conversation from an approved task. */
+  app.post('/tasks/:id/follow-up', async (c) => {
+    const id = c.req.param('id');
+    const task = queries.getTaskById(id);
+    if (!task) return c.json({ error: 'Task not found' }, 404);
+    if (task.status !== 'approved') {
+      return c.json({ error: 'Only approved tasks can have follow-ups' }, 400);
+    }
+
+    const body = await c.req.json<{ prompt: string }>();
+    if (!body.prompt?.trim()) {
+      return c.json({ error: 'prompt is required' }, 400);
+    }
+
+    // Parse parent session data to carry forward the session ID
+    const parentSession = task.agent_session_data
+      ? JSON.parse(task.agent_session_data)
+      : null;
+
+    // Resolve agent_type from task type config
+    const taskTypeConfig = config.task_types[task.type];
+    const agentType = taskTypeConfig?.agent ?? task.agent_type ?? 'claude-code';
+
+    // Create follow-up task with parent's session ID pre-populated
+    const followUpTask = queries.createTask({
+      project_id: task.project_id,
+      type: task.type,
+      prompt: body.prompt.trim(),
+      priority: task.priority,
+      depends_on: task.id,
+      agent_type: agentType,
+    });
+
+    // Pre-populate session data so the dispatcher uses --resume
+    if (parentSession?.session_id) {
+      queries.updateTask(followUpTask.id, {
+        agent_session_data: JSON.stringify({
+          session_id: parentSession.session_id,
+          pid: 0,
+        }),
+      });
+    }
+
+    taskQueue.recomputePositions(followUpTask.project_id);
+    const updated = queries.getTaskById(followUpTask.id)!;
+
+    queries.createTaskEvent(followUpTask.id, 'follow_up', JSON.stringify({ parent_task_id: id }));
+    serverLog.info(`Follow-up task created from task ${id}`, followUpTask.id);
+    sseManager.broadcast('task:created', updated);
+
+    // Trigger dispatch check
+    dispatcher.tryDispatch();
+
+    return c.json(updated, 201);
+  });
+
   /** Get diff for a completed task. */
   app.get('/tasks/:id/diff', (c) => {
     const id = c.req.param('id');
