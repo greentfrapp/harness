@@ -100,6 +100,30 @@ describe('ClaudeCodeAdapter', () => {
       expect(args[idx + 1]).toBe('bypassPermissions');
       expect(args).not.toContain('--allowedTools');
     });
+
+    it('appends --allowedTools for granted tools with non-bypass permission mode', () => {
+      const args = adapter.buildArgs({
+        prompt: 'test',
+        systemPrompt: null,
+        usesWorktree: true,
+        permissionMode: 'default',
+        allowedTools: ['Bash', 'Write'],
+      });
+      expect(args).toContain('--allowedTools');
+      const idx = args.lastIndexOf('--allowedTools');
+      expect(args[idx + 1]).toBe('Bash,Write');
+    });
+
+    it('skips --allowedTools when bypassPermissions is active', () => {
+      const args = adapter.buildArgs({
+        prompt: 'test',
+        systemPrompt: null,
+        usesWorktree: true,
+        allowedTools: ['Bash'],
+      });
+      // Default for worktree is bypassPermissions — allowedTools should be skipped
+      expect(args).not.toContain('--allowedTools');
+    });
   });
 
   describe('buildResumeArgs', () => {

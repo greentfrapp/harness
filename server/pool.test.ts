@@ -317,7 +317,23 @@ describe('AgentPool progress broadcasting', () => {
     createTaskEvent.mockClear();
     broadcast.mockClear();
 
-    // Emit a permission_request event (real CLI format)
+    // First, emit an assistant message with a tool_use block (to track tool name)
+    const toolUseMsg = {
+      type: 'assistant',
+      message: {
+        role: 'assistant',
+        content: [{
+          type: 'tool_use',
+          id: 'toolu_01VEtj6LusjYDzCWYq7CnALj',
+          name: 'Bash',
+          input: { command: 'curl example.com' },
+        }],
+      },
+      session_id: 'sess-1',
+    };
+    spawnedProc.stdout.emit('data', Buffer.from(JSON.stringify(toolUseMsg) + '\n'));
+
+    // Then emit the permission_request event (real CLI format)
     const permMsg = {
       type: 'user',
       message: {
@@ -332,22 +348,29 @@ describe('AgentPool progress broadcasting', () => {
       tool_use_result: 'Error: This command requires approval',
       session_id: 'sess-1',
     };
+
+    // Clear again after the tool_use progress broadcast
+    updateTask.mockClear();
+    createTaskEvent.mockClear();
+    broadcast.mockClear();
+
     spawnedProc.stdout.emit('data', Buffer.from(JSON.stringify(permMsg) + '\n'));
 
     // Should have killed the agent
     expect(spawnedProc.kill).toHaveBeenCalledWith('SIGTERM');
 
-    // Should have updated status to permission
+    // Should have updated status to permission with tool name and pending_tool in session data
     expect(updateTask).toHaveBeenCalledWith('task-1', {
       status: 'permission',
-      error_message: 'Agent requested permission for a tool',
+      error_message: 'Tool requiring permission: Bash',
+      agent_session_data: expect.stringContaining('"pending_tool":"Bash"'),
     });
 
-    // Should have created a task event
+    // Should have created a task event with the tool name
     expect(createTaskEvent).toHaveBeenCalledWith(
       'task-1',
       'permission_requested',
-      JSON.stringify({ tool: null }),
+      JSON.stringify({ tool: 'Bash' }),
     );
 
     // Should have broadcast to inbox

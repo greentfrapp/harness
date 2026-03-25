@@ -334,7 +334,7 @@ export function createTaskRoutes(ctx: AppContext) {
     return c.json(updated);
   });
 
-  /** Grant permission: re-queue a permission task so it resumes with bypassPermissions. */
+  /** Grant permission: add the blocked tool to granted_tools, re-queue for --resume. */
   app.post('/tasks/:id/grant-permission', (c) => {
     const id = c.req.param('id');
     const task = queries.getTaskById(id);
@@ -346,12 +346,22 @@ export function createTaskRoutes(ctx: AppContext) {
     const project = queries.getProjectById(task.project_id);
     if (!project) return c.json({ error: 'Project not found' }, 404);
 
-    // Re-queue preserving worktree, branch, and session for --resume
+    // Add the blocked tool to the cumulative granted_tools list
+    const sessionData = task.agent_session_data ? JSON.parse(task.agent_session_data) : {};
+    const grantedTools = new Set<string>(sessionData.granted_tools ?? []);
+    if (sessionData.pending_tool) {
+      grantedTools.add(sessionData.pending_tool);
+      serverLog.info(`Granting tool: ${sessionData.pending_tool}`, id);
+    }
+    sessionData.granted_tools = [...grantedTools];
+    delete sessionData.pending_tool;
+
     const updated = queries.updateTask(id, {
       status: 'queued',
       error_message: null,
+      agent_session_data: JSON.stringify(sessionData),
     });
-    queries.createTaskEvent(id, 'permission_granted', null);
+    queries.createTaskEvent(id, 'permission_granted', JSON.stringify({ tool: sessionData.granted_tools }));
     serverLog.info(`Permission granted, task re-queued`, id);
 
     taskQueue.recomputePositions(task.project_id);

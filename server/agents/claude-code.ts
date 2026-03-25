@@ -28,6 +28,7 @@ export class ClaudeCodeAdapter implements AgentAdapter {
     systemPrompt: string | null;
     usesWorktree: boolean;
     permissionMode?: string;
+    allowedTools?: string[];
   }): string[] {
     const args: string[] = ['--output-format', 'stream-json', '--verbose'];
 
@@ -35,7 +36,7 @@ export class ClaudeCodeAdapter implements AgentAdapter {
       args.push('--system-prompt', opts.systemPrompt);
     }
 
-    this.applyPermissionArgs(args, opts.usesWorktree, opts.permissionMode);
+    this.applyPermissionArgs(args, opts.usesWorktree, opts.permissionMode, opts.allowedTools);
 
     // The prompt is passed via -p for non-interactive mode
     args.push('-p', opts.prompt);
@@ -43,10 +44,10 @@ export class ClaudeCodeAdapter implements AgentAdapter {
     return args;
   }
 
-  buildResumeArgs(opts: { prompt: string; sessionId: string; usesWorktree: boolean; permissionMode?: string }): string[] {
+  buildResumeArgs(opts: { prompt: string; sessionId: string; usesWorktree: boolean; permissionMode?: string; allowedTools?: string[] }): string[] {
     const args: string[] = ['--output-format', 'stream-json', '--verbose'];
 
-    this.applyPermissionArgs(args, opts.usesWorktree, opts.permissionMode);
+    this.applyPermissionArgs(args, opts.usesWorktree, opts.permissionMode, opts.allowedTools);
 
     args.push('--resume', opts.sessionId);
     args.push('-p', opts.prompt);
@@ -54,7 +55,7 @@ export class ClaudeCodeAdapter implements AgentAdapter {
   }
 
   /** Apply permission flags based on config override or default behavior. */
-  private applyPermissionArgs(args: string[], usesWorktree: boolean, permissionMode?: string): void {
+  private applyPermissionArgs(args: string[], usesWorktree: boolean, permissionMode?: string, allowedTools?: string[]): void {
     if (permissionMode) {
       // Explicit config override
       args.push('--permission-mode', permissionMode);
@@ -64,6 +65,13 @@ export class ClaudeCodeAdapter implements AgentAdapter {
     } else {
       // Default: Discuss tasks / plan mode — read-only
       args.push('--allowedTools', 'Read,Glob,Grep,WebSearch,WebFetch');
+    }
+
+    // Pre-approve specific granted tools (works alongside permission mode).
+    // Skip if bypassPermissions since everything is already allowed.
+    const effectiveMode = permissionMode ?? (usesWorktree ? 'bypassPermissions' : undefined);
+    if (allowedTools?.length && effectiveMode !== 'bypassPermissions') {
+      args.push('--allowedTools', allowedTools.join(','));
     }
   }
 

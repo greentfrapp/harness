@@ -13,6 +13,7 @@ import { serverLog } from './log.ts';
 export interface AgentSessionData {
   session_id: string | null;
   pid: number;
+  granted_tools?: string[];
 }
 
 interface ActiveAgent {
@@ -103,6 +104,7 @@ export class AgentPool {
 
     // Check if this task has a pre-populated session ID (e.g. follow-up task)
     const existingSession = parseSessionData(task.agent_session_data);
+    const grantedTools = existingSession?.granted_tools;
     if (existingSession?.session_id) {
       // Resume the previous conversation in the existing worktree
       this.spawnAgent(task, project, {
@@ -111,6 +113,7 @@ export class AgentPool {
         usesWorktree: true,
         resumeSessionId: existingSession.session_id,
         permissionMode,
+        allowedTools: grantedTools,
       });
       return;
     }
@@ -127,6 +130,7 @@ export class AgentPool {
       usesWorktree: true,
       resumeSessionId: null,
       permissionMode,
+      allowedTools: grantedTools,
     });
   }
 
@@ -135,6 +139,7 @@ export class AgentPool {
     const taskTypeConfig = this.deps.config.task_types[task.type] ??
       this.deps.config.task_types['discuss'];
     const permissionMode = taskTypeConfig?.permission_mode;
+    const sessionData = parseSessionData(task.agent_session_data);
     const systemPrompt = taskTypeConfig
       ? taskTypeConfig.prompt_template.replace('{user_prompt}', task.prompt)
       : task.prompt;
@@ -145,6 +150,7 @@ export class AgentPool {
       usesWorktree: false,
       resumeSessionId: null,
       permissionMode,
+      allowedTools: sessionData?.granted_tools,
     });
   }
 
@@ -164,6 +170,7 @@ export class AgentPool {
       usesWorktree: !!task.worktree_path,
       resumeSessionId: sessionData.session_id,
       permissionMode,
+      allowedTools: sessionData.granted_tools,
     });
   }
 
@@ -208,6 +215,7 @@ export class AgentPool {
       usesWorktree: boolean;
       resumeSessionId: string | null;
       permissionMode?: string;
+      allowedTools?: string[];
     },
   ): void {
     const adapter = this.deps.agentRegistry.getOrDefault(task.agent_type);
@@ -218,12 +226,14 @@ export class AgentPool {
           sessionId: opts.resumeSessionId,
           usesWorktree: opts.usesWorktree,
           permissionMode: opts.permissionMode,
+          allowedTools: opts.allowedTools,
         })
       : adapter.buildArgs({
           prompt: task.prompt,
           systemPrompt: opts.systemPrompt,
           usesWorktree: opts.usesWorktree,
           permissionMode: opts.permissionMode,
+          allowedTools: opts.allowedTools,
         });
 
     // Append extra_args from config if defined
@@ -273,6 +283,7 @@ export class AgentPool {
     // Collect stdout for parsing
     let buffer = '';
     let lastSummary = '';
+    let lastToolName = '';
 
     proc.stdout?.on('data', (chunk: Buffer) => {
       buffer += chunk.toString();
@@ -284,6 +295,22 @@ export class AgentPool {
 
         const event = adapter.parseMessage(line);
         if (!event) continue;
+
+        // Track the last tool name from assistant tool_use messages
+        // so we can report it when a permission request follows
+        const raw = event.raw as any;
+        if (raw?.type === 'assistant' && Array.isArray(raw?.message?.content)) {
+          for (const block of raw.message.content) {
+            if (block.type === 'tool_use' && block.name) {
+              lastToolName = block.name;
+            }
+          }
+        }
+
+        // Attach tracked tool name to permission_request events
+        if (event.type === 'permission_request' && lastToolName) {
+          event.toolName = lastToolName;
+        }
 
         this.handleAgentEvent(task.id, agent, event);
 
@@ -351,9 +378,17 @@ export class AgentPool {
       const toolInfo = event.toolName
         ? `Tool requiring permission: ${event.toolName}`
         : 'Agent requested permission for a tool';
+
+      // Store pending_tool in session data so grant-permission can read it
+      const currentTask = this.deps.getTaskById(taskId);
+      const sessionData = parseSessionData(currentTask?.agent_session_data ?? null)
+        ?? { session_id: null, pid: 0 };
+      (sessionData as any).pending_tool = event.toolName ?? null;
+
       this.deps.updateTask(taskId, {
         status: 'permission',
         error_message: toolInfo,
+        agent_session_data: JSON.stringify(sessionData),
       });
       this.deps.createTaskEvent(
         taskId,
