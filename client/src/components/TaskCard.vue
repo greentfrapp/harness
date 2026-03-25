@@ -23,6 +23,7 @@ const emit = defineEmits<{
 }>();
 
 const expanded = ref(false);
+const autoFollowUp = ref(false);
 const confirmingDelete = ref(false);
 const deleting = ref(false);
 
@@ -315,7 +316,7 @@ function handleRetry(id: string) {
         <button
           v-if="task.status === 'approved'"
           class="px-2 py-1 text-xs font-medium rounded bg-blue-900 hover:bg-blue-800 text-blue-300 transition-colors"
-          @click="(e: Event) => { e.stopPropagation(); expanded = true; }"
+          @click="(e: Event) => { e.stopPropagation(); autoFollowUp = true; expanded = true; }"
         >
           Follow Up
         </button>
@@ -355,6 +356,7 @@ function handleRetry(id: string) {
       v-if="expanded"
       :task="task"
       :context="context"
+      :auto-follow-up="autoFollowUp"
       @cancel="emit('cancel', $event)"
       @approve="handleApprove($event)"
       @reject="handleReject($event)"

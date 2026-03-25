@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue';
+import { ref, nextTick, onMounted, computed } from 'vue';
 import type { Task, TaskEvent } from '@shared/types';
 import { marked } from 'marked';
 import { api } from '../api';
@@ -9,6 +9,7 @@ import DiffViewer from './DiffViewer.vue';
 const props = defineProps<{
   task: Task;
   context: 'outbox' | 'inbox';
+  autoFollowUp?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -34,6 +35,7 @@ const blockedDependents = ref<Array<{ id: string; prompt: string; status: string
 const followUpPrompt = ref('');
 const followingUp = ref(false);
 const showFollowUp = ref(false);
+const followUpTextarea = ref<HTMLTextAreaElement | null>(null);
 const revisePrompt = ref('');
 const revising = ref(false);
 const showRevise = ref(false);
@@ -43,6 +45,11 @@ onMounted(async () => {
     events.value = await api.tasks.events(props.task.id);
   } catch {
     // Ignore fetch errors
+  }
+  if (props.autoFollowUp) {
+    showFollowUp.value = true;
+    await nextTick();
+    followUpTextarea.value?.focus();
   }
 });
 
@@ -314,7 +321,7 @@ function formatTime(ts: number): string {
       <div v-if="!showFollowUp">
         <button
           class="px-3 py-1.5 text-xs font-medium rounded bg-blue-900 hover:bg-blue-800 text-blue-300 transition-colors"
-          @click="showFollowUp = true"
+          @click="showFollowUp = true; nextTick(() => followUpTextarea?.focus())"
         >
           Follow Up
         </button>
@@ -322,6 +329,7 @@ function formatTime(ts: number): string {
       <div v-else class="space-y-2">
         <h4 class="text-xs font-medium text-gray-500 uppercase">Continue Conversation</h4>
         <textarea
+          ref="followUpTextarea"
           v-model="followUpPrompt"
           class="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-200 placeholder-gray-500 focus:border-blue-600 focus:outline-none resize-y"
           rows="3"
