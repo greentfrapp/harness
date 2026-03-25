@@ -375,6 +375,41 @@ describe('ClaudeCodeAdapter', () => {
       expect(event!.raw).toEqual(original);
     });
 
+    it('detects ExitPlanMode tool use as plan_approval_request', () => {
+      const msg = JSON.stringify({
+        type: 'assistant',
+        message: {
+          role: 'assistant',
+          content: [{
+            type: 'tool_use',
+            id: 'toolu_01WHpfNi98VZq5UAAyFxS5ux',
+            name: 'ExitPlanMode',
+            input: {
+              plan: '# Plan\n\n- Step 1\n- Step 2',
+              planFilePath: '/home/user/.claude/plans/test.md',
+            },
+          }],
+        },
+        session_id: 'sess-1',
+      });
+      const event = adapter.parseMessage(msg);
+      expect(event).not.toBeNull();
+      expect(event!.type).toBe('plan_approval_request');
+      expect(event!.summary).toBe('# Plan\n\n- Step 1\n- Step 2');
+      expect(event!.sessionId).toBe('sess-1');
+    });
+
+    it('does not detect ExitPlanMode in non-assistant messages', () => {
+      const msg = JSON.stringify({
+        type: 'tool_use',
+        tool: 'ExitPlanMode',
+        session_id: 'sess-1',
+      });
+      const event = adapter.parseMessage(msg);
+      expect(event).not.toBeNull();
+      expect(event!.type).toBe('progress');
+    });
+
     it('parses metadata-only assistant message', () => {
       const original = {
         type: 'assistant',
