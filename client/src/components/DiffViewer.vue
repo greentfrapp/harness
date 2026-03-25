@@ -233,14 +233,20 @@ watch(renderedHtml, async () => {
 .diff-container .d2h-diff-tbody tr td {
   line-height: 1.3;
 }
-/* Ensure side-by-side containers establish proper overflow context */
+/* Ensure side-by-side containers render as two columns */
 .diff-container .d2h-file-side-diff {
+  display: inline-block;
+  width: 50%;
   position: relative;
   overflow-x: auto;
   overflow-y: hidden;
+  vertical-align: top;
+  margin: 0;
 }
 /* Prevent diff wrapper from breaking out of container */
 .diff-container .d2h-file-diff {
   overflow: auto;
+  white-space: nowrap;
+  font-size: 0; /* Remove inline-block whitespace gap */
 }
 </style>
