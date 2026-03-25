@@ -13,7 +13,7 @@ const TAG_COLORS: Record<string, { bg: string; text: string }> = {
   purple: { bg: 'bg-purple-900', text: 'text-purple-300' },
   orange: { bg: 'bg-orange-900', text: 'text-orange-300' },
   pink: { bg: 'bg-pink-900', text: 'text-pink-300' },
-  gray: { bg: 'bg-gray-800', text: 'text-gray-400' },
+  gray: { bg: 'bg-zinc-800', text: 'text-zinc-400' },
   cyan: { bg: 'bg-cyan-900', text: 'text-cyan-300' },
   indigo: { bg: 'bg-indigo-900', text: 'text-indigo-300' },
   teal: { bg: 'bg-teal-900', text: 'text-teal-300' },
@@ -89,18 +89,18 @@ const statusConfig: Record<
   string,
   { color: string; label: string; pulse?: boolean }
 > = {
-  draft: { color: 'bg-gray-600', label: 'Draft' },
-  queued: { color: 'bg-gray-500', label: 'Queued' },
+  draft: { color: 'bg-zinc-600', label: 'Draft' },
+  queued: { color: 'bg-zinc-500', label: 'Queued' },
   in_progress: { color: 'bg-blue-500', label: 'Running', pulse: true },
   retrying: { color: 'bg-yellow-500', label: 'Retrying', pulse: true },
   ready: { color: 'bg-green-500', label: 'Ready' },
-  held: { color: 'bg-gray-500', label: 'Held' },
-  deferred: { color: 'bg-gray-600', label: 'Deferred' },
+  held: { color: 'bg-zinc-500', label: 'Held' },
+  deferred: { color: 'bg-zinc-600', label: 'Deferred' },
   error: { color: 'bg-red-500', label: 'Error' },
   permission: { color: 'bg-red-500', label: 'Permission', pulse: true },
-  approved: { color: 'bg-gray-500', label: 'Approved' },
+  approved: { color: 'bg-zinc-500', label: 'Approved' },
   rejected: { color: 'bg-red-600', label: 'Rejected' },
-  cancelled: { color: 'bg-gray-600', label: 'Cancelled' },
+  cancelled: { color: 'bg-zinc-600', label: 'Cancelled' },
 };
 
 const status = computed(() => statusConfig[props.task.status] ?? statusConfig.queued);
@@ -248,12 +248,12 @@ async function handleCollapsedReturn(e: Event) {
 <template>
   <div class="group rounded-lg border overflow-hidden" :class="[
     isCheckedOut ? 'border-teal-500/60 bg-teal-950/30 ring-1 ring-teal-500/30' :
-    task.status === 'approved' ? 'border-green-900/50 bg-gray-900/60 opacity-75' : 'border-gray-800 bg-gray-900',
+    task.status === 'approved' ? 'border-green-900/50 bg-zinc-900/60 opacity-75' : 'border-zinc-800 bg-zinc-900',
     selected ? 'ring-1 ring-zinc-500/60 border-zinc-500/40' : ''
   ]">
     <!-- Summary row -->
     <button
-      class="w-full px-4 py-3 flex items-start gap-3 text-left hover:bg-gray-800/50 transition-colors"
+      class="w-full px-4 py-3 flex items-start gap-3 text-left hover:bg-zinc-800/50 transition-colors"
       @click="hasSelection ? emit('toggleSelect', task.id) : (expanded = !expanded)"
     >
       <!-- Selection checkbox (visible on hover or when selected/hasSelection) -->
@@ -262,7 +262,7 @@ async function handleCollapsedReturn(e: Event) {
         class="mt-1 w-4 h-4 rounded border shrink-0 flex items-center justify-center transition-colors cursor-pointer"
         :class="selected
           ? 'bg-zinc-600 border-zinc-500 text-white'
-          : 'border-gray-600 bg-gray-800 hover:border-gray-400'"
+          : 'border-zinc-600 bg-zinc-800 hover:border-zinc-400'"
         @click.stop="emit('toggleSelect', task.id)"
       >
         <svg v-if="selected" class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -277,7 +277,7 @@ async function handleCollapsedReturn(e: Event) {
       >
         <!-- Hover checkbox (hidden by default, shown on group hover) -->
         <span
-          class="w-4 h-4 rounded border items-center justify-center transition-colors cursor-pointer border-gray-600 bg-gray-800 hover:border-gray-400 hidden group-hover:flex absolute inset-0"
+          class="w-4 h-4 rounded border items-center justify-center transition-colors cursor-pointer border-zinc-600 bg-zinc-800 hover:border-zinc-400 hidden group-hover:flex absolute inset-0"
           @click.stop="emit('toggleSelect', task.id)"
         />
         <!-- Status dot (hidden on hover) -->
@@ -290,7 +290,7 @@ async function handleCollapsedReturn(e: Event) {
       <!-- Content -->
       <div class="flex-1 min-w-0">
         <div class="flex items-center gap-2 mb-1">
-          <span class="text-xs font-medium px-1.5 py-0.5 rounded bg-gray-800 text-gray-400">
+          <span class="text-xs font-medium px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400">
             {{ task.type }}
           </span>
           <span
@@ -301,7 +301,7 @@ async function handleCollapsedReturn(e: Event) {
           </span>
           <span
             v-if="task.status === 'approved'"
-            class="text-xs font-medium px-1.5 py-0.5 rounded bg-gray-800 text-gray-400"
+            class="text-xs font-medium px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400"
           >
             Accepted
           </span>
@@ -330,21 +330,21 @@ async function handleCollapsedReturn(e: Event) {
             :class="{
               'bg-red-900 text-red-300': task.priority === 'P0',
               'bg-orange-900 text-orange-300': task.priority === 'P1',
-              'bg-gray-800 text-gray-400': task.priority === 'P2',
-              'bg-gray-800 text-gray-500': task.priority === 'P3',
+              'bg-zinc-800 text-zinc-400': task.priority === 'P2',
+              'bg-zinc-800 text-zinc-500': task.priority === 'P3',
             }"
           >
             {{ task.priority }}
           </span>
-          <span class="text-xs text-gray-600 ml-auto">{{ elapsed }}</span>
+          <span class="text-xs text-zinc-600 ml-auto">{{ elapsed }}</span>
         </div>
-        <p class="text-sm text-gray-300 leading-snug">{{ truncatedPrompt }}</p>
+        <p class="text-sm text-zinc-300 leading-snug">{{ truncatedPrompt }}</p>
       </div>
 
       <!-- Queue position -->
       <span
         v-if="context === 'outbox' && task.queue_position"
-        class="text-xs text-gray-600 font-mono mt-1"
+        class="text-xs text-zinc-600 font-mono mt-1"
       >
         #{{ task.queue_position }}
       </span>
@@ -352,7 +352,7 @@ async function handleCollapsedReturn(e: Event) {
       <!-- Action buttons (visible in collapsed state for tasks needing input) -->
       <div v-if="needsInput" class="flex items-center gap-1 shrink-0" @click.stop>
         <template v-if="actionsDisabled">
-          <span class="text-xs text-gray-500 italic" title="Another task in this repo is checked out">Locked</span>
+          <span class="text-xs text-zinc-500 italic" title="Another task in this repo is checked out">Locked</span>
         </template>
         <template v-else-if="collapsedMergeError">
           <span class="text-xs text-red-400 max-w-48 truncate" :title="collapsedMergeError">Merge failed</span>
@@ -380,7 +380,7 @@ async function handleCollapsedReturn(e: Event) {
             {{ collapsedRejecting ? 'Rejecting...' : 'Reject' }}
           </button>
           <button
-            class="px-2 py-1 text-xs font-medium rounded bg-gray-800 hover:bg-gray-700 text-gray-400 transition-colors"
+            class="px-2 py-1 text-xs font-medium rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-400 transition-colors"
             @click="handleCollapsedDefer"
           >
             Defer
@@ -409,7 +409,7 @@ async function handleCollapsedReturn(e: Event) {
       <!-- Retry button (visible in collapsed state for error tasks) -->
       <div v-if="isError" class="flex items-center gap-1 shrink-0" @click.stop>
         <template v-if="actionsDisabled">
-          <span class="text-xs text-gray-500 italic" title="Another task in this repo is checked out">Locked</span>
+          <span class="text-xs text-zinc-500 italic" title="Another task in this repo is checked out">Locked</span>
         </template>
         <template v-else>
           <button
@@ -453,7 +453,7 @@ async function handleCollapsedReturn(e: Event) {
           class="px-2 py-1 text-xs font-medium rounded transition-colors disabled:opacity-50"
           :class="confirmingDelete
             ? 'bg-red-800 hover:bg-red-700 text-red-200'
-            : 'bg-gray-800 hover:bg-gray-700 text-gray-500 hover:text-red-400'"
+            : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-500 hover:text-red-400'"
           :disabled="deleting"
           @click="handleDelete"
         >
@@ -461,7 +461,7 @@ async function handleCollapsedReturn(e: Event) {
         </button>
         <button
           v-if="confirmingDelete && !deleting"
-          class="px-2 py-1 text-xs font-medium rounded bg-gray-800 hover:bg-gray-700 text-gray-500 transition-colors"
+          class="px-2 py-1 text-xs font-medium rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-500 transition-colors"
           @click="cancelDelete"
         >
           ✕
@@ -472,7 +472,7 @@ async function handleCollapsedReturn(e: Event) {
       <span
         role="button"
         tabindex="0"
-        class="w-4 h-4 text-gray-600 hover:text-gray-300 mt-1 shrink-0 transition-colors cursor-pointer"
+        class="w-4 h-4 text-zinc-600 hover:text-zinc-300 mt-1 shrink-0 transition-colors cursor-pointer"
         title="Open in modal"
         @click.stop="emit('maximize', task.id)"
         @keydown.enter.stop="emit('maximize', task.id)"
@@ -485,7 +485,7 @@ async function handleCollapsedReturn(e: Event) {
 
       <!-- Expand chevron -->
       <svg
-        class="w-4 h-4 text-gray-600 mt-1 shrink-0 transition-transform"
+        class="w-4 h-4 text-zinc-600 mt-1 shrink-0 transition-transform"
         :class="expanded ? 'rotate-180' : ''"
         fill="none"
         stroke="currentColor"

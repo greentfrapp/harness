@@ -108,28 +108,28 @@ function shortName(fullPath: string): string {
 <template>
   <div class="space-y-1">
     <!-- Stats summary -->
-    <div v-if="stats" class="text-xs text-gray-500 font-mono whitespace-pre">{{ stats }}</div>
+    <div v-if="stats" class="text-xs text-zinc-500 font-mono whitespace-pre">{{ stats }}</div>
 
     <!-- Loading -->
-    <div v-if="loading" class="text-sm text-gray-500 py-4 text-center">Loading diff...</div>
+    <div v-if="loading" class="text-sm text-zinc-500 py-4 text-center">Loading diff...</div>
 
     <!-- Error -->
     <div v-else-if="error" class="text-sm text-red-400 py-4 text-center">{{ error }}</div>
 
     <!-- No changes -->
-    <div v-else-if="!diffText" class="text-sm text-gray-500 py-4 text-center">No changes</div>
+    <div v-else-if="!diffText" class="text-sm text-zinc-500 py-4 text-center">No changes</div>
 
     <!-- Tabbed diff display -->
-    <div v-else-if="fileDiffs.length" class="rounded border border-gray-800 overflow-hidden">
+    <div v-else-if="fileDiffs.length" class="rounded border border-zinc-800 overflow-hidden">
       <!-- Tab bar -->
-      <div class="diff-tab-bar flex overflow-x-auto border-b border-gray-800 bg-[#0d1117]">
+      <div class="diff-tab-bar flex overflow-x-auto border-b border-zinc-800 bg-[#0d1117]">
         <button
           v-for="(file, idx) in fileDiffs"
           :key="file.fileName"
-          class="diff-tab shrink-0 px-3 py-1.5 text-xs font-mono border-r border-gray-800 transition-colors whitespace-nowrap"
+          class="diff-tab shrink-0 px-3 py-1.5 text-xs font-mono border-r border-zinc-800 transition-colors whitespace-nowrap"
           :class="idx === activeFileIndex
             ? 'bg-[#161b22] text-[#58a6ff] border-b-2 border-b-[#58a6ff]'
-            : 'text-gray-400 hover:text-gray-200 hover:bg-[#161b22]/50'"
+            : 'text-zinc-400 hover:text-zinc-200 hover:bg-[#161b22]/50'"
           :title="file.fileName"
           @click="activeFileIndex = idx"
         >
@@ -140,7 +140,7 @@ function shortName(fullPath: string): string {
       </div>
 
       <!-- Full path of active file -->
-      <div class="px-2 py-1 bg-[#161b22] text-xs text-gray-500 font-mono border-b border-gray-800 truncate">
+      <div class="px-2 py-1 bg-[#161b22] text-xs text-zinc-500 font-mono border-b border-zinc-800 truncate">
         {{ fileDiffs[activeFileIndex]?.fileName }}
       </div>
 

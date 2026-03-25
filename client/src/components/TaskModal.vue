@@ -37,17 +37,17 @@ onBeforeUnmount(() => {
 });
 
 const statusConfig: Record<string, { color: string; label: string }> = {
-  queued: { color: 'text-gray-400', label: 'Queued' },
+  queued: { color: 'text-zinc-400', label: 'Queued' },
   in_progress: { color: 'text-blue-400', label: 'Running' },
   retrying: { color: 'text-yellow-400', label: 'Retrying' },
   ready: { color: 'text-green-400', label: 'Ready' },
-  held: { color: 'text-gray-400', label: 'Held' },
-  deferred: { color: 'text-gray-500', label: 'Deferred' },
+  held: { color: 'text-zinc-400', label: 'Held' },
+  deferred: { color: 'text-zinc-500', label: 'Deferred' },
   error: { color: 'text-red-400', label: 'Error' },
   permission: { color: 'text-red-400', label: 'Permission' },
-  approved: { color: 'text-gray-400', label: 'Approved' },
+  approved: { color: 'text-zinc-400', label: 'Approved' },
   rejected: { color: 'text-red-500', label: 'Rejected' },
-  cancelled: { color: 'text-gray-500', label: 'Cancelled' },
+  cancelled: { color: 'text-zinc-500', label: 'Cancelled' },
 };
 
 function statusLabel(status: string) {
@@ -55,7 +55,7 @@ function statusLabel(status: string) {
 }
 
 function statusColor(status: string) {
-  return statusConfig[status]?.color ?? 'text-gray-400';
+  return statusConfig[status]?.color ?? 'text-zinc-400';
 }
 </script>
 
@@ -69,12 +69,12 @@ function statusColor(status: string) {
       />
 
       <!-- Modal -->
-      <div class="relative bg-gray-900 border border-gray-700 rounded-xl shadow-2xl w-full max-w-4xl mx-4 max-h-[90vh] flex flex-col">
+      <div class="relative bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl w-full max-w-4xl mx-4 max-h-[90vh] flex flex-col">
         <!-- Header -->
-        <div class="px-6 py-4 border-b border-gray-800 flex items-center justify-between shrink-0">
+        <div class="px-6 py-4 border-b border-zinc-800 flex items-center justify-between shrink-0">
           <div class="flex items-center gap-3 min-w-0">
             <h2 class="text-lg font-semibold truncate">Task</h2>
-            <span class="text-xs font-medium px-1.5 py-0.5 rounded bg-gray-800 text-gray-400 shrink-0">
+            <span class="text-xs font-medium px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 shrink-0">
               {{ task.type }}
             </span>
             <span
@@ -82,8 +82,8 @@ function statusColor(status: string) {
               :class="{
                 'bg-red-900 text-red-300': task.priority === 'P0',
                 'bg-orange-900 text-orange-300': task.priority === 'P1',
-                'bg-gray-800 text-gray-400': task.priority === 'P2',
-                'bg-gray-800 text-gray-500': task.priority === 'P3',
+                'bg-zinc-800 text-zinc-400': task.priority === 'P2',
+                'bg-zinc-800 text-zinc-500': task.priority === 'P3',
               }"
             >
               {{ task.priority }}
@@ -91,12 +91,12 @@ function statusColor(status: string) {
             <span class="text-xs font-medium shrink-0" :class="statusColor(task.status)">
               {{ statusLabel(task.status) }}
             </span>
-            <span class="text-xs text-gray-600 font-mono shrink-0">
+            <span class="text-xs text-zinc-600 font-mono shrink-0">
               {{ task.id.slice(0, 8) }}
             </span>
           </div>
           <button
-            class="p-1.5 text-gray-400 hover:text-gray-200 transition-colors rounded-md hover:bg-gray-800 shrink-0"
+            class="p-1.5 text-zinc-400 hover:text-zinc-200 transition-colors rounded-md hover:bg-zinc-800 shrink-0"
             title="Close (Esc)"
             @click="emit('close')"
           >
