@@ -3,6 +3,7 @@ import { ref } from 'vue';
 import type { Task, LogEntry } from '@shared/types';
 import { useOutbox } from './useOutbox';
 import { useInbox } from './useInbox';
+import { useCheckouts } from './useCheckouts';
 import { useLog } from './useLog';
 
 export const useEvents = defineStore('events', () => {
@@ -72,6 +73,18 @@ export const useEvents = defineStore('events', () => {
       const entry: LogEntry = JSON.parse(e.data);
       const log = useLog();
       log.onLogEntry(entry);
+    });
+
+    eventSource.addEventListener('task:checked_out', (e) => {
+      const data = JSON.parse(e.data);
+      const checkoutsStore = useCheckouts();
+      checkoutsStore.onCheckedOut(data);
+    });
+
+    eventSource.addEventListener('task:returned', (e) => {
+      const data = JSON.parse(e.data);
+      const checkoutsStore = useCheckouts();
+      checkoutsStore.onReturned(data);
     });
 
     // Forward task:progress events as custom DOM events for SessionStream

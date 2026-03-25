@@ -5,6 +5,7 @@ import { api } from './api';
 import { useEvents } from './stores/useEvents';
 import { useOutbox } from './stores/useOutbox';
 import { useInbox } from './stores/useInbox';
+import { useCheckouts } from './stores/useCheckouts';
 import OutboxPanel from './components/OutboxPanel.vue';
 import InboxPanel from './components/InboxPanel.vue';
 import NewTaskModal from './components/NewTaskModal.vue';
@@ -15,6 +16,7 @@ import { useLog } from './stores/useLog';
 const events = useEvents();
 const outbox = useOutbox();
 const inbox = useInbox();
+const checkoutsStore = useCheckouts();
 const log = useLog();
 
 const showNewTask = ref(false);
@@ -61,6 +63,19 @@ async function handleSettingsClose() {
   await refreshConfig();
 }
 
+const returningCheckout = ref<string | null>(null);
+
+async function handleReturnCheckout(taskId: string) {
+  returningCheckout.value = taskId;
+  try {
+    await api.tasks.return_(taskId);
+  } catch {
+    // Error will show via SSE or be silently handled
+  } finally {
+    returningCheckout.value = null;
+  }
+}
+
 function handleOpenSettingsFromTask() {
   showNewTask.value = false;
   showSettings.value = true;
@@ -73,6 +88,7 @@ onMounted(async () => {
   await Promise.all([
     outbox.fetchTasks(),
     inbox.fetchItems(),
+    checkoutsStore.fetchCheckouts(),
     log.fetchRecent(),
     refreshConfig(),
   ]);
@@ -116,6 +132,21 @@ onUnmounted(() => {
         </button>
       </div>
     </header>
+
+    <!-- Checkout banner -->
+    <div v-if="checkoutsStore.hasCheckouts" class="bg-amber-950 border-b border-amber-900 px-6 py-2">
+      <div v-for="co in checkoutsStore.checkouts" :key="co.taskId" class="flex items-center gap-3 text-sm">
+        <span class="text-amber-400 font-medium shrink-0">Checked out</span>
+        <span class="text-amber-200 truncate">{{ co.projectName }}: {{ co.taskPrompt }}</span>
+        <button
+          class="ml-auto px-3 py-1 text-xs font-medium rounded bg-amber-900 hover:bg-amber-800 text-amber-300 transition-colors disabled:opacity-50 shrink-0"
+          :disabled="returningCheckout === co.taskId"
+          @click="handleReturnCheckout(co.taskId)"
+        >
+          {{ returningCheckout === co.taskId ? 'Returning...' : 'Return' }}
+        </button>
+      </div>
+    </div>
 
     <!-- Main two-column layout -->
     <main class="flex-1 min-h-0 grid grid-cols-2 divide-x divide-gray-800 overflow-hidden">

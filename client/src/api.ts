@@ -6,6 +6,7 @@ import type {
   CreateTaskInput,
   UpdateTaskInput,
   TagConfig,
+  CheckoutInfo,
 } from '@shared/types';
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
@@ -88,6 +89,13 @@ export const api = {
       request<TaskEvent[]>(`/api/tasks/${id}/events`),
     progress: (id: string) =>
       request<{ messages: unknown[] }>(`/api/tasks/${id}/progress`),
+    checkout: (id: string) =>
+      request<{ ok: boolean; checkout_branch: string }>(`/api/tasks/${id}/checkout`, { method: 'POST' }),
+    return_: (id: string) =>
+      request<{ ok: boolean }>(`/api/tasks/${id}/return`, { method: 'POST' }),
+  },
+  checkouts: {
+    list: () => request<CheckoutInfo[]>('/api/checkouts'),
   },
   log: {
     recent: () => request<LogEntry[]>('/api/log'),

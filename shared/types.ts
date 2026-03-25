@@ -170,7 +170,17 @@ export type SSEEventType =
   | 'task:progress'
   | 'inbox:new'
   | 'inbox:updated'
+  | 'task:checked_out'
+  | 'task:returned'
   | 'log:entry';
+
+// Checkout state exposed to clients
+export interface CheckoutInfo {
+  taskId: string;
+  taskPrompt: string;
+  repoPath: string;
+  projectName: string;
+}
 
 export interface SSEEvent<T = unknown> {
   type: SSEEventType;

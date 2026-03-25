@@ -196,6 +196,70 @@ export function hasCommits(
   }
 }
 
+/** Checkout a task's branch into the main repo for manual testing.
+ *  Creates a temporary branch from the target, merges the task branch into it,
+ *  and checks it out in the main repo working tree. */
+export function checkoutTask(
+  repoPath: string,
+  targetBranch: string,
+  taskBranch: string,
+  checkoutBranch: string,
+): void {
+  try {
+    // Create checkout branch from target
+    execSync(`git checkout ${targetBranch}`, { cwd: repoPath, stdio: 'pipe' });
+    execSync(`git checkout -b ${checkoutBranch}`, { cwd: repoPath, stdio: 'pipe' });
+    // Merge task branch into it
+    execSync(
+      `git merge ${taskBranch} --no-ff -m "Checkout ${taskBranch} for testing"`,
+      { cwd: repoPath, stdio: 'pipe' },
+    );
+  } catch (err) {
+    // Clean up on failure: abort merge if in progress, delete branch, restore target
+    try { execSync('git merge --abort', { cwd: repoPath, stdio: 'pipe' }); } catch { /* no merge in progress */ }
+    try { execSync(`git checkout ${targetBranch}`, { cwd: repoPath, stdio: 'pipe' }); } catch { /* best effort */ }
+    try { execSync(`git branch -D ${checkoutBranch}`, { cwd: repoPath, stdio: 'pipe' }); } catch { /* may not exist */ }
+    throw err;
+  }
+}
+
+/** Return a checked-out repo to its target branch and clean up the checkout branch. */
+export function returnCheckout(
+  repoPath: string,
+  targetBranch: string,
+  checkoutBranch: string,
+): void {
+  execSync(`git checkout ${targetBranch}`, { cwd: repoPath, stdio: 'pipe' });
+  try {
+    execSync(`git branch -D ${checkoutBranch}`, { cwd: repoPath, stdio: 'pipe' });
+  } catch {
+    // Branch may already be deleted
+  }
+}
+
+/** Delete all harness/checkout-* branches in a repo (startup cleanup). */
+export function cleanupCheckoutBranches(repoPath: string): void {
+  try {
+    const output = execSync('git branch --list "harness/checkout-*"', {
+      cwd: repoPath,
+      encoding: 'utf-8',
+    });
+    for (const line of output.split('\n')) {
+      const branch = line.trim();
+      if (branch) {
+        try {
+          execSync(`git branch -D ${branch}`, { cwd: repoPath, stdio: 'pipe' });
+          serverLog.info(`Cleaned up stale checkout branch: ${branch}`);
+        } catch {
+          // Best effort
+        }
+      }
+    }
+  } catch {
+    // No matching branches or git error
+  }
+}
+
 /** Generate a branch name from task ID and prompt. */
 export function makeBranchName(taskId: string, prompt: string): string {
   const shortId = taskId.slice(0, 8);

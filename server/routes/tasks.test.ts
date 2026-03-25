@@ -9,9 +9,22 @@ vi.mock('../config.ts', () => ({
   CONFIG_PATH: '/mock/.harness/config.jsonc',
 }));
 
+vi.mock('../git.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../git.ts')>();
+  return {
+    ...actual,
+    checkoutTask: vi.fn(),
+    returnCheckout: vi.fn(),
+    cleanupCheckoutBranches: vi.fn(),
+  };
+});
+
 import { readConfigRaw, saveConfigRaw } from '../config.ts';
+import { checkoutTask, returnCheckout } from '../git.ts';
 const mockReadConfigRaw = readConfigRaw as ReturnType<typeof vi.fn>;
 const mockSaveConfigRaw = saveConfigRaw as ReturnType<typeof vi.fn>;
+const mockCheckoutTask = checkoutTask as ReturnType<typeof vi.fn>;
+const mockReturnCheckout = returnCheckout as ReturnType<typeof vi.fn>;
 
 function makeTask(overrides: Partial<Task> = {}): Task {
   return {
@@ -82,6 +95,7 @@ function makeContext(): AppContext {
       getTaskEvents: vi.fn().mockReturnValue([]),
       clearParentReferences: vi.fn(),
     } as any,
+    checkoutState: new Map(),
   };
 }
 
@@ -92,6 +106,8 @@ describe('Task Routes', () => {
   beforeEach(() => {
     ctx = makeContext();
     app = createTaskRoutes(ctx);
+    mockCheckoutTask.mockReset();
+    mockReturnCheckout.mockReset();
   });
 
   describe('GET /projects', () => {
@@ -491,6 +507,192 @@ describe('Task Routes', () => {
 
       await app.request('/tasks/task-1', { method: 'DELETE' });
       expect(ctx.queries.clearParentReferences).toHaveBeenCalledWith('task-1');
+    });
+  });
+
+  describe('POST /tasks/:id/checkout', () => {
+    it('checks out a ready task with a branch', async () => {
+      const task = makeTask({ status: 'ready', branch_name: 'harness/abc-test' });
+      (ctx.queries.getTaskById as any).mockReturnValue(task);
+
+      const res = await app.request('/tasks/task-1/checkout', { method: 'POST' });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.ok).toBe(true);
+      expect(body.checkout_branch).toMatch(/^harness\/checkout-/);
+
+      expect(mockCheckoutTask).toHaveBeenCalledWith(
+        '/tmp/test', 'main', 'harness/abc-test', expect.stringContaining('harness/checkout-'),
+      );
+      expect(ctx.queries.createTaskEvent).toHaveBeenCalledWith('task-1', 'checked_out', null);
+      expect(ctx.sseManager.broadcast).toHaveBeenCalledWith('task:checked_out', expect.objectContaining({
+        taskId: 'task-1',
+        projectName: 'test',
+      }));
+      expect(ctx.checkoutState.has('/tmp/test')).toBe(true);
+    });
+
+    it('returns 404 for unknown task', async () => {
+      (ctx.queries.getTaskById as any).mockReturnValue(undefined);
+      const res = await app.request('/tasks/nope/checkout', { method: 'POST' });
+      expect(res.status).toBe(404);
+    });
+
+    it('returns 400 for non-ready task', async () => {
+      (ctx.queries.getTaskById as any).mockReturnValue(makeTask({ status: 'approved' }));
+      const res = await app.request('/tasks/task-1/checkout', { method: 'POST' });
+      expect(res.status).toBe(400);
+    });
+
+    it('returns 400 for task without branch', async () => {
+      (ctx.queries.getTaskById as any).mockReturnValue(makeTask({ status: 'ready', branch_name: null }));
+      const res = await app.request('/tasks/task-1/checkout', { method: 'POST' });
+      expect(res.status).toBe(400);
+    });
+
+    it('returns 409 when repo already has a checkout active', async () => {
+      const task = makeTask({ status: 'ready', branch_name: 'harness/abc-test' });
+      (ctx.queries.getTaskById as any).mockReturnValue(task);
+
+      // Pre-populate checkout state
+      ctx.checkoutState.set('/tmp/test', { taskId: 'other-task', checkoutBranch: 'harness/checkout-other' });
+
+      const res = await app.request('/tasks/task-1/checkout', { method: 'POST' });
+      expect(res.status).toBe(409);
+      const body = await res.json();
+      expect(body.checked_out_task_id).toBe('other-task');
+    });
+
+    it('allows checkout of error tasks', async () => {
+      const task = makeTask({ status: 'error', branch_name: 'harness/abc-test' });
+      (ctx.queries.getTaskById as any).mockReturnValue(task);
+
+      const res = await app.request('/tasks/task-1/checkout', { method: 'POST' });
+      expect(res.status).toBe(200);
+    });
+
+    it('returns 500 when git checkout fails', async () => {
+      const task = makeTask({ status: 'ready', branch_name: 'harness/abc-test' });
+      (ctx.queries.getTaskById as any).mockReturnValue(task);
+      mockCheckoutTask.mockImplementationOnce(() => { throw new Error('merge conflict'); });
+
+      const res = await app.request('/tasks/task-1/checkout', { method: 'POST' });
+      expect(res.status).toBe(500);
+      const body = await res.json();
+      expect(body.error).toMatch(/merge conflict/);
+      expect(ctx.checkoutState.has('/tmp/test')).toBe(false);
+    });
+  });
+
+  describe('POST /tasks/:id/return', () => {
+    it('returns a checked-out task', async () => {
+      const task = makeTask({ status: 'ready', branch_name: 'harness/abc-test' });
+      (ctx.queries.getTaskById as any).mockReturnValue(task);
+
+      ctx.checkoutState.set('/tmp/test', { taskId: 'task-1', checkoutBranch: 'harness/checkout-task-1' });
+
+      const res = await app.request('/tasks/task-1/return', { method: 'POST' });
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.ok).toBe(true);
+
+      expect(mockReturnCheckout).toHaveBeenCalledWith('/tmp/test', 'main', 'harness/checkout-task-1');
+      expect(ctx.queries.createTaskEvent).toHaveBeenCalledWith('task-1', 'returned', null);
+      expect(ctx.sseManager.broadcast).toHaveBeenCalledWith('task:returned', expect.objectContaining({
+        taskId: 'task-1',
+      }));
+      expect(ctx.checkoutState.has('/tmp/test')).toBe(false);
+    });
+
+    it('returns 400 when task is not checked out', async () => {
+      const task = makeTask({ status: 'ready' });
+      (ctx.queries.getTaskById as any).mockReturnValue(task);
+
+      const res = await app.request('/tasks/task-1/return', { method: 'POST' });
+      expect(res.status).toBe(400);
+    });
+
+    it('returns 404 for unknown task', async () => {
+      (ctx.queries.getTaskById as any).mockReturnValue(undefined);
+      const res = await app.request('/tasks/nope/return', { method: 'POST' });
+      expect(res.status).toBe(404);
+    });
+  });
+
+  describe('GET /checkouts', () => {
+    it('returns empty list when no checkouts active', async () => {
+      const res = await app.request('/checkouts');
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body).toEqual([]);
+    });
+
+    it('returns active checkouts', async () => {
+      const task = makeTask({ status: 'ready', prompt: 'implement feature X' });
+      (ctx.queries.getTaskById as any).mockReturnValue(task);
+
+      ctx.checkoutState.set('/tmp/test', { taskId: 'task-1', checkoutBranch: 'harness/checkout-task-1' });
+
+      const res = await app.request('/checkouts');
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body).toHaveLength(1);
+      expect(body[0]).toEqual({
+        taskId: 'task-1',
+        taskPrompt: 'implement feature X',
+        repoPath: '/tmp/test',
+        projectName: 'test',
+      });
+    });
+  });
+
+  describe('auto-return on approve/reject', () => {
+    it('auto-returns checkout when approving checked-out task', async () => {
+      const task = makeTask({ status: 'ready', branch_name: null });
+      (ctx.queries.getTaskById as any).mockReturnValue(task);
+      (ctx.queries.updateTask as any).mockReturnValue(makeTask({ status: 'approved' }));
+
+      ctx.checkoutState.set('/tmp/test', { taskId: 'task-1', checkoutBranch: 'harness/checkout-task-1' });
+
+      const res = await app.request('/tasks/task-1/approve', { method: 'POST' });
+      expect(res.status).toBe(200);
+
+      // Should have auto-returned
+      expect(mockReturnCheckout).toHaveBeenCalledWith('/tmp/test', 'main', 'harness/checkout-task-1');
+      expect(ctx.checkoutState.has('/tmp/test')).toBe(false);
+      expect(ctx.sseManager.broadcast).toHaveBeenCalledWith('task:returned', expect.objectContaining({
+        taskId: 'task-1',
+      }));
+    });
+
+    it('auto-returns checkout when rejecting checked-out task', async () => {
+      const task = makeTask({ status: 'ready' });
+      (ctx.queries.getTaskById as any).mockReturnValue(task);
+      (ctx.queries.updateTask as any).mockReturnValue(makeTask({ status: 'rejected' }));
+      (ctx.queries.getTasksByStatus as any).mockReturnValue([]);
+
+      ctx.checkoutState.set('/tmp/test', { taskId: 'task-1', checkoutBranch: 'harness/checkout-task-1' });
+
+      const res = await app.request('/tasks/task-1/reject', { method: 'POST' });
+      expect(res.status).toBe(200);
+
+      expect(mockReturnCheckout).toHaveBeenCalledWith('/tmp/test', 'main', 'harness/checkout-task-1');
+      expect(ctx.checkoutState.has('/tmp/test')).toBe(false);
+    });
+
+    it('does not auto-return for a different task', async () => {
+      const task = makeTask({ status: 'ready', branch_name: null });
+      (ctx.queries.getTaskById as any).mockReturnValue(task);
+      (ctx.queries.updateTask as any).mockReturnValue(makeTask({ status: 'approved' }));
+
+      // Different task is checked out
+      ctx.checkoutState.set('/tmp/test', { taskId: 'other-task', checkoutBranch: 'harness/checkout-other' });
+
+      await app.request('/tasks/task-1/approve', { method: 'POST' });
+
+      // Should NOT have returned
+      expect(mockReturnCheckout).not.toHaveBeenCalled();
+      expect(ctx.checkoutState.has('/tmp/test')).toBe(true);
     });
   });
 });

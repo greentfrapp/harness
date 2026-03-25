@@ -12,8 +12,9 @@ import { AgentRegistry } from './agents/index.ts';
 import { Dispatcher } from './dispatcher.ts';
 import { recoverStaleTasks } from './recovery.ts';
 import { createTaskRoutes } from './routes/tasks.ts';
-import type { AppContext } from './context.ts';
+import type { AppContext, CheckoutEntry } from './context.ts';
 import { serverLog } from './log.ts';
+import { cleanupCheckoutBranches } from './git.ts';
 
 // --- Startup ---
 
@@ -94,6 +95,15 @@ dispatcher = new Dispatcher({
   isDependencySatisfied: (task) => taskQueue.isDependencySatisfied(task),
 });
 
+// --- Checkout state (in-memory, transient) ---
+
+const checkoutState = new Map<string, CheckoutEntry>();
+
+// Clean up any stale checkout branches from a previous crash
+for (const project of queries.getAllProjects()) {
+  cleanupCheckoutBranches(project.repo_path);
+}
+
 const appContext: AppContext = {
   config,
   sseManager,
@@ -101,6 +111,7 @@ const appContext: AppContext = {
   pool,
   dispatcher,
   queries,
+  checkoutState,
 };
 
 // --- App ---
