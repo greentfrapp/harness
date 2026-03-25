@@ -679,7 +679,7 @@ harness/
 - [ ] Multiple repos can have independent checkouts simultaneously (e.g., task A checked out in repo-frontend, task B checked out in repo-backend)
 - [ ] UI shows a prominent "Checked Out" banner at the top of the inbox (or globally) listing all currently checked-out tasks and their repos, each with a "Return" button
 - [ ] `POST /api/tasks/:id/return`: checks the task's repo back to its target branch, deletes the temporary checkout branch, clears that repo's checkout state
-- [ ] Auto-return safety: if the user attempts to Accept/Reject/Checkout a task in a repo that already has a checkout active, prompt to return the existing checkout first
+- [ ] Auto-return safety: if the user attempts to Accept/Reject/Checkout/Revise a task in a repo that already has a checkout active, prompt to return the existing checkout first
 - [ ] After returning, the user can Accept or Reject as normal — checkout does not modify the task's actual branch or status
 - [ ] SSE events `task:checked_out` and `task:returned` (include `repo_path` in payload) to keep all clients in sync
 
@@ -687,6 +687,8 @@ harness/
 - [x] Revise action on inbox Do tasks: user adds feedback text — *`POST /tasks/:id/revise` endpoint, purple "Revise" button in `TaskDetail.vue`*
 - [x] `--resume` with stored session ID in full mode (not plan mode), feedback replaces prompt — *`agent_session_data` preserved; pool.ts:92-101 detects session ID and spawns with `--resume`*
 - [x] Task returns to outbox with status `queued`, preserving worktree and branch — *changed from `in_progress` to `queued` so dispatcher handles it normally*
+- [x] Dispatcher reuses existing worktree for revised tasks — *`dispatchDoTask()` skips `createWorktree` when `task.worktree_path` and `task.branch_name` already exist, preserving original commits*
+- [x] Auto-return checkout on revise — *`autoReturnIfCheckedOut(id)` called at start of revise endpoint, matching approve/reject pattern*
 - [x] Log `task_event` with `event_type = 'revised'` and feedback in `data`
 
 **Defer**
@@ -739,7 +741,7 @@ harness/
 
 These features were implemented during development but weren't tracked in the original phase plan:
 
-- **Revise flow**: `POST /tasks/:id/revise` returns a `ready` or `error` task to the outbox with new feedback, preserving `agent_session_data`, `worktree_path`, and `branch_name`. The agent resumes via `--resume` in the same worktree with full conversation context. This is the primary pre-approval feedback mechanism.
+- **Revise flow**: `POST /tasks/:id/revise` returns a `ready` or `error` task to the outbox with new feedback, preserving `agent_session_data`, `worktree_path`, and `branch_name`. The agent resumes via `--resume` in the same worktree with full conversation context. The dispatcher reuses the existing worktree (skipping `createWorktree`) so original commits are preserved. Auto-returns any active checkout before re-queuing. This is the primary pre-approval feedback mechanism.
 - **Follow-up flow**: `POST /tasks/:id/follow-up` creates a continuation task from an `approved` parent, carrying forward the session ID for `--resume` in a fresh worktree. Uses `parent_task_id` for lineage (not `depends_on`). Guarded against concurrent follow-ups on the same parent (409).
 - **Orphan cleanup**: `clearParentReferences()` nulls out `depends_on` and `parent_task_id` on children when a parent task is rejected, cancelled, or deleted — preventing orphaned tasks from being blocked forever on unsatisfiable dependencies.
 - **Fix flow**: `POST /tasks/:id/fix` re-queues a task with `[MERGE CONFLICT FIX]` context prepended to the prompt, cleaning up the old worktree/branch. Used when merge fails on approve.
@@ -765,7 +767,7 @@ These features were implemented during development but weren't tracked in the or
 - **Discuss task isolation**: Uses Claude Code plan mode (read-only) in main repo directory. Safe for concurrent execution since no writes occur. General read-only enforcement for non-CC agents is future work.
 - **Conversational mode**: Any task (not just Discuss) can transition into a conversation via `--resume`. Capped at 5 concurrent sessions to bound API cost. Allows quick Q&A on Do task results without formal revision.
 - **Error handling**: Retry via `--resume` with history preservation, max 3 retries, then push to inbox with error for user decision.
-- **Worktree lifecycle**: Fresh worktrees created per Do task, destroyed after approval/rejection/cancellation. No reuse — reliability over marginal speed. Discuss tasks don't use worktrees.
+- **Worktree lifecycle**: Fresh worktrees created per Do task, destroyed after approval/rejection/cancellation. Worktrees are reused on revision (preserving original commits); fresh creation only for new tasks. Discuss tasks don't use worktrees.
 - **Revise behavior**: Two mechanisms depending on task state. **Pre-approval** (Revise): `POST /tasks/:id/revise` returns the same task to the outbox with `queued` status, preserving worktree, branch, and session data. The agent resumes via `--resume` in the same worktree. **Post-approval** (Follow-up): `POST /tasks/:id/follow-up` creates a new task with the parent's session ID and a `parent_task_id` link, dispatching immediately with a fresh worktree from the updated target branch. Only one active follow-up per parent task is allowed.
 - **Session resumption**: All human-in-the-loop interactions (revise, conversational mode, retries) use `--resume`. Full conversation is replayed to the model. Claude Code has automatic context compaction for long conversations.
 - **Context accumulation**: Deferred to future work. Claude Code handles automatic compaction internally. If this proves insufficient, Harness can add explicit summarization later.
