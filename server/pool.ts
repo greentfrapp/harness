@@ -355,20 +355,27 @@ export class AgentPool {
     const task = this.deps.getTaskById(taskId);
     if (!task) return;
 
-    // Capture diff stats for Do tasks
+    // Capture diff stats and full diff for Do tasks
     let diffSummary: string | null = null;
+    let diffFull: string | null = null;
     if (task.branch_name) {
       diffSummary = git.getDiffStats(
         project.repo_path,
         project.target_branch,
         task.branch_name,
       );
+      diffFull = git.getDiff(
+        project.repo_path,
+        project.target_branch,
+        task.branch_name,
+      ) || null;
     }
 
     this.deps.updateTask(taskId, {
       status: 'ready',
       agent_summary: summary || null,
       diff_summary: diffSummary,
+      diff_full: diffFull,
       error_message: null,
     });
     this.deps.createTaskEvent(taskId, 'completed', null);

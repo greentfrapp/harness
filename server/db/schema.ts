@@ -30,6 +30,7 @@ export const tasks = sqliteTable('tasks', {
   worktree_path: text('worktree_path'),
   branch_name: text('branch_name'),
   diff_summary: text('diff_summary'),
+  diff_full: text('diff_full'),
   agent_summary: text('agent_summary'),
   error_message: text('error_message'),
   retry_count: integer('retry_count').notNull().default(0),

@@ -751,23 +751,34 @@ export function createTaskRoutes(ctx: AppContext) {
     const task = queries.getTaskById(id);
     if (!task) return c.json({ error: 'Task not found' }, 404);
 
-    if (!task.branch_name) {
-      return c.json({ diff: '', stats: '' });
-    }
-
     const project = queries.getProjectById(task.project_id);
     if (!project) return c.json({ error: 'Project not found' }, 404);
 
-    const diff = git.getDiff(
-      project.repo_path,
-      project.target_branch,
-      task.branch_name,
-    );
-    const stats = git.getDiffStats(
-      project.repo_path,
-      project.target_branch,
-      task.branch_name,
-    );
+    let diff = '';
+    let stats = '';
+
+    // Only attempt live diff if the branch still exists
+    if (task.branch_name && git.branchExists(project.repo_path, task.branch_name)) {
+      diff = git.getDiff(
+        project.repo_path,
+        project.target_branch,
+        task.branch_name,
+      );
+      stats = git.getDiffStats(
+        project.repo_path,
+        project.target_branch,
+        task.branch_name,
+      );
+
+      // Backfill cache on first successful live diff
+      if (diff && !task.diff_full) {
+        queries.updateTask(id, { diff_full: diff });
+      }
+    }
+
+    // Fall back to cached values for whichever field is empty
+    if (!diff && task.diff_full) diff = task.diff_full;
+    if (!stats && task.diff_summary) stats = task.diff_summary;
 
     return c.json({ diff, stats });
   });

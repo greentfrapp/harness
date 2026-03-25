@@ -60,6 +60,19 @@ export function deleteBranch(repoPath: string, branchName: string): void {
   }
 }
 
+/** Check whether a local branch ref exists. */
+export function branchExists(repoPath: string, branchName: string): boolean {
+  try {
+    execSync(`git rev-parse --verify refs/heads/${branchName}`, {
+      cwd: repoPath,
+      stdio: 'pipe',
+    });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Get the full diff between target branch and the task branch. */
 export function getDiff(
   repoPath: string,
@@ -72,7 +85,8 @@ export function getDiff(
       encoding: 'utf-8',
       maxBuffer: 10 * 1024 * 1024, // 10MB
     });
-  } catch {
+  } catch (err) {
+    serverLog.warn(`getDiff failed for ${branchName}: ${err instanceof Error ? err.message : String(err)}`);
     return '';
   }
 }
@@ -88,7 +102,8 @@ export function getDiffStats(
       cwd: repoPath,
       encoding: 'utf-8',
     }).trim();
-  } catch {
+  } catch (err) {
+    serverLog.warn(`getDiffStats failed for ${branchName}: ${err instanceof Error ? err.message : String(err)}`);
     return '';
   }
 }

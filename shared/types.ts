@@ -99,6 +99,7 @@ export interface Task {
   worktree_path: string | null;
   branch_name: string | null;
   diff_summary: string | null;
+  diff_full: string | null;
   agent_summary: string | null;
   error_message: string | null;
   retry_count: number;
@@ -150,6 +151,7 @@ export interface UpdateTaskInput {
   worktree_path?: string | null;
   branch_name?: string | null;
   diff_summary?: string | null;
+  diff_full?: string | null;
   agent_summary?: string | null;
   error_message?: string | null;
 }

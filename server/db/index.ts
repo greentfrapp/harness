@@ -38,6 +38,7 @@ const CREATE_TABLES_SQL = `
     worktree_path TEXT,
     branch_name TEXT,
     diff_summary TEXT,
+    diff_full TEXT,
     agent_summary TEXT,
     error_message TEXT,
     retry_count INTEGER NOT NULL DEFAULT 0,
@@ -89,6 +90,11 @@ export function initDatabase(): void {
   }
   try {
     sqlite.exec("ALTER TABLE tasks ADD COLUMN tags TEXT NOT NULL DEFAULT '[]'");
+  } catch {
+    // Column already exists
+  }
+  try {
+    sqlite.exec('ALTER TABLE tasks ADD COLUMN diff_full TEXT');
   } catch {
     // Column already exists
   }
