@@ -209,7 +209,6 @@ function formatTime(ts: number): string {
 
     <!-- Live session stream for in-progress tasks -->
     <div v-if="showSessionStream">
-      <h4 class="text-xs font-medium text-gray-500 uppercase mb-2">Live Session</h4>
       <SessionStream :task-id="task.id" />
     </div>
 
