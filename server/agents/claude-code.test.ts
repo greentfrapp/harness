@@ -184,17 +184,24 @@ describe('ClaudeCodeAdapter', () => {
       expect(event!.costUsd).toBe(0.05);
     });
 
-    it('parses a permission_request message', () => {
+    it('parses a permission request from tool_result error', () => {
       const msg = JSON.stringify({
-        type: 'assistant',
-        subtype: 'permission_request',
+        type: 'user',
+        message: {
+          role: 'user',
+          content: [{
+            type: 'tool_result',
+            content: 'This command requires approval',
+            is_error: true,
+            tool_use_id: 'toolu_01VEtj6LusjYDzCWYq7CnALj',
+          }],
+        },
+        tool_use_result: 'Error: This command requires approval',
         session_id: 'sess-1',
-        tool: 'Write',
       });
       const event = adapter.parseMessage(msg);
       expect(event).not.toBeNull();
       expect(event!.type).toBe('permission_request');
-      expect(event!.toolName).toBe('Write');
     });
 
     it('parses an error message', () => {

@@ -92,7 +92,13 @@ export class ClaudeCodeAdapter implements AgentAdapter {
       };
     }
 
-    if (msg.subtype === 'permission_request') {
+    // Detect permission request: in -p mode, the CLI returns a tool_result
+    // with "requires approval" when a tool needs permission
+    if (
+      msg.type === 'user' &&
+      typeof msg.tool_use_result === 'string' &&
+      msg.tool_use_result.includes('requires approval')
+    ) {
       return { ...base, type: 'permission_request' };
     }
 

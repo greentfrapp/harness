@@ -174,6 +174,33 @@ Final message when the session completes. Contains summary, cost, and duration.
 }
 ```
 
+### Permission request (tool blocked)
+
+When `--permission-mode default` is active and a tool requires approval, the CLI does **not** emit a special permission event. Instead, the tool result is returned as an error with `"This command requires approval"`. The agent then typically retries.
+
+```json
+{
+  "type": "user",
+  "message": {
+    "role": "user",
+    "content": [
+      {
+        "type": "tool_result",
+        "content": "This command requires approval",
+        "is_error": true,
+        "tool_use_id": "toolu_01VEtj6LusjYDzCWYq7CnALj"
+      }
+    ]
+  },
+  "tool_use_result": "Error: This command requires approval",
+  "session_id": "...",
+  "uuid": "...",
+  "timestamp": "2026-03-25T09:29:32.572Z"
+}
+```
+
+Harness detects this by checking `msg.type === 'user'` and `msg.tool_use_result` containing `"requires approval"`.
+
 ## Key Facts
 
 - **No top-level `tool_use` or `tool_result` messages** — these are always content blocks inside `assistant` and `user` messages respectively.

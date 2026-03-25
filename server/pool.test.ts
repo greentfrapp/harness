@@ -89,7 +89,11 @@ const fakeAdapter: AgentAdapter = {
         content: msg.content,
         raw: msg,
       };
-      if (msg.subtype === 'permission_request') {
+      if (
+        msg.type === 'user' &&
+        typeof msg.tool_use_result === 'string' &&
+        msg.tool_use_result.includes('requires approval')
+      ) {
         return { ...base, type: 'permission_request' as const };
       }
       return {
@@ -313,12 +317,20 @@ describe('AgentPool progress broadcasting', () => {
     createTaskEvent.mockClear();
     broadcast.mockClear();
 
-    // Emit a permission_request event
+    // Emit a permission_request event (real CLI format)
     const permMsg = {
-      type: 'assistant',
-      subtype: 'permission_request',
+      type: 'user',
+      message: {
+        role: 'user',
+        content: [{
+          type: 'tool_result',
+          content: 'This command requires approval',
+          is_error: true,
+          tool_use_id: 'toolu_01VEtj6LusjYDzCWYq7CnALj',
+        }],
+      },
+      tool_use_result: 'Error: This command requires approval',
       session_id: 'sess-1',
-      tool: 'Write',
     };
     spawnedProc.stdout.emit('data', Buffer.from(JSON.stringify(permMsg) + '\n'));
 
@@ -328,14 +340,14 @@ describe('AgentPool progress broadcasting', () => {
     // Should have updated status to permission
     expect(updateTask).toHaveBeenCalledWith('task-1', {
       status: 'permission',
-      error_message: 'Tool requiring permission: Write',
+      error_message: 'Agent requested permission for a tool',
     });
 
     // Should have created a task event
     expect(createTaskEvent).toHaveBeenCalledWith(
       'task-1',
       'permission_requested',
-      JSON.stringify({ tool: 'Write' }),
+      JSON.stringify({ tool: null }),
     );
 
     // Should have broadcast to inbox
