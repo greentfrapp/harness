@@ -64,6 +64,7 @@ async function handleSettingsClose() {
 }
 
 const returningCheckout = ref<string | null>(null);
+const approvingCheckout = ref<string | null>(null);
 
 async function handleReturnCheckout(taskId: string) {
   returningCheckout.value = taskId;
@@ -73,6 +74,17 @@ async function handleReturnCheckout(taskId: string) {
     // Error will show via SSE or be silently handled
   } finally {
     returningCheckout.value = null;
+  }
+}
+
+async function handleApproveCheckout(taskId: string) {
+  approvingCheckout.value = taskId;
+  try {
+    await api.tasks.approve(taskId);
+  } catch {
+    // Error will show via SSE or be silently handled
+  } finally {
+    approvingCheckout.value = null;
   }
 }
 
@@ -138,13 +150,22 @@ onUnmounted(() => {
       <div v-for="co in checkoutsStore.checkouts" :key="co.taskId" class="flex items-center gap-3 text-sm">
         <span class="text-amber-400 font-medium shrink-0">Checked out</span>
         <span class="text-amber-200 truncate">{{ co.projectName }}: {{ co.taskPrompt }}</span>
-        <button
-          class="ml-auto px-3 py-1 text-xs font-medium rounded bg-amber-900 hover:bg-amber-800 text-amber-300 transition-colors disabled:opacity-50 shrink-0"
-          :disabled="returningCheckout === co.taskId"
-          @click="handleReturnCheckout(co.taskId)"
-        >
-          {{ returningCheckout === co.taskId ? 'Returning...' : 'Return' }}
-        </button>
+        <div class="ml-auto flex gap-2 shrink-0">
+          <button
+            class="px-3 py-1 text-xs font-medium rounded bg-amber-900 hover:bg-amber-800 text-amber-300 transition-colors disabled:opacity-50"
+            :disabled="returningCheckout === co.taskId"
+            @click="handleReturnCheckout(co.taskId)"
+          >
+            {{ returningCheckout === co.taskId ? 'Returning...' : 'Return' }}
+          </button>
+          <button
+            class="px-3 py-1 text-xs font-medium rounded bg-green-900 hover:bg-green-800 text-green-300 transition-colors disabled:opacity-50"
+            :disabled="approvingCheckout === co.taskId"
+            @click="handleApproveCheckout(co.taskId)"
+          >
+            {{ approvingCheckout === co.taskId ? 'Merging...' : 'Approve' }}
+          </button>
+        </div>
       </div>
     </div>
 

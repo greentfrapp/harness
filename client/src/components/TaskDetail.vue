@@ -307,7 +307,7 @@ function formatTime(ts: number): string {
     </div>
 
     <!-- Revise for ready/error tasks in inbox -->
-    <div v-if="context === 'inbox' && (task.status === 'ready' || task.status === 'error') && !actionsDisabled" class="space-y-2">
+    <div v-if="context === 'inbox' && (task.status === 'ready' || task.status === 'error') && (!actionsDisabled || isTaskCheckedOut)" class="space-y-2">
       <div v-if="!showRevise">
         <button
           class="px-3 py-1.5 text-xs font-medium rounded bg-purple-900 hover:bg-purple-800 text-purple-300 transition-colors"
@@ -435,14 +435,28 @@ function formatTime(ts: number): string {
           </button>
         </template>
         <template v-if="task.branch_name">
-          <button
-            v-if="isTaskCheckedOut"
-            class="px-3 py-1.5 text-xs font-medium rounded bg-amber-900 hover:bg-amber-800 text-amber-300 transition-colors disabled:opacity-50"
-            :disabled="returning"
-            @click="handleReturn"
-          >
-            {{ returning ? 'Returning...' : 'Return' }}
-          </button>
+          <template v-if="isTaskCheckedOut">
+            <button
+              class="px-3 py-1.5 text-xs font-medium rounded bg-amber-900 hover:bg-amber-800 text-amber-300 transition-colors disabled:opacity-50"
+              :disabled="returning"
+              @click="handleReturn"
+            >
+              {{ returning ? 'Returning...' : 'Return' }}
+            </button>
+            <button
+              class="px-3 py-1.5 text-xs font-medium rounded bg-green-900 hover:bg-green-800 text-green-300 transition-colors disabled:opacity-50"
+              :disabled="approving"
+              @click="handleApprove"
+            >
+              {{ approving ? 'Merging...' : 'Approve' }}
+            </button>
+            <button
+              class="px-3 py-1.5 text-xs font-medium rounded bg-purple-900 hover:bg-purple-800 text-purple-300 transition-colors"
+              @click="showRevise = true"
+            >
+              Revise
+            </button>
+          </template>
           <button
             v-else-if="!actionsDisabled"
             class="px-3 py-1.5 text-xs font-medium rounded bg-teal-900 hover:bg-teal-800 text-teal-300 transition-colors disabled:opacity-50"
