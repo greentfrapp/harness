@@ -14,6 +14,7 @@ export interface AgentSessionData {
   session_id: string | null;
   pid: number;
   granted_tools?: string[];
+  plan_approved?: boolean;
 }
 
 interface ActiveAgent {
@@ -100,11 +101,17 @@ export class AgentPool {
     // Resolve task type config for system prompt and permission mode
     const taskTypeConfig = this.deps.config.task_types[task.type] ??
       this.deps.config.task_types['do'];
-    const permissionMode = taskTypeConfig?.permission_mode;
+    const configPermissionMode = taskTypeConfig?.permission_mode;
 
     // Check if this task has a pre-populated session ID (e.g. follow-up task)
     const existingSession = parseSessionData(task.agent_session_data);
     const grantedTools = existingSession?.granted_tools;
+
+    // Override permission mode for plan-approved tasks (execute phase):
+    // undefined falls through to default bypassPermissions for worktree tasks
+    const permissionMode = existingSession?.plan_approved
+      ? undefined
+      : configPermissionMode;
     if (existingSession?.session_id) {
       // Resume the previous conversation in the existing worktree
       this.spawnAgent(task, project, {
@@ -364,7 +371,7 @@ export class AgentPool {
       this.progressBuffers.delete(task.id);
 
       const currentTask = this.deps.getTaskById(task.id);
-      if (!currentTask || currentTask.status === 'cancelled' || currentTask.status === 'permission') return;
+      if (!currentTask || currentTask.status === 'cancelled' || currentTask.status === 'permission' || currentTask.status === 'held') return;
 
       if (code === 0) {
         this.handleAgentSuccess(task.id, project, lastSummary || lastAssistantText);
@@ -385,6 +392,25 @@ export class AgentPool {
     _agent: ActiveAgent,
     event: AgentProgressEvent,
   ): void {
+    // Handle plan_approval_request: kill agent, move task to held for plan review
+    if (event.type === 'plan_approval_request') {
+      serverLog.info(`Plan approval requested`, taskId);
+
+      this.killAgent(taskId);
+
+      // Store the plan summary and move to held
+      this.deps.updateTask(taskId, {
+        status: 'held',
+        agent_summary: event.summary || null,
+        error_message: null,
+      });
+      this.deps.createTaskEvent(taskId, 'plan_completed', null);
+      const updated = this.deps.getTaskById(taskId);
+      this.deps.broadcast('inbox:new', updated);
+      this.deps.onTaskCompleted(taskId);
+      return;
+    }
+
     // Handle permission_request: kill agent, move task to inbox
     if (event.type === 'permission_request') {
       serverLog.warn(

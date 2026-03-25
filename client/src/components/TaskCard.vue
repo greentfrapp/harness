@@ -66,11 +66,16 @@ const isPermission = computed(() =>
   props.context === 'inbox' && props.task.status === 'permission',
 );
 
+const isHeld = computed(() =>
+  props.context === 'inbox' && props.task.status === 'held',
+);
+
 const collapsedApproving = ref(false);
 const collapsedRejecting = ref(false);
 const collapsedRetrying = ref(false);
 const collapsedFixing = ref(false);
 const collapsedGranting = ref(false);
+const collapsedApprovingPlan = ref(false);
 const collapsedMergeError = ref('');
 
 function handleDelete(e: Event) {
@@ -99,7 +104,7 @@ const statusConfig: Record<
   in_progress: { color: 'bg-blue-500', label: 'Running', pulse: true },
   retrying: { color: 'bg-yellow-500', label: 'Retrying', pulse: true },
   ready: { color: 'bg-green-500', label: 'Ready' },
-  held: { color: 'bg-zinc-500', label: 'Held' },
+  held: { color: 'bg-amber-500', label: 'Plan Review' },
   deferred: { color: 'bg-zinc-600', label: 'Deferred' },
   error: { color: 'bg-red-500', label: 'Error' },
   permission: { color: 'bg-red-500', label: 'Permission', pulse: true },
@@ -234,6 +239,16 @@ async function handleCollapsedGrantPermission(e: Event) {
     await api.tasks.grantPermission(props.task.id);
   } finally {
     collapsedGranting.value = false;
+  }
+}
+
+async function handleCollapsedApprovePlan(e: Event) {
+  e.stopPropagation();
+  collapsedApprovingPlan.value = true;
+  try {
+    await api.tasks.approvePlan(props.task.id);
+  } finally {
+    collapsedApprovingPlan.value = false;
   }
 }
 
@@ -468,6 +483,23 @@ async function handleCollapsedReturn(e: Event) {
           @click="handleCollapsedGrantPermission"
         >
           {{ collapsedGranting ? 'Granting...' : 'Grant' }}
+        </button>
+        <button
+          class="px-2 py-1 text-xs font-medium rounded bg-red-900 hover:bg-red-800 text-red-300 transition-colors"
+          @click="(e: Event) => { e.stopPropagation(); emit('reject', task.id); }"
+        >
+          Reject
+        </button>
+      </div>
+
+      <!-- Approve Plan / Reject buttons (visible in collapsed state for held/plan-review tasks) -->
+      <div v-if="isHeld" class="flex items-center gap-1 shrink-0" @click.stop>
+        <button
+          class="px-2 py-1 text-xs font-medium rounded bg-green-900 hover:bg-green-800 text-green-300 transition-colors disabled:opacity-50"
+          :disabled="collapsedApprovingPlan"
+          @click="handleCollapsedApprovePlan"
+        >
+          {{ collapsedApprovingPlan ? 'Approving...' : 'Approve Plan' }}
         </button>
         <button
           class="px-2 py-1 text-xs font-medium rounded bg-red-900 hover:bg-red-800 text-red-300 transition-colors"

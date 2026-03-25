@@ -249,7 +249,7 @@ export function createTaskRoutes(ctx: AppContext) {
     const id = c.req.param('id');
     const task = queries.getTaskById(id);
     if (!task) return c.json({ error: 'Task not found' }, 404);
-    if (task.status !== 'ready' && task.status !== 'error') {
+    if (task.status !== 'ready' && task.status !== 'error' && task.status !== 'held') {
       return c.json({ error: 'Task cannot be rejected in current status' }, 400);
     }
 
@@ -334,6 +334,42 @@ export function createTaskRoutes(ctx: AppContext) {
     return c.json(updated);
   });
 
+  /** Approve plan: re-queue a held plan-mode task for execution with full permissions. */
+  app.post('/tasks/:id/approve-plan', (c) => {
+    const id = c.req.param('id');
+    const task = queries.getTaskById(id);
+    if (!task) return c.json({ error: 'Task not found' }, 404);
+    if (task.status !== 'held') {
+      return c.json({ error: 'Only held tasks can have plans approved' }, 400);
+    }
+
+    const project = queries.getProjectById(task.project_id);
+    if (!project) return c.json({ error: 'Project not found' }, 404);
+
+    // Mark plan as approved in session data
+    const sessionData = task.agent_session_data
+      ? JSON.parse(task.agent_session_data)
+      : { session_id: null, pid: 0 };
+    sessionData.plan_approved = true;
+
+    const updated = queries.updateTask(id, {
+      status: 'queued',
+      prompt: 'Your plan has been approved. Execute it now — you have full permissions to make changes.',
+      error_message: null,
+      agent_summary: null,
+      diff_summary: null,
+      agent_session_data: JSON.stringify(sessionData),
+    });
+    queries.createTaskEvent(id, 'plan_approved', null);
+    serverLog.info(`Plan approved, task re-queued for execution`, id);
+
+    taskQueue.recomputePositions(task.project_id);
+    sseManager.broadcast('task:updated', updated);
+    dispatcher.tryDispatch();
+
+    return c.json(updated);
+  });
+
   /** Grant permission: add the blocked tool to granted_tools, re-queue for --resume. */
   app.post('/tasks/:id/grant-permission', (c) => {
     const id = c.req.param('id');
@@ -359,12 +395,14 @@ export function createTaskRoutes(ctx: AppContext) {
       grantedTools.add(grantPattern);
       serverLog.info(`Granting tool: ${grantPattern}`, id);
     }
+    const grantedTool = sessionData.pending_tool ?? 'the requested tool';
     sessionData.granted_tools = [...grantedTools];
     delete sessionData.pending_tool;
     delete sessionData.pending_tool_input;
 
     const updated = queries.updateTask(id, {
       status: 'queued',
+      prompt: `Permission granted for ${grantedTool}. Continue with your task.`,
       error_message: null,
       agent_session_data: JSON.stringify(sessionData),
     });
@@ -590,8 +628,8 @@ export function createTaskRoutes(ctx: AppContext) {
     const id = c.req.param('id');
     const task = queries.getTaskById(id);
     if (!task) return c.json({ error: 'Task not found' }, 404);
-    if (task.status !== 'ready' && task.status !== 'error') {
-      return c.json({ error: 'Only ready or error tasks can be revised' }, 400);
+    if (task.status !== 'ready' && task.status !== 'error' && task.status !== 'held') {
+      return c.json({ error: 'Only ready, error, or held tasks can be revised' }, 400);
     }
 
     // Auto-return if this task is currently checked out

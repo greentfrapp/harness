@@ -474,6 +474,181 @@ describe('AgentPool progress broadcasting', () => {
     }));
   });
 
+  it('intercepts ExitPlanMode tool use and moves task to held status', async () => {
+    const updateTask = vi.fn(() => makeTask());
+    const createTaskEvent = vi.fn();
+    const onTaskCompleted = vi.fn();
+
+    const config: HarnessConfig = {
+      projects: [],
+      task_types: {
+        do: { prompt_template: '{user_prompt}', uses_worktree: true },
+      },
+      concurrency: { max_worktrees: 2, max_conversations: 2 },
+    } as any;
+
+    // Use a parser that detects ExitPlanMode (like the real ClaudeCodeAdapter)
+    const planAdapter: AgentAdapter = {
+      ...fakeAdapter,
+      parseMessage(line: string) {
+        try {
+          const msg = JSON.parse(line);
+          const base = { sessionId: msg.session_id, raw: msg };
+          if (msg.type === 'assistant' && Array.isArray(msg.message?.content)) {
+            for (const block of msg.message.content) {
+              if (block.type === 'tool_use' && block.name === 'ExitPlanMode') {
+                return { ...base, type: 'plan_approval_request' as const, summary: block.input?.plan };
+              }
+            }
+          }
+          return { ...base, type: 'progress' as const };
+        } catch { return null; }
+      },
+    };
+    const planRegistry: AgentRegistry = { register: vi.fn(), getOrDefault: () => planAdapter } as any;
+
+    const planPool = new AgentPool({
+      config,
+      agentRegistry: planRegistry,
+      getProjectById: () => makeProject(),
+      updateTask,
+      createTaskEvent,
+      broadcast,
+      getTaskById: () => makeTask({ status: 'held' as any }),
+      onTaskCompleted,
+    });
+
+    const task = makeTask();
+    await planPool.dispatchDoTask(task, makeProject());
+
+    updateTask.mockClear();
+    createTaskEvent.mockClear();
+    broadcast.mockClear();
+
+    // Emit an ExitPlanMode tool use (as the real CLI does)
+    const exitPlanMsg = {
+      type: 'assistant',
+      message: {
+        role: 'assistant',
+        content: [{
+          type: 'tool_use',
+          name: 'ExitPlanMode',
+          input: { plan: 'Step 1: do X\nStep 2: do Y' },
+        }],
+      },
+      session_id: 'sess-1',
+    };
+    spawnedProc.stdout.emit('data', Buffer.from(JSON.stringify(exitPlanMsg) + '\n'));
+
+    // Should have killed the agent
+    expect(spawnedProc.kill).toHaveBeenCalledWith('SIGTERM');
+
+    // Should have set status to held with plan as summary
+    expect(updateTask).toHaveBeenCalledWith('task-1', expect.objectContaining({
+      status: 'held',
+      agent_summary: 'Step 1: do X\nStep 2: do Y',
+    }));
+    expect(createTaskEvent).toHaveBeenCalledWith('task-1', 'plan_completed', null);
+    expect(broadcast).toHaveBeenCalledWith('inbox:new', expect.anything());
+    expect(onTaskCompleted).toHaveBeenCalledWith('task-1');
+  });
+
+  it('routes plan-approved do task to ready status on success', async () => {
+    const updateTask = vi.fn(() => makeTask());
+    const createTaskEvent = vi.fn();
+    const onTaskCompleted = vi.fn();
+
+    const config: HarnessConfig = {
+      projects: [],
+      task_types: {
+        do: { prompt_template: '{user_prompt}', uses_worktree: true, permission_mode: 'plan' },
+      },
+      concurrency: { max_worktrees: 2, max_conversations: 2 },
+    } as any;
+
+    const taskWithApproval = makeTask({
+      branch_name: 'harness/test-branch',
+      agent_session_data: JSON.stringify({ session_id: 'sess-1', pid: 0, plan_approved: true }),
+    });
+
+    const execPool = new AgentPool({
+      config,
+      agentRegistry: fakeRegistry,
+      getProjectById: () => makeProject(),
+      updateTask,
+      createTaskEvent,
+      broadcast,
+      getTaskById: () => taskWithApproval,
+      onTaskCompleted,
+    });
+
+    const task = makeTask({
+      branch_name: 'harness/test-branch',
+      worktree_path: '/existing/wt',
+      agent_session_data: JSON.stringify({ session_id: 'sess-1', pid: 0, plan_approved: true }),
+    });
+    await execPool.dispatchDoTask(task, makeProject());
+
+    const resultMsg = { type: 'result', result: 'Executed the plan successfully.', session_id: 'sess-1' };
+    spawnedProc.stdout.emit('data', Buffer.from(JSON.stringify(resultMsg) + '\n'));
+
+    updateTask.mockClear();
+    createTaskEvent.mockClear();
+
+    spawnedProc.emit('close', 0);
+
+    // Should set status to 'ready' (execute phase complete)
+    expect(updateTask).toHaveBeenCalledWith('task-1', expect.objectContaining({
+      status: 'ready',
+      agent_summary: 'Executed the plan successfully.',
+    }));
+    expect(createTaskEvent).toHaveBeenCalledWith('task-1', 'completed', null);
+  });
+
+  it('overrides permission mode to undefined for plan-approved tasks', async () => {
+    const { spawn } = await import('node:child_process');
+    const mockSpawn = spawn as ReturnType<typeof vi.fn>;
+
+    const config: HarnessConfig = {
+      projects: [],
+      task_types: {
+        do: { prompt_template: '{user_prompt}', uses_worktree: true, permission_mode: 'plan' },
+      },
+      concurrency: { max_worktrees: 2, max_conversations: 2 },
+    } as any;
+
+    // Track what buildResumeArgs receives
+    const buildResumeArgsSpy = vi.fn(() => ['--resume', 'sess-1', '-p', 'test']);
+    const spyAdapter = { ...fakeAdapter, buildResumeArgs: buildResumeArgsSpy };
+    const spyRegistry: AgentRegistry = {
+      register: vi.fn(),
+      getOrDefault: () => spyAdapter,
+    } as any;
+
+    const overridePool = new AgentPool({
+      config,
+      agentRegistry: spyRegistry,
+      getProjectById: () => makeProject(),
+      updateTask: vi.fn(() => makeTask()),
+      createTaskEvent: vi.fn(),
+      broadcast,
+      getTaskById: () => makeTask(),
+      onTaskCompleted: vi.fn(),
+    });
+
+    const task = makeTask({
+      worktree_path: '/existing/wt',
+      branch_name: 'harness/test-branch',
+      agent_session_data: JSON.stringify({ session_id: 'sess-1', pid: 0, plan_approved: true }),
+    });
+    await overridePool.dispatchDoTask(task, makeProject());
+
+    // Should call buildResumeArgs with permissionMode undefined (not 'plan')
+    expect(buildResumeArgsSpy).toHaveBeenCalledWith(expect.objectContaining({
+      permissionMode: undefined,
+    }));
+  });
+
   it('falls back to last assistant text when result has no summary', async () => {
     const updateTask = vi.fn(() => makeTask());
     const createTaskEvent = vi.fn();

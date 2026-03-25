@@ -5,7 +5,7 @@
 
 /** Structured progress event emitted by an adapter's message parser. */
 export interface AgentProgressEvent {
-  type: 'progress' | 'result' | 'permission_request' | 'error';
+  type: 'progress' | 'result' | 'permission_request' | 'plan_approval_request' | 'error';
   sessionId?: string;
   summary?: string;
   costUsd?: number;

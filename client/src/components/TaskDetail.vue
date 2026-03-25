@@ -44,6 +44,7 @@ const showRevise = ref(false);
 const checkingOut = ref(false);
 const returning = ref(false);
 const granting = ref(false);
+const approvingPlan = ref(false);
 const checkoutsStore = useCheckouts();
 
 const isTaskCheckedOut = computed(() => checkoutsStore.isCheckedOut(props.task.id));
@@ -69,6 +70,18 @@ async function handleGrant() {
     await api.tasks.grantPermission(props.task.id);
   } finally {
     granting.value = false;
+  }
+}
+
+async function handleApprovePlan() {
+  approvingPlan.value = true;
+  actionError.value = '';
+  try {
+    await api.tasks.approvePlan(props.task.id);
+  } catch (e) {
+    actionError.value = e instanceof Error ? e.message : 'Approve plan failed';
+  } finally {
+    approvingPlan.value = false;
   }
 }
 
@@ -359,7 +372,7 @@ function formatTime(ts: number): string {
     </div>
 
     <!-- Revise for ready/error tasks in inbox -->
-    <div v-if="context === 'inbox' && (task.status === 'ready' || task.status === 'error') && (!actionsDisabled || isTaskCheckedOut)" class="space-y-2">
+    <div v-if="context === 'inbox' && (task.status === 'ready' || task.status === 'error' || task.status === 'held') && (!actionsDisabled || isTaskCheckedOut)" class="space-y-2">
       <div v-if="!showRevise">
         <button
           class="px-3 py-1.5 text-xs font-medium rounded bg-purple-900 hover:bg-purple-800 text-purple-300 transition-colors"
@@ -449,6 +462,22 @@ function formatTime(ts: number): string {
           @click="emit('cancel', task.id)"
         >
           Cancel
+        </button>
+      </template>
+      <template v-if="context === 'inbox' && task.status === 'held'">
+        <button
+          class="px-3 py-1.5 text-xs font-medium rounded bg-green-900 hover:bg-green-800 text-green-300 transition-colors disabled:opacity-50"
+          :disabled="approvingPlan"
+          @click="handleApprovePlan"
+        >
+          {{ approvingPlan ? 'Approving...' : 'Approve Plan' }}
+        </button>
+        <button
+          class="px-3 py-1.5 text-xs font-medium rounded bg-red-900 hover:bg-red-800 text-red-300 transition-colors disabled:opacity-50"
+          :disabled="rejecting"
+          @click="handleReject"
+        >
+          {{ rejecting ? 'Rejecting...' : 'Reject' }}
         </button>
       </template>
       <template v-if="context === 'inbox' && task.status === 'error'">
