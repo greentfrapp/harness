@@ -284,7 +284,7 @@ function handleRetry(id: string) {
       </span>
 
       <!-- Action buttons (visible in collapsed state for tasks needing input) -->
-      <div v-if="needsInput && !expanded" class="flex items-center gap-1 shrink-0" @click.stop>
+      <div v-if="needsInput" class="flex items-center gap-1 shrink-0" @click.stop>
         <template v-if="collapsedMergeError">
           <span class="text-xs text-red-400 max-w-48 truncate" :title="collapsedMergeError">Merge failed</span>
           <button
@@ -320,7 +320,7 @@ function handleRetry(id: string) {
       </div>
 
       <!-- Retry button (visible in collapsed state for error tasks) -->
-      <div v-if="isError && !expanded" class="flex items-center gap-1 shrink-0" @click.stop>
+      <div v-if="isError" class="flex items-center gap-1 shrink-0" @click.stop>
         <button
           class="px-2 py-1 text-xs font-medium rounded bg-yellow-900 hover:bg-yellow-800 text-yellow-300 transition-colors disabled:opacity-50"
           :disabled="collapsedRetrying"
@@ -331,7 +331,7 @@ function handleRetry(id: string) {
       </div>
 
       <!-- Follow Up + Delete buttons (visible in collapsed state for terminal tasks) -->
-      <div v-if="isTerminal && !expanded" class="flex items-center gap-1 shrink-0" @click.stop>
+      <div v-if="isTerminal" class="flex items-center gap-1 shrink-0" @click.stop>
         <button
           v-if="task.status === 'approved'"
           class="px-2 py-1 text-xs font-medium rounded bg-blue-900 hover:bg-blue-800 text-blue-300 transition-colors"
