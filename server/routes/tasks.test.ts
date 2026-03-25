@@ -431,6 +431,71 @@ describe('Task Routes', () => {
     });
   });
 
+  describe('POST /tasks/:id/fix', () => {
+    it('fixes a ready task preserving session data, worktree, and branch', async () => {
+      const task = makeTask({
+        status: 'ready',
+        agent_session_data: '{"session_id":"sess-1","pid":123}',
+        worktree_path: '/tmp/wt',
+        branch_name: 'harness/abc-test',
+        prompt: 'Add login form',
+      });
+      (ctx.queries.getTaskById as any).mockReturnValue(task);
+      (ctx.queries.updateTask as any).mockImplementation((id: string, updates: any) =>
+        makeTask({ id, ...updates }),
+      );
+
+      const res = await app.request('/tasks/task-1/fix', { method: 'POST' });
+      expect(res.status).toBe(200);
+
+      // Should preserve session, worktree, and branch — only clear summaries
+      expect(ctx.queries.updateTask).toHaveBeenCalledWith('task-1', {
+        status: 'queued',
+        prompt: expect.stringContaining('[MERGE CONFLICT]'),
+        error_message: null,
+        agent_summary: null,
+        diff_summary: null,
+      });
+
+      // Prompt should include original task
+      const updateCall = (ctx.queries.updateTask as any).mock.calls[0][1];
+      expect(updateCall.prompt).toContain('Add login form');
+
+      // Should NOT clear session data, worktree, or branch
+      expect(updateCall).not.toHaveProperty('agent_session_data');
+      expect(updateCall).not.toHaveProperty('worktree_path');
+      expect(updateCall).not.toHaveProperty('branch_name');
+
+      expect(ctx.queries.createTaskEvent).toHaveBeenCalledWith('task-1', 'fix_merge_conflict', null);
+      expect(ctx.dispatcher.tryDispatch).toHaveBeenCalled();
+    });
+
+    it('rejects fix on non-ready task', async () => {
+      (ctx.queries.getTaskById as any).mockReturnValue(makeTask({ status: 'queued' }));
+
+      const res = await app.request('/tasks/task-1/fix', { method: 'POST' });
+      expect(res.status).toBe(400);
+    });
+
+    it('does not double-prefix on repeated fix', async () => {
+      const task = makeTask({
+        status: 'ready',
+        prompt: '[MERGE CONFLICT] Your branch failed to merge into main due to conflicts. Merge main into your branch and resolve all conflicts, then verify the code still works.\n\nOriginal task:\nAdd login form',
+      });
+      (ctx.queries.getTaskById as any).mockReturnValue(task);
+      (ctx.queries.updateTask as any).mockImplementation((id: string, updates: any) =>
+        makeTask({ id, ...updates }),
+      );
+
+      const res = await app.request('/tasks/task-1/fix', { method: 'POST' });
+      expect(res.status).toBe(200);
+
+      const updateCall = (ctx.queries.updateTask as any).mock.calls[0][1];
+      // Should not have nested [MERGE CONFLICT] prefixes
+      expect(updateCall.prompt.match(/\[MERGE CONFLICT\]/g)).toHaveLength(1);
+    });
+  });
+
   describe('POST /tasks/:id/follow-up', () => {
     it('blocks concurrent follow-ups on the same parent', async () => {
       const parent = makeTask({
