@@ -201,7 +201,7 @@ async function handleMaximizeDelete(id: string) {
         context="inbox"
         :hasSelection="hasSelection"
         :selected="isSelected(item.id)"
-        :tag-configs="tagConfigs?.value"
+        :tag-configs="tagConfigs"
         :is-checked-out="checkoutsStore.isCheckedOut(item.id)"
         :actions-disabled="checkoutsStore.isProjectLockedByOtherTask(item.project_id, item.id)"
         @approve="handleApprove"
