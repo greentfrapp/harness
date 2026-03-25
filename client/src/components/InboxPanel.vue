@@ -77,6 +77,12 @@ async function handleDefer(id: string) {
 async function handleDelete(id: string) {
   await inbox.deleteTask(id);
 }
+
+async function handleFollowUp(_id: string) {
+  // Follow-up task is created by TaskDetail via api.tasks.followUp()
+  // The SSE event will add the new task to the outbox automatically.
+  await inbox.fetchItems();
+}
 </script>
 
 <template>
@@ -172,6 +178,7 @@ async function handleDelete(id: string) {
         @retry="handleRetry"
         @defer="handleDefer"
         @delete="handleDelete"
+        @follow-up="handleFollowUp"
         @toggleSelect="toggle"
       />
       <div

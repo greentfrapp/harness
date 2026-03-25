@@ -88,6 +88,19 @@ export class AgentPool {
       branch_name: branchName,
     });
 
+    // Check if this task has a pre-populated session ID (e.g. follow-up task)
+    const existingSession = parseSessionData(task.agent_session_data);
+    if (existingSession?.session_id) {
+      // Resume the previous conversation in the new worktree
+      this.spawnAgent(task, project, {
+        cwd: wtPath,
+        systemPrompt: null,
+        usesWorktree: true,
+        resumeSessionId: existingSession.session_id,
+      });
+      return;
+    }
+
     // Build system prompt from config template
     const taskTypeConfig = this.deps.config.task_types[task.type] ??
       this.deps.config.task_types['do'];
