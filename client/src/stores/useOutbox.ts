@@ -30,7 +30,15 @@ export const useOutbox = defineStore('outbox', () => {
 
   async function createTask(input: CreateTaskInput): Promise<Task> {
     const task = await api.tasks.create(input);
-    onTaskCreated(task);
+    // Only add if SSE hasn't already delivered this task (possibly with a newer status).
+    // The server broadcasts SSE events (task:created, task:updated) before sending
+    // the HTTP response, so on warm connections the SSE events may arrive first.
+    // Without this guard, the stale 'queued' status from the HTTP response would
+    // overwrite the newer 'in_progress' status delivered via SSE.
+    const existing = tasks.value.find((t) => t.id === task.id);
+    if (!existing) {
+      onTaskCreated(task);
+    }
     return task;
   }
 
