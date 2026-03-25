@@ -155,7 +155,7 @@ export class AgentPool {
       cwd: project.repo_path,
       systemPrompt,
       usesWorktree: false,
-      resumeSessionId: null,
+      resumeSessionId: sessionData?.session_id ?? null,
       permissionMode,
       allowedTools: sessionData?.granted_tools,
     });
