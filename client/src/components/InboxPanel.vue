@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
+import type { Task } from '@shared/types';
 import { useInbox } from '../stores/useInbox';
 import { useTaskSelection } from '../composables/useTaskSelection';
 import TaskCard from './TaskCard.vue';
+import TaskModal from './TaskModal.vue';
 
 const inbox = useInbox();
 const confirming = ref(false);
@@ -82,6 +84,28 @@ async function handleFollowUp(_id: string) {
   // Follow-up task is created by TaskDetail via api.tasks.followUp()
   // The SSE event will add the new task to the outbox automatically.
   await inbox.fetchItems();
+}
+
+const maximizedTask = ref<Task | null>(null);
+
+function handleMaximize(id: string) {
+  const task = inbox.sortedItems.find((t) => t.id === id);
+  if (task) maximizedTask.value = task;
+}
+
+async function handleMaximizeApprove(id: string) {
+  await handleApprove(id);
+  maximizedTask.value = null;
+}
+
+async function handleMaximizeReject(id: string) {
+  await handleReject(id);
+  maximizedTask.value = null;
+}
+
+async function handleMaximizeDelete(id: string) {
+  await handleDelete(id);
+  maximizedTask.value = null;
 }
 </script>
 
@@ -180,6 +204,7 @@ async function handleFollowUp(_id: string) {
         @delete="handleDelete"
         @follow-up="handleFollowUp"
         @toggleSelect="toggle"
+        @maximize="handleMaximize"
       />
       <div
         v-if="!inbox.sortedItems.length && !inbox.loading"
@@ -188,5 +213,19 @@ async function handleFollowUp(_id: string) {
         No items to review
       </div>
     </div>
+
+    <!-- Task Modal -->
+    <TaskModal
+      v-if="maximizedTask"
+      :task="maximizedTask"
+      context="inbox"
+      @close="maximizedTask = null"
+      @approve="handleMaximizeApprove"
+      @reject="handleMaximizeReject"
+      @retry="handleRetry"
+      @defer="handleDefer"
+      @delete="handleMaximizeDelete"
+      @follow-up="handleFollowUp"
+    />
   </div>
 </template>
