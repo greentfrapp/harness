@@ -186,6 +186,13 @@ export interface CheckoutInfo {
   projectId: string;
 }
 
+export interface RepoStatus {
+  projectId: string;
+  projectName: string;
+  dirty: boolean;
+  fileCount: number;
+}
+
 export interface SSEEvent<T = unknown> {
   type: SSEEventType;
   data: T;

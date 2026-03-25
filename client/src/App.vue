@@ -6,6 +6,7 @@ import { useEvents } from './stores/useEvents';
 import { useOutbox } from './stores/useOutbox';
 import { useInbox } from './stores/useInbox';
 import { useCheckouts } from './stores/useCheckouts';
+import { useRepoStatus } from './stores/useRepoStatus';
 import OutboxPanel from './components/OutboxPanel.vue';
 import InboxPanel from './components/InboxPanel.vue';
 import NewTaskModal from './components/NewTaskModal.vue';
@@ -18,6 +19,7 @@ const outbox = useOutbox();
 const inbox = useInbox();
 const checkoutsStore = useCheckouts();
 const log = useLog();
+const repoStatus = useRepoStatus();
 
 const showNewTask = ref(false);
 const editingDraft = ref<import('@shared/types').Task | null>(null);
@@ -133,6 +135,8 @@ onMounted(async () => {
   window.addEventListener('keydown', onKeydown);
   events.connect();
 
+  repoStatus.startPolling();
+
   await Promise.all([
     outbox.fetchTasks(),
     inbox.fetchItems(),
@@ -145,6 +149,7 @@ onMounted(async () => {
 onUnmounted(() => {
   window.removeEventListener('keydown', onKeydown);
   events.disconnect();
+  repoStatus.stopPolling();
 });
 </script>
 
@@ -158,6 +163,11 @@ onUnmounted(() => {
           class="w-2 h-2 rounded-full"
           :class="events.connected ? 'bg-green-500' : 'bg-red-500'"
           :title="events.connected ? 'Connected' : 'Disconnected'"
+        />
+        <div
+          v-if="repoStatus.hasDirtyRepos"
+          class="w-2 h-2 rounded-full bg-amber-500"
+          :title="repoStatus.dirtyProjects.map((p: import('@shared/types').RepoStatus) => `${p.projectName}: ${p.fileCount} file${p.fileCount === 1 ? '' : 's'} changed`).join('\n')"
         />
       </div>
       <div class="flex items-center gap-2">

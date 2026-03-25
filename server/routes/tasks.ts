@@ -38,6 +38,15 @@ export function createTaskRoutes(ctx: AppContext) {
     return c.json(queries.getAllProjects());
   });
 
+  app.get('/projects/status', (c) => {
+    const projects = queries.getAllProjects();
+    const statuses = projects.map((p) => {
+      const { dirty, fileCount } = git.getRepoStatus(p.repo_path);
+      return { projectId: p.id, projectName: p.name, dirty, fileCount };
+    });
+    return c.json(statuses);
+  });
+
   // --- Config (task types for frontend) ---
 
   app.get('/config', (c) => {
