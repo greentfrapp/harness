@@ -113,11 +113,11 @@ async function handleMaximizeDelete(id: string) {
 
 <template>
   <div class="flex flex-col h-full overflow-hidden">
-    <div class="px-4 h-12 border-b border-gray-800 flex items-center justify-between">
+    <div class="px-4 h-12 border-b border-zinc-800 flex items-center justify-between">
       <div class="flex items-center gap-2">
         <template v-if="hasSelection">
           <template v-if="confirmingBulkDelete">
-            <span class="text-xs text-gray-400">Delete {{ selectedCount }} task{{ selectedCount > 1 ? 's' : '' }}?</span>
+            <span class="text-xs text-zinc-400">Delete {{ selectedCount }} task{{ selectedCount > 1 ? 's' : '' }}?</span>
             <button
               class="px-2 py-1 text-xs font-medium rounded bg-red-800 hover:bg-red-700 text-red-200 transition-colors disabled:opacity-50"
               :disabled="bulkDeleting"
@@ -126,7 +126,7 @@ async function handleMaximizeDelete(id: string) {
               {{ bulkDeleting ? 'Deleting...' : 'Confirm' }}
             </button>
             <button
-              class="px-2 py-1 text-xs font-medium rounded bg-gray-800 hover:bg-gray-700 text-gray-400 transition-colors"
+              class="px-2 py-1 text-xs font-medium rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-400 transition-colors"
               @click="cancelBulkDelete()"
             >
               Cancel
@@ -142,7 +142,7 @@ async function handleMaximizeDelete(id: string) {
           </template>
         </template>
         <template v-else>
-          <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wider">
+          <h2 class="text-sm font-semibold text-zinc-300 uppercase tracking-wider">
             Inbox
           </h2>
           <span
@@ -161,14 +161,14 @@ async function handleMaximizeDelete(id: string) {
       <div v-if="inbox.sortedItems.length" class="flex items-center gap-2 text-xs">
         <template v-if="hasSelection">
           <button
-            class="text-gray-400 hover:text-gray-200 transition-colors"
+            class="text-zinc-400 hover:text-zinc-200 transition-colors"
             @click="toggleSelectAll()"
           >
             {{ allSelected ? 'Deselect All' : 'Select All' }}
           </button>
-          <span class="text-gray-500">{{ selectedCount }} selected</span>
+          <span class="text-zinc-500">{{ selectedCount }} selected</span>
           <button
-            class="text-gray-500 hover:text-gray-300 transition-colors"
+            class="text-zinc-500 hover:text-zinc-300 transition-colors"
             @click="clearSelection()"
           >
             Cancel
@@ -176,13 +176,13 @@ async function handleMaximizeDelete(id: string) {
         </template>
         <template v-else>
           <template v-if="confirming">
-            <span class="text-gray-400">Clear all?</span>
+            <span class="text-zinc-400">Clear all?</span>
             <button class="text-red-400 hover:text-red-300 font-medium" @click="handleClear()">Yes</button>
-            <button class="text-gray-500 hover:text-gray-300" @click="confirming = false">No</button>
+            <button class="text-zinc-500 hover:text-zinc-300" @click="confirming = false">No</button>
           </template>
           <button
             v-else
-            class="text-gray-500 hover:text-gray-300 transition-colors"
+            class="text-zinc-500 hover:text-zinc-300 transition-colors"
             @click="confirming = true"
           >
             Clear
@@ -211,7 +211,7 @@ async function handleMaximizeDelete(id: string) {
       />
       <div
         v-if="!inbox.sortedItems.length && !inbox.loading"
-        class="text-center text-gray-600 py-12 text-sm"
+        class="text-center text-zinc-600 py-12 text-sm"
       >
         No items to review
       </div>

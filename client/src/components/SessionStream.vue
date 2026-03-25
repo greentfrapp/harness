@@ -183,7 +183,7 @@ function isToolResultLong(item: DisplayItem): boolean {
   <div>
     <!-- Header with label and filters -->
     <div class="flex items-center gap-3 mb-2">
-      <h4 class="text-xs font-medium text-gray-500 uppercase shrink-0">Live Session</h4>
+      <h4 class="text-xs font-medium text-zinc-500 uppercase shrink-0">Live Session</h4>
       <div class="flex items-center gap-1 flex-wrap">
         <button
           v-for="f in filterLabels"
@@ -191,7 +191,7 @@ function isToolResultLong(item: DisplayItem): boolean {
           class="px-1.5 py-0.5 text-[10px] font-medium rounded border transition-colors"
           :class="activeFilters.has(f.type)
             ? f.activeColor
-            : 'bg-gray-900 border-gray-700 text-gray-600 hover:text-gray-400'"
+            : 'bg-zinc-900 border-zinc-700 text-zinc-600 hover:text-zinc-400'"
           @click="toggleFilter(f.type)"
           :title="`Toggle ${f.label} messages`"
         >
@@ -199,9 +199,9 @@ function isToolResultLong(item: DisplayItem): boolean {
         </button>
       </div>
     </div>
-  <div ref="containerRef" class="overflow-y-auto max-h-[32rem] text-sm p-3 bg-gray-950 rounded-lg border border-gray-800" @scroll="handleScroll">
+  <div ref="containerRef" class="overflow-y-auto max-h-[32rem] text-sm p-3 bg-zinc-950 rounded-lg border border-zinc-800" @scroll="handleScroll">
     <!-- Empty state -->
-    <div v-if="displayItems.length === 0" class="text-gray-600 text-center py-8">
+    <div v-if="displayItems.length === 0" class="text-zinc-600 text-center py-8">
       <template v-if="messages.length === 0">
         <div class="text-lg mb-1">⏳</div>
         Waiting for agent output…
@@ -219,7 +219,7 @@ function isToolResultLong(item: DisplayItem): boolean {
           <div class="flex items-start gap-2">
             <span class="shrink-0 mt-0.5 text-blue-400">●</span>
             <div
-              class="prose prose-invert prose-sm max-w-none text-gray-200"
+              class="prose prose-invert prose-sm max-w-none text-zinc-200"
               v-html="renderMarkdown(item.text ?? '')"
             />
           </div>
@@ -230,12 +230,12 @@ function isToolResultLong(item: DisplayItem): boolean {
           <div class="flex items-center gap-2 text-yellow-400">
             <span class="shrink-0">⏺</span>
             <span class="font-semibold text-xs uppercase tracking-wide">{{ item.toolName ?? 'Unknown Tool' }}</span>
-            <span v-if="toolInputSummary(item.toolInput)" class="text-gray-500 text-xs font-normal truncate">
+            <span v-if="toolInputSummary(item.toolInput)" class="text-zinc-500 text-xs font-normal truncate">
               {{ toolInputSummary(item.toolInput) }}
             </span>
           </div>
           <div v-if="formatToolInput(item.toolInput)" class="ml-5 mt-1">
-            <pre class="text-xs text-gray-400 bg-gray-900 rounded px-2 py-1.5 overflow-x-auto max-h-40 whitespace-pre-wrap break-all">{{ formatToolInput(item.toolInput) }}</pre>
+            <pre class="text-xs text-zinc-400 bg-zinc-900 rounded px-2 py-1.5 overflow-x-auto max-h-40 whitespace-pre-wrap break-all">{{ formatToolInput(item.toolInput) }}</pre>
           </div>
         </div>
 
@@ -246,25 +246,25 @@ function isToolResultLong(item: DisplayItem): boolean {
             class="cursor-pointer select-none"
             @click="toggleToolResult(index)"
           >
-            <span class="text-xs text-gray-500 hover:text-gray-400 transition-colors">
+            <span class="text-xs text-zinc-500 hover:text-zinc-400 transition-colors">
               {{ collapsedToolResults.has(index) ? '▶' : '▼' }}
               <span class="ml-1">Output</span>
-              <span class="text-gray-600 ml-1">({{ formatToolResult(item.toolResult).split('\n').length }} lines)</span>
+              <span class="text-zinc-600 ml-1">({{ formatToolResult(item.toolResult).split('\n').length }} lines)</span>
             </span>
           </div>
           <pre
             v-if="!isToolResultLong(item) || !collapsedToolResults.has(index)"
-            class="text-xs bg-gray-900 rounded px-2 py-1.5 overflow-x-auto overflow-y-auto max-h-60 whitespace-pre-wrap break-all"
+            class="text-xs bg-zinc-900 rounded px-2 py-1.5 overflow-x-auto overflow-y-auto max-h-60 whitespace-pre-wrap break-all"
             :class="item.isError ? 'text-red-400 border border-red-900/50' : 'text-green-400/80'"
           >{{ formatToolResult(item.toolResult) }}</pre>
         </div>
 
         <!-- ── Result (final summary) ── -->
-        <div v-else-if="item.displayType === 'result'" class="session-result border-t border-gray-800 pt-3 mt-3">
+        <div v-else-if="item.displayType === 'result'" class="session-result border-t border-zinc-800 pt-3 mt-3">
           <div class="flex items-start gap-2">
             <span class="shrink-0 mt-0.5 text-emerald-400">✓</span>
             <div
-              class="prose prose-invert prose-sm max-w-none text-gray-200"
+              class="prose prose-invert prose-sm max-w-none text-zinc-200"
               v-html="renderMarkdown(item.resultText ?? '')"
             />
           </div>
@@ -272,7 +272,7 @@ function isToolResultLong(item: DisplayItem): boolean {
 
         <!-- ── System message ── -->
         <div v-else-if="item.displayType === 'system'" class="session-system">
-          <div class="flex items-center gap-2 text-gray-500 text-xs">
+          <div class="flex items-center gap-2 text-zinc-500 text-xs">
             <span class="shrink-0">ℹ</span>
             <span>{{ item.text }}</span>
           </div>
@@ -288,9 +288,9 @@ function isToolResultLong(item: DisplayItem): boolean {
 
         <!-- ── Fallback for unrecognized message types ── -->
         <div v-else class="session-unknown">
-          <div class="flex items-start gap-2 text-gray-500 text-xs">
+          <div class="flex items-start gap-2 text-zinc-500 text-xs">
             <span class="shrink-0 mt-0.5">…</span>
-            <span class="text-gray-400">{{ item.raw?.type }}: {{ item.text || '' }}</span>
+            <span class="text-zinc-400">{{ item.raw?.type }}: {{ item.text || '' }}</span>
           </div>
         </div>
       </template>

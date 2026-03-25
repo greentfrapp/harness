@@ -84,10 +84,10 @@ watch(renderedHtml, async () => {
   <div class="space-y-1">
     <!-- Stats summary + file list toggle -->
     <div v-if="stats || renderedHtml" class="flex items-center gap-2">
-      <div v-if="stats" class="text-xs text-gray-500 font-mono whitespace-pre flex-1">{{ stats }}</div>
+      <div v-if="stats" class="text-xs text-zinc-500 font-mono whitespace-pre flex-1">{{ stats }}</div>
       <button
         v-if="renderedHtml"
-        class="text-xs text-gray-500 hover:text-gray-300 transition-colors shrink-0 px-1.5 py-0.5 rounded bg-gray-800 hover:bg-gray-700"
+        class="text-xs text-zinc-500 hover:text-zinc-300 transition-colors shrink-0 px-1.5 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700"
         @click="toggleFileList"
       >
         {{ fileListVisible ? 'Hide' : 'Show' }} file list
@@ -95,19 +95,19 @@ watch(renderedHtml, async () => {
     </div>
 
     <!-- Loading -->
-    <div v-if="loading" class="text-sm text-gray-500 py-4 text-center">Loading diff...</div>
+    <div v-if="loading" class="text-sm text-zinc-500 py-4 text-center">Loading diff...</div>
 
     <!-- Error -->
     <div v-else-if="error" class="text-sm text-red-400 py-4 text-center">{{ error }}</div>
 
     <!-- No changes -->
-    <div v-else-if="!diffText" class="text-sm text-gray-500 py-4 text-center">No changes</div>
+    <div v-else-if="!diffText" class="text-sm text-zinc-500 py-4 text-center">No changes</div>
 
     <!-- Diff display -->
     <div
       v-else
       ref="diffContainer"
-      class="diff-container overflow-x-auto overflow-y-auto rounded border border-gray-800"
+      class="diff-container overflow-x-auto overflow-y-auto rounded border border-zinc-800"
       style="max-height: 70vh;"
       v-html="renderedHtml"
     />
