@@ -81,14 +81,20 @@ const fakeAdapter: AgentAdapter = {
   parseMessage(line: string) {
     try {
       const msg = JSON.parse(line);
-      return {
-        type: msg.type === 'result' ? 'result' : 'progress',
+      const base = {
         sessionId: msg.session_id,
         summary: msg.result,
         costUsd: msg.cost_usd,
         toolName: msg.tool,
         content: msg.content,
         raw: msg,
+      };
+      if (msg.subtype === 'permission_request') {
+        return { ...base, type: 'permission_request' as const };
+      }
+      return {
+        ...base,
+        type: (msg.type === 'result' ? 'result' : 'progress') as 'result' | 'progress',
       };
     } catch {
       return null;
@@ -272,5 +278,73 @@ describe('AgentPool progress broadcasting', () => {
       worktree_path: '/tmp/wt',
       branch_name: 'branch-test',
     });
+  });
+
+  it('kills agent and moves task to permission status on permission_request', async () => {
+    const updateTask = vi.fn(() => makeTask({ status: 'permission' as any }));
+    const createTaskEvent = vi.fn();
+    const onTaskCompleted = vi.fn();
+
+    const config: HarnessConfig = {
+      projects: [],
+      task_types: {
+        do: { prompt_template: '{user_prompt}', uses_worktree: true },
+      },
+      concurrency: { max_worktrees: 2, max_conversations: 2 },
+    } as any;
+
+    const permPool = new AgentPool({
+      config,
+      agentRegistry: fakeRegistry,
+      getProjectById: () => makeProject(),
+      updateTask,
+      createTaskEvent,
+      broadcast,
+      getTaskById: () => makeTask({ status: 'permission' as any }),
+      onTaskCompleted,
+    });
+
+    const task = makeTask();
+    const project = makeProject();
+    await permPool.dispatchDoTask(task, project);
+
+    // Clear setup calls
+    updateTask.mockClear();
+    createTaskEvent.mockClear();
+    broadcast.mockClear();
+
+    // Emit a permission_request event
+    const permMsg = {
+      type: 'assistant',
+      subtype: 'permission_request',
+      session_id: 'sess-1',
+      tool: 'Write',
+    };
+    spawnedProc.stdout.emit('data', Buffer.from(JSON.stringify(permMsg) + '\n'));
+
+    // Should have killed the agent
+    expect(spawnedProc.kill).toHaveBeenCalledWith('SIGTERM');
+
+    // Should have updated status to permission
+    expect(updateTask).toHaveBeenCalledWith('task-1', {
+      status: 'permission',
+      error_message: 'Tool requiring permission: Write',
+    });
+
+    // Should have created a task event
+    expect(createTaskEvent).toHaveBeenCalledWith(
+      'task-1',
+      'permission_requested',
+      JSON.stringify({ tool: 'Write' }),
+    );
+
+    // Should have broadcast to inbox
+    expect(broadcast).toHaveBeenCalledWith('inbox:new', expect.anything());
+
+    // Should have freed the slot
+    expect(onTaskCompleted).toHaveBeenCalledWith('task-1');
+
+    // Should NOT have broadcast as task:progress
+    expect(broadcast).not.toHaveBeenCalledWith('task:progress', expect.anything());
   });
 });

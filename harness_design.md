@@ -235,14 +235,15 @@ Cancel kills the Claude Code process, destroys the worktree (if any), and delete
 
 ### 8. Claude Code Permissions
 
-When Claude Code encounters a tool use that falls outside `--allowedTools`, the permission request is surfaced as an inbox item with state `permission`. These are **prioritized above all other inbox items** and trigger a **red notification badge** on the inbox header, since permission-blocked agents are idle and waiting.
+When Claude Code encounters a tool use that requires approval, it emits a `permission_request` event in its JSON stream. Harness detects this, kills the agent process, and surfaces the task as an inbox item with status `permission`. These are **prioritized above all other inbox items** and trigger a **red notification badge** on the inbox header, since permission-blocked agents are idle and waiting.
 
 The item shows:
 - Which task triggered the request
-- What tool/action the agent wants to use
-- The agent's stated reason
+- What tool the agent wanted to use (stored in `error_message`)
 
-The user can approve (agent continues) or deny (agent receives the denial and adapts). This keeps the agent running headlessly while giving the user control over escalations without needing to interact with Claude Code's own CLI prompts.
+The user can **Grant** (task re-queues and resumes via `--resume` with `--permission-mode bypassPermissions`, giving the agent full tool access going forward) or **Reject** (task is discarded). The kill-and-resume approach is used because Claude Code's CLI does not support sending permission responses via stdin in headless mode.
+
+**Why permission requests happen**: Do tasks normally run with `--permission-mode bypassPermissions` and should never trigger permission prompts. However, resumed sessions (`--resume` for retries, revises, fixes, follow-ups) must explicitly re-pass the permission mode flag. The `buildResumeArgs` method mirrors the permission logic from `buildArgs` to ensure resumed tasks retain their permission mode.
 
 ---
 
@@ -728,12 +729,12 @@ harness/
 - [ ] Move to inbox: send dependents to inbox for individual review/editing
 
 **Permission requests**
-- [ ] Detect CC permission prompts from `--json` output stream
-- [ ] Create inbox item with status `permission`, store tool name and reason
-- [ ] Prioritize permission items above all others in inbox
-- [ ] Red notification badge when permissions are pending
-- [ ] Approve: send approval back to CC process stdin, agent continues
-- [ ] Deny: send denial, agent adapts
+- [x] Detect CC permission prompts from `--json` output stream — *`ClaudeCodeAdapter.parseMessage()` detects `subtype: 'permission_request'` and returns `type: 'permission_request'` event*
+- [x] Kill agent and create inbox item with status `permission`, store tool name in `error_message` — *`handleAgentEvent()` in `pool.ts` detects permission_request, calls `killAgent()`, updates status, broadcasts `inbox:new`*
+- [x] Prioritize permission items above all others in inbox — *`useInbox.ts` `sortedItems` sorts `permission` status first*
+- [x] Red notification badge when permissions are pending — *`hasPermissionRequests` computed in `useInbox.ts`, pulsing red badge in `statusConfig`*
+- [x] Grant: re-queue task with `--resume` and `--permission-mode bypassPermissions` — *`POST /tasks/:id/grant-permission` route preserves `agent_session_data`/worktree/branch; `buildResumeArgs` now passes permission flags matching `buildArgs`*
+- [x] Reject: user rejects the task (discard branch and worktree) — *reuses existing reject flow*
 
 **Verification**: Submit 3 Do tasks touching overlapping directories. Verify they're grouped in inbox. Batch approve — confirm sequential merge with re-check after each. Introduce a conflict — verify it's flagged before merge. Approve conflicting items — verify auto-created conflict-resolution task. Cancel a task with dependents — verify cascade warning. Permission request — verify red badge, approve/deny flow.
 
@@ -750,6 +751,7 @@ These features were implemented during development but weren't tracked in the or
 - **Progress buffering**: `GET /api/tasks/:id/progress` returns buffered agent output for late-joining SSE clients, so they see prior progress when expanding a running task.
 - **Stream filters**: `server/streamFilters.ts` filters Claude Code `--json` output to extract displayable content (assistant messages, tool calls, results) from metadata noise.
 - **Settings modal**: `SettingsModal.vue` with JSONC editor, real-time parse error detection, and hot-reload via `PUT /api/config/raw`.
+- **Permission handling**: When an agent emits a `permission_request` event, `handleAgentEvent()` kills the process, sets status to `permission` (with tool name in `error_message`), and pushes to inbox. `POST /tasks/:id/grant-permission` re-queues preserving session/worktree so the agent resumes with `--permission-mode bypassPermissions`. `buildResumeArgs` now mirrors the permission logic from `buildArgs`, ensuring resumed tasks (retries, revises, fixes, follow-ups) retain their permission mode — this was the root cause of permission requests appearing in the first place.
 
 ---
 

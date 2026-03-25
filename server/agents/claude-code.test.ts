@@ -82,6 +82,7 @@ describe('ClaudeCodeAdapter', () => {
       const args = adapter.buildResumeArgs({
         prompt: 'test',
         sessionId: 'sess-123',
+        usesWorktree: true,
       });
       const idx = args.indexOf('--resume');
       expect(idx).toBeGreaterThan(-1);
@@ -92,6 +93,7 @@ describe('ClaudeCodeAdapter', () => {
       const args = adapter.buildResumeArgs({
         prompt: 'continue',
         sessionId: 'sess-123',
+        usesWorktree: true,
       });
       expect(args).toContain('--output-format');
       expect(args).toContain('stream-json');
@@ -99,6 +101,28 @@ describe('ClaudeCodeAdapter', () => {
       const pIdx = args.indexOf('-p');
       expect(pIdx).toBeGreaterThan(-1);
       expect(args[pIdx + 1]).toBe('continue');
+    });
+
+    it('adds --permission-mode bypassPermissions for worktree resume', () => {
+      const args = adapter.buildResumeArgs({
+        prompt: 'continue',
+        sessionId: 'sess-123',
+        usesWorktree: true,
+      });
+      const idx = args.indexOf('--permission-mode');
+      expect(idx).toBeGreaterThan(-1);
+      expect(args[idx + 1]).toBe('bypassPermissions');
+      expect(args).not.toContain('--allowedTools');
+    });
+
+    it('adds --allowedTools for non-worktree resume', () => {
+      const args = adapter.buildResumeArgs({
+        prompt: 'continue',
+        sessionId: 'sess-123',
+        usesWorktree: false,
+      });
+      expect(args).toContain('--allowedTools');
+      expect(args).not.toContain('--permission-mode');
     });
   });
 

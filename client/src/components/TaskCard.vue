@@ -62,10 +62,15 @@ const isError = computed(() =>
   props.context === 'inbox' && props.task.status === 'error',
 );
 
+const isPermission = computed(() =>
+  props.context === 'inbox' && props.task.status === 'permission',
+);
+
 const collapsedApproving = ref(false);
 const collapsedRejecting = ref(false);
 const collapsedRetrying = ref(false);
 const collapsedFixing = ref(false);
+const collapsedGranting = ref(false);
 const collapsedMergeError = ref('');
 
 function handleDelete(e: Event) {
@@ -220,6 +225,16 @@ async function handleCollapsedRetry(e: Event) {
 function handleRetry(id: string) {
   expanded.value = false;
   emit('retry', id);
+}
+
+async function handleCollapsedGrantPermission(e: Event) {
+  e.stopPropagation();
+  collapsedGranting.value = true;
+  try {
+    await api.tasks.grantPermission(props.task.id);
+  } finally {
+    collapsedGranting.value = false;
+  }
 }
 
 const isTaskCheckedOut = computed(() => checkoutsStore.isCheckedOut(props.task.id));
@@ -431,16 +446,6 @@ async function handleCollapsedReturn(e: Event) {
         <template v-if="actionsDisabled">
           <span class="text-xs text-zinc-500 italic" title="Another task in this repo is checked out">Locked</span>
         </template>
-        <template v-else-if="collapsedCheckoutError">
-          <span class="text-xs text-red-400 max-w-48 truncate" :title="collapsedCheckoutError">Checkout failed</span>
-          <button
-            class="px-2 py-1 text-xs font-medium rounded bg-yellow-900 hover:bg-yellow-800 text-yellow-300 transition-colors disabled:opacity-50"
-            :disabled="collapsedFixing"
-            @click="handleCollapsedCheckoutFix"
-          >
-            {{ collapsedFixing ? 'Re-queuing...' : 'Fix' }}
-          </button>
-        </template>
         <template v-else>
           <button
             class="px-2 py-1 text-xs font-medium rounded bg-yellow-900 hover:bg-yellow-800 text-yellow-300 transition-colors disabled:opacity-50"
@@ -449,25 +454,27 @@ async function handleCollapsedReturn(e: Event) {
           >
             {{ collapsedRetrying ? 'Retrying...' : 'Retry' }}
           </button>
-          <template v-if="task.branch_name">
-            <button
-              v-if="isTaskCheckedOut"
-              class="px-2 py-1 text-xs font-medium rounded bg-amber-900 hover:bg-amber-800 text-amber-300 transition-colors disabled:opacity-50"
-              :disabled="collapsedReturning"
-              @click="handleCollapsedReturn"
-            >
-              {{ collapsedReturning ? 'Returning...' : 'Return' }}
-            </button>
-            <button
-              v-else-if="!actionsDisabled"
-              class="px-2 py-1 text-xs font-medium rounded bg-teal-900 hover:bg-teal-800 text-teal-300 transition-colors disabled:opacity-50"
-              :disabled="collapsedCheckingOut"
-              @click="handleCollapsedCheckout"
-            >
-              {{ collapsedCheckingOut ? 'Checking out...' : 'Checkout' }}
-            </button>
-          </template>
         </template>
+      </div>
+
+      <!-- Grant/Reject buttons (visible in collapsed state for permission tasks) -->
+      <div v-if="isPermission" class="flex items-center gap-1 shrink-0" @click.stop>
+        <span class="text-xs text-red-400 max-w-48 truncate" :title="task.error_message ?? ''">
+          {{ task.error_message ?? 'Permission needed' }}
+        </span>
+        <button
+          class="px-2 py-1 text-xs font-medium rounded bg-green-900 hover:bg-green-800 text-green-300 transition-colors disabled:opacity-50"
+          :disabled="collapsedGranting"
+          @click="handleCollapsedGrantPermission"
+        >
+          {{ collapsedGranting ? 'Granting...' : 'Grant' }}
+        </button>
+        <button
+          class="px-2 py-1 text-xs font-medium rounded bg-red-900 hover:bg-red-800 text-red-300 transition-colors"
+          @click="(e: Event) => { e.stopPropagation(); emit('reject', task.id); }"
+        >
+          Reject
+        </button>
       </div>
 
       <!-- Follow Up + Delete buttons (visible in collapsed state for terminal tasks) -->

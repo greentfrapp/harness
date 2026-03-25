@@ -48,8 +48,15 @@ export class ClaudeCodeAdapter implements AgentAdapter {
     return args;
   }
 
-  buildResumeArgs(opts: { prompt: string; sessionId: string }): string[] {
+  buildResumeArgs(opts: { prompt: string; sessionId: string; usesWorktree: boolean }): string[] {
     const args: string[] = ['--output-format', 'stream-json', '--verbose'];
+
+    if (opts.usesWorktree) {
+      args.push('--permission-mode', 'bypassPermissions');
+    } else {
+      args.push('--allowedTools', 'Read,Glob,Grep,WebSearch,WebFetch');
+    }
+
     args.push('--resume', opts.sessionId);
     args.push('-p', opts.prompt);
     return args;
