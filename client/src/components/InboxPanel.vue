@@ -87,7 +87,7 @@ async function handleFollowUp(_id: string) {
 
 <template>
   <div class="flex flex-col h-full overflow-hidden">
-    <div class="px-4 py-3 border-b border-gray-800 flex items-center justify-between">
+    <div class="px-4 h-12 border-b border-gray-800 flex items-center justify-between">
       <div class="flex items-center gap-2">
         <template v-if="hasSelection">
           <template v-if="confirmingBulkDelete">
