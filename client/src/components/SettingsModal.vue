@@ -92,15 +92,15 @@ async function handleSave() {
       />
 
       <!-- Modal -->
-      <div class="relative bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl w-full max-w-2xl mx-4">
-        <div class="px-6 py-4 border-b border-zinc-800">
+      <div class="relative bg-gray-900 border border-gray-700 rounded-xl shadow-2xl w-full max-w-2xl mx-4">
+        <div class="px-6 py-4 border-b border-gray-800">
           <h2 class="text-lg font-semibold">Settings</h2>
-          <p v-if="configPath" class="text-xs text-zinc-500 mt-0.5 font-mono">{{ configPath }}</p>
+          <p v-if="configPath" class="text-xs text-gray-500 mt-0.5 font-mono">{{ configPath }}</p>
         </div>
 
         <div class="px-6 py-4 space-y-3">
           <!-- Loading -->
-          <div v-if="loading" class="text-sm text-zinc-500 py-8 text-center">
+          <div v-if="loading" class="text-sm text-gray-500 py-8 text-center">
             Loading config...
           </div>
 
@@ -110,8 +110,8 @@ async function handleSave() {
               v-model="content"
               rows="20"
               spellcheck="false"
-              class="w-full bg-zinc-800 border rounded-md px-3 py-2 text-sm font-mono leading-relaxed focus:outline-none focus:ring-2 focus:ring-blue-600 resize-y"
-              :class="hasParseErrors ? 'border-red-600' : 'border-zinc-700'"
+              class="w-full bg-gray-800 border rounded-md px-3 py-2 text-sm font-mono leading-relaxed focus:outline-none focus:ring-2 focus:ring-blue-600 resize-y"
+              :class="hasParseErrors ? 'border-red-600' : 'border-gray-700'"
               autofocus
             />
 
@@ -135,7 +135,7 @@ async function handleSave() {
           <div class="flex justify-end gap-2 pt-2">
             <button
               type="button"
-              class="px-4 py-2 text-sm text-zinc-400 hover:text-zinc-200 transition-colors"
+              class="px-4 py-2 text-sm text-gray-400 hover:text-gray-200 transition-colors"
               @click="emit('close')"
             >
               Cancel

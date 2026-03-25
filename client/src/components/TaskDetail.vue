@@ -213,28 +213,28 @@ function formatTime(ts: number): string {
 </script>
 
 <template>
-  <div class="border-t border-zinc-800 px-4 py-3 space-y-4 bg-zinc-900/50">
+  <div class="border-t border-gray-800 px-4 py-3 space-y-4 bg-gray-900/50">
     <!-- Parent task lineage -->
-    <div v-if="task.parent_task_id" class="text-xs text-zinc-500">
-      Follow-up of <span class="font-mono text-zinc-400">{{ task.parent_task_id.slice(0, 8) }}</span>
+    <div v-if="task.parent_task_id" class="text-xs text-gray-500">
+      Follow-up of <span class="font-mono text-gray-400">{{ task.parent_task_id.slice(0, 8) }}</span>
     </div>
 
     <!-- Full prompt -->
     <div>
-      <h4 class="text-xs font-medium text-zinc-500 uppercase mb-1">Prompt</h4>
-      <p class="text-sm text-zinc-300 whitespace-pre-wrap">{{ task.prompt }}</p>
+      <h4 class="text-xs font-medium text-gray-500 uppercase mb-1">Prompt</h4>
+      <p class="text-sm text-gray-300 whitespace-pre-wrap">{{ task.prompt }}</p>
     </div>
 
     <!-- Status & Priority & Tags & Branch -->
-    <div class="flex gap-4 text-xs text-zinc-500 flex-wrap">
-      <span>Status: <span class="text-zinc-300">{{ task.status }}</span></span>
-      <span>Priority: <span class="text-zinc-300">{{ task.priority }}</span></span>
-      <span v-if="task.tags?.length">Tags: <span class="text-zinc-300">{{ task.tags.join(', ') }}</span></span>
+    <div class="flex gap-4 text-xs text-gray-500 flex-wrap">
+      <span>Status: <span class="text-gray-300">{{ task.status }}</span></span>
+      <span>Priority: <span class="text-gray-300">{{ task.priority }}</span></span>
+      <span v-if="task.tags?.length">Tags: <span class="text-gray-300">{{ task.tags.join(', ') }}</span></span>
       <span v-if="task.depends_on">
-        Depends on: <span class="text-zinc-300 font-mono">{{ task.depends_on.slice(0, 8) }}</span>
+        Depends on: <span class="text-gray-300 font-mono">{{ task.depends_on.slice(0, 8) }}</span>
       </span>
       <span v-if="task.branch_name">
-        Branch: <span class="text-zinc-300 font-mono">{{ task.branch_name }}</span>
+        Branch: <span class="text-gray-300 font-mono">{{ task.branch_name }}</span>
       </span>
     </div>
 
@@ -245,20 +245,20 @@ function formatTime(ts: number): string {
 
     <!-- Agent summary -->
     <div v-if="task.agent_summary">
-      <h4 class="text-xs font-medium text-zinc-500 uppercase mb-1">Agent Summary</h4>
-      <div class="text-sm text-zinc-300 prose prose-invert prose-sm max-w-none" v-html="renderedSummary"></div>
+      <h4 class="text-xs font-medium text-gray-500 uppercase mb-1">Agent Summary</h4>
+      <div class="text-sm text-gray-300 prose prose-invert prose-sm max-w-none" v-html="renderedSummary"></div>
     </div>
 
     <!-- Diff viewer for completed Do tasks in inbox -->
     <div v-if="showDiffViewer">
-      <h4 class="text-xs font-medium text-zinc-500 uppercase mb-2">Changes</h4>
+      <h4 class="text-xs font-medium text-gray-500 uppercase mb-2">Changes</h4>
       <DiffViewer :task-id="task.id" />
     </div>
 
     <!-- Diff stats (when no full diff viewer, but stats exist) -->
     <div v-else-if="task.diff_summary && !showDiffViewer">
-      <h4 class="text-xs font-medium text-zinc-500 uppercase mb-1">Diff Summary</h4>
-      <p class="text-xs text-zinc-400 font-mono whitespace-pre overflow-y-auto" style="max-height: 40vh;">{{ task.diff_summary }}</p>
+      <h4 class="text-xs font-medium text-gray-500 uppercase mb-1">Diff Summary</h4>
+      <p class="text-xs text-gray-400 font-mono whitespace-pre overflow-y-auto" style="max-height: 40vh;">{{ task.diff_summary }}</p>
     </div>
 
     <!-- Error -->
@@ -292,15 +292,15 @@ function formatTime(ts: number): string {
 
     <!-- Event timeline -->
     <div v-if="events.length">
-      <h4 class="text-xs font-medium text-zinc-500 uppercase mb-2">Timeline</h4>
+      <h4 class="text-xs font-medium text-gray-500 uppercase mb-2">Timeline</h4>
       <div class="space-y-1">
         <div
           v-for="event in events"
           :key="event.id"
           class="flex items-center gap-2 text-xs"
         >
-          <span class="text-zinc-600 font-mono">{{ formatTime(event.created_at) }}</span>
-          <span class="text-zinc-400">{{ event.event_type }}</span>
+          <span class="text-gray-600 font-mono">{{ formatTime(event.created_at) }}</span>
+          <span class="text-gray-400">{{ event.event_type }}</span>
         </div>
       </div>
     </div>
@@ -316,10 +316,10 @@ function formatTime(ts: number): string {
         </button>
       </div>
       <div v-else class="space-y-2">
-        <h4 class="text-xs font-medium text-zinc-500 uppercase">Revise Task</h4>
+        <h4 class="text-xs font-medium text-gray-500 uppercase">Revise Task</h4>
         <textarea
           v-model="revisePrompt"
-          class="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-zinc-200 placeholder-zinc-500 focus:border-purple-600 focus:outline-none resize-y"
+          class="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-200 placeholder-gray-500 focus:border-purple-600 focus:outline-none resize-y"
           rows="3"
           placeholder="Enter feedback for the agent..."
           :disabled="revising"
@@ -335,13 +335,13 @@ function formatTime(ts: number): string {
             {{ revising ? 'Sending...' : 'Send Revision' }}
           </button>
           <button
-            class="px-3 py-1.5 text-xs font-medium rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-400 transition-colors"
+            class="px-3 py-1.5 text-xs font-medium rounded bg-gray-800 hover:bg-gray-700 text-gray-400 transition-colors"
             :disabled="revising"
             @click="showRevise = false; revisePrompt = ''"
           >
             Cancel
           </button>
-          <span class="text-xs text-zinc-600 self-center ml-auto">Cmd+Enter to send</span>
+          <span class="text-xs text-gray-600 self-center ml-auto">Cmd+Enter to send</span>
         </div>
       </div>
     </div>
@@ -357,11 +357,11 @@ function formatTime(ts: number): string {
         </button>
       </div>
       <div v-else class="space-y-2">
-        <h4 class="text-xs font-medium text-zinc-500 uppercase">Continue Conversation</h4>
+        <h4 class="text-xs font-medium text-gray-500 uppercase">Continue Conversation</h4>
         <textarea
           ref="followUpTextarea"
           v-model="followUpPrompt"
-          class="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-zinc-200 placeholder-zinc-500 focus:border-blue-600 focus:outline-none resize-y"
+          class="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-200 placeholder-gray-500 focus:border-blue-600 focus:outline-none resize-y"
           rows="3"
           placeholder="Enter your follow-up request..."
           :disabled="followingUp"
@@ -377,19 +377,19 @@ function formatTime(ts: number): string {
             {{ followingUp ? 'Sending...' : 'Send Follow-Up' }}
           </button>
           <button
-            class="px-3 py-1.5 text-xs font-medium rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-400 transition-colors"
+            class="px-3 py-1.5 text-xs font-medium rounded bg-gray-800 hover:bg-gray-700 text-gray-400 transition-colors"
             :disabled="followingUp"
             @click="showFollowUp = false; followUpPrompt = ''"
           >
             Cancel
           </button>
-          <span class="text-xs text-zinc-600 self-center ml-auto">Cmd+Enter to send</span>
+          <span class="text-xs text-gray-600 self-center ml-auto">Cmd+Enter to send</span>
         </div>
       </div>
     </div>
 
     <!-- Actions -->
-    <div class="flex gap-2 pt-2 border-t border-zinc-800">
+    <div class="flex gap-2 pt-2 border-t border-gray-800">
       <template v-if="context === 'outbox'">
         <button
           class="px-3 py-1.5 text-xs font-medium rounded bg-red-900 hover:bg-red-800 text-red-300 transition-colors"
@@ -422,7 +422,7 @@ function formatTime(ts: number): string {
           {{ retrying ? 'Retrying...' : 'Retry' }}
         </button>
         <button
-          class="px-3 py-1.5 text-xs font-medium rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-400 transition-colors"
+          class="px-3 py-1.5 text-xs font-medium rounded bg-gray-800 hover:bg-gray-700 text-gray-400 transition-colors"
           @click="emit('defer', task.id)"
         >
           Defer
@@ -453,7 +453,7 @@ function formatTime(ts: number): string {
           class="px-3 py-1.5 text-xs font-medium rounded transition-colors disabled:opacity-50"
           :class="confirmingDelete
             ? 'bg-red-800 hover:bg-red-700 text-red-200'
-            : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-500 hover:text-red-400'"
+            : 'bg-gray-800 hover:bg-gray-700 text-gray-500 hover:text-red-400'"
           :disabled="deleting"
           @click="handleDelete"
         >
@@ -461,7 +461,7 @@ function formatTime(ts: number): string {
         </button>
         <button
           v-if="confirmingDelete && !deleting"
-          class="px-3 py-1.5 text-xs font-medium rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-500 transition-colors"
+          class="px-3 py-1.5 text-xs font-medium rounded bg-gray-800 hover:bg-gray-700 text-gray-500 transition-colors"
           @click="confirmingDelete = false"
         >
           Cancel

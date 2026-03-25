@@ -694,5 +694,34 @@ describe('Task Routes', () => {
       expect(mockReturnCheckout).not.toHaveBeenCalled();
       expect(ctx.checkoutState.has('/tmp/test')).toBe(true);
     });
+
+    it('auto-returns checkout when revising checked-out task', async () => {
+      const task = makeTask({
+        status: 'ready',
+        agent_session_data: '{"session_id":"sess-1","pid":123}',
+        worktree_path: '/tmp/wt',
+        branch_name: 'harness/abc-test',
+      });
+      (ctx.queries.getTaskById as any).mockReturnValue(task);
+      (ctx.queries.updateTask as any).mockImplementation((id: string, updates: any) =>
+        makeTask({ id, ...updates }),
+      );
+
+      ctx.checkoutState.set('/tmp/test', { taskId: 'task-1', checkoutBranch: 'harness/checkout-task-1' });
+
+      const res = await app.request('/tasks/task-1/revise', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: 'Fix the tests please' }),
+      });
+      expect(res.status).toBe(200);
+
+      // Should have auto-returned
+      expect(mockReturnCheckout).toHaveBeenCalledWith('/tmp/test', 'main', 'harness/checkout-task-1');
+      expect(ctx.checkoutState.has('/tmp/test')).toBe(false);
+      expect(ctx.sseManager.broadcast).toHaveBeenCalledWith('task:returned', expect.objectContaining({
+        taskId: 'task-1',
+      }));
+    });
   });
 });

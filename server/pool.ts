@@ -71,27 +71,35 @@ export class AgentPool {
 
   /** Dispatch a Do task: create worktree, spawn agent, handle lifecycle. */
   async dispatchDoTask(task: Task, project: Project): Promise<void> {
-    const branchName = git.makeBranchName(task.id, task.prompt);
-    const wtPath = git.worktreePath(project.repo_path, branchName);
+    let branchName: string;
+    let wtPath: string;
 
-    // Create worktree from target branch
-    git.createWorktree(
-      project.repo_path,
-      project.target_branch,
-      branchName,
-      wtPath,
-    );
+    if (task.worktree_path && task.branch_name) {
+      // Revision: reuse existing worktree and branch (preserves original commits)
+      branchName = task.branch_name;
+      wtPath = task.worktree_path;
+    } else {
+      // New task: create fresh worktree from target branch
+      branchName = git.makeBranchName(task.id, task.prompt);
+      wtPath = git.worktreePath(project.repo_path, branchName);
 
-    // Update task with worktree info
-    this.deps.updateTask(task.id, {
-      worktree_path: wtPath,
-      branch_name: branchName,
-    });
+      git.createWorktree(
+        project.repo_path,
+        project.target_branch,
+        branchName,
+        wtPath,
+      );
+
+      this.deps.updateTask(task.id, {
+        worktree_path: wtPath,
+        branch_name: branchName,
+      });
+    }
 
     // Check if this task has a pre-populated session ID (e.g. follow-up task)
     const existingSession = parseSessionData(task.agent_session_data);
     if (existingSession?.session_id) {
-      // Resume the previous conversation in the new worktree
+      // Resume the previous conversation in the existing worktree
       this.spawnAgent(task, project, {
         cwd: wtPath,
         systemPrompt: null,

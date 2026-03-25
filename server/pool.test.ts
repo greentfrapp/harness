@@ -220,4 +220,57 @@ describe('AgentPool progress broadcasting', () => {
       message: validMsg,
     });
   });
+
+  it('reuses existing worktree for revised tasks instead of creating a new one', async () => {
+    const git = await import('./git.ts');
+    const mockCreateWorktree = git.createWorktree as ReturnType<typeof vi.fn>;
+    const mockMakeBranchName = git.makeBranchName as ReturnType<typeof vi.fn>;
+    mockCreateWorktree.mockClear();
+    mockMakeBranchName.mockClear();
+
+    const task = makeTask({
+      worktree_path: '/existing/wt',
+      branch_name: 'harness/original-branch',
+      agent_session_data: '{"session_id":"sess-1","pid":123}',
+    });
+    const project = makeProject();
+
+    await pool.dispatchDoTask(task, project);
+
+    // Should NOT create a new worktree or compute a new branch name
+    expect(mockCreateWorktree).not.toHaveBeenCalled();
+    expect(mockMakeBranchName).not.toHaveBeenCalled();
+
+    // Should NOT overwrite worktree_path/branch_name on the task
+    const updateTask = pool['deps'].updateTask as ReturnType<typeof vi.fn>;
+    for (const call of updateTask.mock.calls) {
+      const updates = call[1];
+      expect(updates).not.toHaveProperty('worktree_path');
+      expect(updates).not.toHaveProperty('branch_name');
+    }
+  });
+
+  it('creates a new worktree for fresh tasks without existing worktree', async () => {
+    const git = await import('./git.ts');
+    const mockCreateWorktree = git.createWorktree as ReturnType<typeof vi.fn>;
+    mockCreateWorktree.mockClear();
+
+    const task = makeTask({
+      worktree_path: null,
+      branch_name: null,
+    });
+    const project = makeProject();
+
+    await pool.dispatchDoTask(task, project);
+
+    // Should create a new worktree
+    expect(mockCreateWorktree).toHaveBeenCalled();
+
+    // Should update task with worktree info
+    const updateTask = pool['deps'].updateTask as ReturnType<typeof vi.fn>;
+    expect(updateTask).toHaveBeenCalledWith('task-1', {
+      worktree_path: '/tmp/wt',
+      branch_name: 'branch-test',
+    });
+  });
 });

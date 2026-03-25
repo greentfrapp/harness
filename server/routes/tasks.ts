@@ -559,6 +559,9 @@ export function createTaskRoutes(ctx: AppContext) {
       return c.json({ error: 'Only ready or error tasks can be revised' }, 400);
     }
 
+    // Auto-return if this task is currently checked out
+    autoReturnIfCheckedOut(id);
+
     const body = await c.req.json<{ prompt: string }>();
     if (!body.prompt?.trim()) {
       return c.json({ error: 'prompt is required' }, 400);
