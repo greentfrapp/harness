@@ -203,19 +203,22 @@ function handleRetry(id: string) {
         </svg>
       </span>
 
-      <!-- Hover checkbox (hidden by default, shown on group hover when no selection active) -->
+      <!-- Status dot / hover checkbox container (fixed size to prevent layout shift) -->
       <span
         v-if="!selected && !hasSelection"
-        class="mt-1 w-4 h-4 rounded border shrink-0 items-center justify-center transition-colors cursor-pointer border-gray-600 bg-gray-800 hover:border-gray-400 hidden group-hover:flex"
-        @click.stop="emit('toggleSelect', task.id)"
-      />
-
-      <!-- Status dot (hidden on hover when no selection active) -->
-      <span
-        v-if="!selected && !hasSelection"
-        class="mt-1 w-2.5 h-2.5 rounded-full shrink-0 group-hover:hidden"
-        :class="[status.color, status.pulse ? 'animate-pulse' : '']"
-      />
+        class="mt-1 w-4 h-4 shrink-0 relative flex items-center justify-center"
+      >
+        <!-- Hover checkbox (hidden by default, shown on group hover) -->
+        <span
+          class="w-4 h-4 rounded border items-center justify-center transition-colors cursor-pointer border-gray-600 bg-gray-800 hover:border-gray-400 hidden group-hover:flex absolute inset-0"
+          @click.stop="emit('toggleSelect', task.id)"
+        />
+        <!-- Status dot (hidden on hover) -->
+        <span
+          class="w-2.5 h-2.5 rounded-full group-hover:hidden"
+          :class="[status.color, status.pulse ? 'animate-pulse' : '']"
+        />
+      </span>
 
       <!-- Content -->
       <div class="flex-1 min-w-0">
