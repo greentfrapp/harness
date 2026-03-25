@@ -74,7 +74,7 @@ const statusConfig: Record<
   deferred: { color: 'bg-gray-600', label: 'Deferred' },
   error: { color: 'bg-red-500', label: 'Error' },
   permission: { color: 'bg-red-500', label: 'Permission', pulse: true },
-  approved: { color: 'bg-green-600', label: 'Approved' },
+  approved: { color: 'bg-gray-500', label: 'Approved' },
   rejected: { color: 'bg-red-600', label: 'Rejected' },
   cancelled: { color: 'bg-gray-600', label: 'Cancelled' },
 };
@@ -241,7 +241,7 @@ function handleRetry(id: string) {
           </span>
           <span
             v-if="task.status === 'approved'"
-            class="text-xs font-medium px-1.5 py-0.5 rounded bg-green-900 text-green-300"
+            class="text-xs font-medium px-1.5 py-0.5 rounded bg-gray-800 text-gray-400"
           >
             Accepted
           </span>
