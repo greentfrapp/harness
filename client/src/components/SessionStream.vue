@@ -11,16 +11,40 @@ const props = defineProps<{
 const messages = ref<StreamMessage[]>([]);
 const containerRef = ref<HTMLElement | null>(null);
 const collapsedToolResults = ref<Set<number>>(new Set());
+const userScrolledUp = ref(false);
 
 /** Expand raw messages into flat display items. */
 const displayItems = computed(() => expandMessages(messages.value));
 
+/** Check if the container is scrolled to the bottom (within a small threshold). */
+function isScrolledToBottom(): boolean {
+  const el = containerRef.value;
+  if (!el) return true;
+  return el.scrollHeight - el.scrollTop - el.clientHeight < 30;
+}
+
+/** Scroll to bottom if auto-scroll is active. */
+function scrollToBottomIfAllowed() {
+  if (!userScrolledUp.value) {
+    nextTick(() => {
+      containerRef.value?.scrollTo({ top: containerRef.value.scrollHeight });
+    });
+  }
+}
+
+/** Handle user scroll events to detect scroll-up / scroll-to-bottom. */
+function handleScroll() {
+  if (isScrolledToBottom()) {
+    userScrolledUp.value = false;
+  } else {
+    userScrolledUp.value = true;
+  }
+}
+
 function handleProgress(event: CustomEvent<{ task_id: string; message: StreamMessage }>) {
   if (event.detail.task_id !== props.taskId) return;
   messages.value.push(event.detail.message);
-  nextTick(() => {
-    containerRef.value?.scrollTo({ top: containerRef.value.scrollHeight });
-  });
+  scrollToBottomIfAllowed();
 }
 
 async function fetchBufferedProgress() {
@@ -34,9 +58,7 @@ async function fetchBufferedProgress() {
           messages.value.push(msg as StreamMessage);
         }
       }
-      nextTick(() => {
-        containerRef.value?.scrollTo({ top: containerRef.value.scrollHeight });
-      });
+      scrollToBottomIfAllowed();
     }
   } catch {
     // Ignore fetch errors — live stream still works
@@ -44,6 +66,8 @@ async function fetchBufferedProgress() {
 }
 
 onMounted(async () => {
+  // Reset auto-scroll when (re-)opening the task
+  userScrolledUp.value = false;
   window.addEventListener('task:progress', handleProgress as EventListener);
   await fetchBufferedProgress();
   // Retry once after 2s if nothing arrived yet (handles race where agent just started)
@@ -125,7 +149,7 @@ function isToolResultLong(item: DisplayItem): boolean {
 </script>
 
 <template>
-  <div ref="containerRef" class="overflow-y-auto max-h-[32rem] text-sm p-3 bg-gray-950 rounded-lg border border-gray-800">
+  <div ref="containerRef" class="overflow-y-auto max-h-[32rem] text-sm p-3 bg-gray-950 rounded-lg border border-gray-800" @scroll="handleScroll">
     <!-- Empty state -->
     <div v-if="displayItems.length === 0" class="text-gray-600 text-center py-8">
       <template v-if="messages.length === 0">
@@ -180,7 +204,7 @@ function isToolResultLong(item: DisplayItem): boolean {
           </div>
           <pre
             v-if="!isToolResultLong(item) || !collapsedToolResults.has(index)"
-            class="text-xs bg-gray-900 rounded px-2 py-1.5 overflow-x-auto whitespace-pre-wrap break-all"
+            class="text-xs bg-gray-900 rounded px-2 py-1.5 overflow-x-auto overflow-y-auto max-h-60 whitespace-pre-wrap break-all"
             :class="item.isError ? 'text-red-400 border border-red-900/50' : 'text-green-400/80'"
           >{{ formatToolResult(item.toolResult) }}</pre>
         </div>
