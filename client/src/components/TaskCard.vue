@@ -37,6 +37,8 @@ const isError = computed(() =>
 const collapsedApproving = ref(false);
 const collapsedRejecting = ref(false);
 const collapsedRetrying = ref(false);
+const collapsedFixing = ref(false);
+const collapsedMergeError = ref('');
 
 function handleDelete(e: Event) {
   e.stopPropagation();
@@ -115,11 +117,29 @@ function handleReject(id: string) {
 async function handleCollapsedApprove(e: Event) {
   e.stopPropagation();
   collapsedApproving.value = true;
+  collapsedMergeError.value = '';
   try {
     await api.tasks.approve(props.task.id);
     emit('approve', props.task.id);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Approve failed';
+    if (msg.toLowerCase().includes('merge failed')) {
+      collapsedMergeError.value = msg;
+    }
   } finally {
     collapsedApproving.value = false;
+  }
+}
+
+async function handleCollapsedFix(e: Event) {
+  e.stopPropagation();
+  collapsedFixing.value = true;
+  try {
+    await api.tasks.fix(props.task.id);
+    collapsedMergeError.value = '';
+    emit('approve', props.task.id);
+  } finally {
+    collapsedFixing.value = false;
   }
 }
 
@@ -202,26 +222,38 @@ function handleRetry(id: string) {
 
       <!-- Action buttons (visible in collapsed state for tasks needing input) -->
       <div v-if="needsInput && !expanded" class="flex items-center gap-1 shrink-0" @click.stop>
-        <button
-          class="px-2 py-1 text-xs font-medium rounded bg-green-900 hover:bg-green-800 text-green-300 transition-colors disabled:opacity-50"
-          :disabled="collapsedApproving"
-          @click="handleCollapsedApprove"
-        >
-          {{ collapsedApproving ? 'Merging...' : 'Accept' }}
-        </button>
-        <button
-          class="px-2 py-1 text-xs font-medium rounded bg-red-900 hover:bg-red-800 text-red-300 transition-colors disabled:opacity-50"
-          :disabled="collapsedRejecting"
-          @click="handleCollapsedReject"
-        >
-          {{ collapsedRejecting ? 'Rejecting...' : 'Reject' }}
-        </button>
-        <button
-          class="px-2 py-1 text-xs font-medium rounded bg-gray-800 hover:bg-gray-700 text-gray-400 transition-colors"
-          @click="handleCollapsedDefer"
-        >
-          Defer
-        </button>
+        <template v-if="collapsedMergeError">
+          <span class="text-xs text-red-400 max-w-48 truncate" :title="collapsedMergeError">Merge failed</span>
+          <button
+            class="px-2 py-1 text-xs font-medium rounded bg-yellow-900 hover:bg-yellow-800 text-yellow-300 transition-colors disabled:opacity-50"
+            :disabled="collapsedFixing"
+            @click="handleCollapsedFix"
+          >
+            {{ collapsedFixing ? 'Re-queuing...' : 'Fix' }}
+          </button>
+        </template>
+        <template v-else>
+          <button
+            class="px-2 py-1 text-xs font-medium rounded bg-green-900 hover:bg-green-800 text-green-300 transition-colors disabled:opacity-50"
+            :disabled="collapsedApproving"
+            @click="handleCollapsedApprove"
+          >
+            {{ collapsedApproving ? 'Merging...' : 'Accept' }}
+          </button>
+          <button
+            class="px-2 py-1 text-xs font-medium rounded bg-red-900 hover:bg-red-800 text-red-300 transition-colors disabled:opacity-50"
+            :disabled="collapsedRejecting"
+            @click="handleCollapsedReject"
+          >
+            {{ collapsedRejecting ? 'Rejecting...' : 'Reject' }}
+          </button>
+          <button
+            class="px-2 py-1 text-xs font-medium rounded bg-gray-800 hover:bg-gray-700 text-gray-400 transition-colors"
+            @click="handleCollapsedDefer"
+          >
+            Defer
+          </button>
+        </template>
       </div>
 
       <!-- Retry button (visible in collapsed state for error tasks) -->

@@ -24,7 +24,9 @@ const events = ref<TaskEvent[]>([]);
 const approving = ref(false);
 const rejecting = ref(false);
 const retrying = ref(false);
+const fixing = ref(false);
 const actionError = ref('');
+const isMergeError = ref(false);
 const deleting = ref(false);
 const confirmingDelete = ref(false);
 const blockedDependents = ref<Array<{ id: string; prompt: string; status: string }>>([]);
@@ -60,7 +62,9 @@ async function handleApprove() {
     }
     emit('approve', props.task.id);
   } catch (e) {
-    actionError.value = e instanceof Error ? e.message : 'Approve failed';
+    const msg = e instanceof Error ? e.message : 'Approve failed';
+    actionError.value = msg;
+    isMergeError.value = msg.toLowerCase().includes('merge failed');
   } finally {
     approving.value = false;
   }
@@ -79,6 +83,20 @@ async function handleReject() {
     actionError.value = e instanceof Error ? e.message : 'Reject failed';
   } finally {
     rejecting.value = false;
+  }
+}
+
+async function handleFix() {
+  fixing.value = true;
+  actionError.value = '';
+  isMergeError.value = false;
+  try {
+    await api.tasks.fix(props.task.id);
+    emit('approve', props.task.id);
+  } catch (e) {
+    actionError.value = e instanceof Error ? e.message : 'Fix failed';
+  } finally {
+    fixing.value = false;
   }
 }
 
@@ -171,7 +189,17 @@ function formatTime(ts: number): string {
 
     <!-- Action error -->
     <div v-if="actionError" class="rounded bg-red-950 border border-red-900 p-3">
-      <p class="text-sm text-red-300">{{ actionError }}</p>
+      <div class="flex items-center gap-3">
+        <p class="text-sm text-red-300 flex-1">{{ actionError }}</p>
+        <button
+          v-if="isMergeError"
+          class="px-3 py-1.5 text-xs font-medium rounded bg-yellow-900 hover:bg-yellow-800 text-yellow-300 transition-colors disabled:opacity-50 shrink-0"
+          :disabled="fixing"
+          @click="handleFix"
+        >
+          {{ fixing ? 'Re-queuing...' : 'Fix' }}
+        </button>
+      </div>
     </div>
 
     <!-- Blocked dependents warning -->
