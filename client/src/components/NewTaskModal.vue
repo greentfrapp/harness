@@ -21,21 +21,25 @@ const props = defineProps<{
   taskTypes: string[];
   existingTasks: Task[];
   tagConfigs?: Record<string, TagConfig>;
+  editingDraft?: Task | null;
 }>();
 
 const emit = defineEmits<{
   close: [];
   create: [input: CreateTaskInput];
   draft: [input: CreateTaskInput];
+  updateDraft: [id: string, input: CreateTaskInput];
   settings: [];
 }>();
 
-const projectId = ref(props.projects[0]?.id ?? '');
-const taskType = ref('do');
-const prompt = ref('');
-const priority = ref<Priority>('P2');
-const selectedTags = ref<string[]>([]);
-const dependsOn = ref<string | null>(null);
+const isEditing = computed(() => !!props.editingDraft);
+
+const projectId = ref(props.editingDraft?.project_id ?? props.projects[0]?.id ?? '');
+const taskType = ref(props.editingDraft?.type ?? 'do');
+const prompt = ref(props.editingDraft?.prompt ?? '');
+const priority = ref<Priority>(props.editingDraft?.priority ?? 'P2');
+const selectedTags = ref<string[]>(props.editingDraft?.tags ? [...props.editingDraft.tags] : []);
+const dependsOn = ref<string | null>(props.editingDraft?.depends_on ?? null);
 const submitting = ref(false);
 const error = ref('');
 const promptInput = ref<HTMLTextAreaElement | null>(null);
@@ -101,7 +105,12 @@ async function handleSubmit() {
       tags: selectedTags.value.length > 0 ? [...selectedTags.value] : undefined,
       depends_on: dependsOn.value || null,
     };
-    emit('create', input);
+    if (isEditing.value && props.editingDraft) {
+      // When sending a draft, update it first then the parent will send it
+      emit('updateDraft', props.editingDraft.id, input);
+    } else {
+      emit('create', input);
+    }
     emit('close');
   } catch (e: any) {
     error.value = e.message || 'Failed to create task';
@@ -125,7 +134,12 @@ function handleSaveDraft() {
     depends_on: dependsOn.value || null,
     as_draft: true,
   };
-  emit('draft', input);
+
+  if (isEditing.value && props.editingDraft) {
+    emit('updateDraft', props.editingDraft.id, input);
+  } else {
+    emit('draft', input);
+  }
   emit('close');
 }
 
@@ -152,7 +166,7 @@ const priorities: { value: Priority; label: string }[] = [
       <!-- Modal -->
       <div class="relative bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl w-full max-w-lg mx-4">
         <div class="px-6 py-4 border-b border-zinc-800">
-          <h2 class="text-lg font-semibold">New Task</h2>
+          <h2 class="text-lg font-semibold">{{ isEditing ? 'Edit Draft' : 'New Task' }}</h2>
         </div>
 
         <!-- Empty state: no projects configured -->
@@ -294,7 +308,7 @@ const priorities: { value: Priority; label: string }[] = [
               class="px-4 py-2 text-sm font-medium bg-zinc-700 hover:bg-zinc-600 text-zinc-300 rounded-md transition-colors disabled:opacity-50"
               @click="handleSaveDraft"
             >
-              Save Draft
+              {{ isEditing ? 'Update Draft' : 'Save Draft' }}
               <kbd class="ml-1 text-xs opacity-60">⌘⇧↵</kbd>
             </button>
             <button
@@ -302,7 +316,7 @@ const priorities: { value: Priority; label: string }[] = [
               :disabled="submitting"
               class="px-4 py-2 text-sm font-medium bg-zinc-600 hover:bg-zinc-500 rounded-md transition-colors disabled:opacity-50"
             >
-              {{ submitting ? 'Creating...' : 'Create Task' }}
+              {{ submitting ? (isEditing ? 'Sending...' : 'Creating...') : (isEditing ? 'Send Task' : 'Create Task') }}
               <kbd class="ml-1 text-xs opacity-60">⌘↵</kbd>
             </button>
           </div>
