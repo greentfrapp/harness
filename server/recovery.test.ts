@@ -18,7 +18,7 @@ function makeTask(overrides: Partial<Task> = {}): Task {
     type: 'do',
     status: 'in_progress',
     prompt: 'test',
-    priority: 'normal',
+    priority: 'P2',
     depends_on: null,
     agent_type: 'claude-code',
     agent_session_data: null,

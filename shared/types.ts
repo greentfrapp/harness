@@ -12,7 +12,7 @@ export type TaskStatus =
   | 'approved'
   | 'rejected'
   | 'cancelled';
-export type Priority = 'urgent' | 'normal' | 'low';
+export type Priority = 'P0' | 'P1' | 'P2' | 'P3';
 export type SubtaskProposalStatus = 'pending' | 'approved' | 'dismissed';
 
 // Statuses that appear in the outbox

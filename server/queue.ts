@@ -1,9 +1,10 @@
 import type { Task, Priority, SSEEventType } from '../shared/types.ts';
 
 const PRIORITY_ORDER: Record<Priority, number> = {
-  urgent: 0,
-  normal: 1,
-  low: 2,
+  P0: 0,
+  P1: 1,
+  P2: 2,
+  P3: 3,
 };
 
 interface TaskQueueDeps {

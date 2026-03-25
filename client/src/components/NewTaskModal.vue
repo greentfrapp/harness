@@ -17,7 +17,7 @@ const emit = defineEmits<{
 const projectId = ref(props.projects[0]?.id ?? '');
 const taskType = ref('do');
 const prompt = ref('');
-const priority = ref<Priority>('normal');
+const priority = ref<Priority>('P2');
 const dependsOn = ref<string | null>(null);
 const submitting = ref(false);
 const error = ref('');
@@ -64,9 +64,10 @@ async function handleSubmit() {
 }
 
 const priorities: { value: Priority; label: string }[] = [
-  { value: 'urgent', label: 'Urgent' },
-  { value: 'normal', label: 'Normal' },
-  { value: 'low', label: 'Low' },
+  { value: 'P0', label: 'P0' },
+  { value: 'P1', label: 'P1' },
+  { value: 'P2', label: 'P2' },
+  { value: 'P3', label: 'P3' },
 ];
 </script>
 

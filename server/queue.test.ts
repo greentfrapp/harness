@@ -9,7 +9,7 @@ function makeTask(overrides: Partial<Task> = {}): Task {
     type: 'do',
     status: 'queued',
     prompt: 'test',
-    priority: 'normal',
+    priority: 'P2',
     depends_on: null,
     agent_type: 'claude-code',
     agent_session_data: null,
@@ -94,24 +94,24 @@ describe('TaskQueue', () => {
       expect(queue.getNextReady()).toBe(task);
     });
 
-    it('returns urgent over normal over low', () => {
-      const low = makeTask({ id: 'low', priority: 'low' });
-      const normal = makeTask({ id: 'normal', priority: 'normal' });
-      const urgent = makeTask({ id: 'urgent', priority: 'urgent' });
+    it('returns P0 over P2 over P3', () => {
+      const low = makeTask({ id: 'low', priority: 'P3' });
+      const normal = makeTask({ id: 'normal', priority: 'P2' });
+      const urgent = makeTask({ id: 'urgent', priority: 'P0' });
       deps.getQueuedTasks.mockReturnValue([low, normal, urgent]);
       expect(queue.getNextReady()?.id).toBe('urgent');
     });
 
     it('breaks priority ties by created_at (oldest first)', () => {
-      const newer = makeTask({ id: 'newer', priority: 'normal', created_at: 2000 });
-      const older = makeTask({ id: 'older', priority: 'normal', created_at: 1000 });
+      const newer = makeTask({ id: 'newer', priority: 'P2', created_at: 2000 });
+      const older = makeTask({ id: 'older', priority: 'P2', created_at: 1000 });
       deps.getQueuedTasks.mockReturnValue([newer, older]);
       expect(queue.getNextReady()?.id).toBe('older');
     });
 
     it('skips tasks with unsatisfied dependencies', () => {
-      const blocked = makeTask({ id: 'blocked', depends_on: 'dep-1', priority: 'urgent' });
-      const ready = makeTask({ id: 'ready', priority: 'normal' });
+      const blocked = makeTask({ id: 'blocked', depends_on: 'dep-1', priority: 'P0' });
+      const ready = makeTask({ id: 'ready', priority: 'P2' });
       deps.getQueuedTasks.mockReturnValue([blocked, ready]);
       deps.getTaskById.mockReturnValue(makeTask({ id: 'dep-1', status: 'queued' }));
       expect(queue.getNextReady()?.id).toBe('ready');
@@ -126,8 +126,8 @@ describe('TaskQueue', () => {
 
   describe('recomputePositions', () => {
     it('assigns sequential positions to ready tasks', () => {
-      const t1 = makeTask({ id: 't1', priority: 'urgent' });
-      const t2 = makeTask({ id: 't2', priority: 'normal' });
+      const t1 = makeTask({ id: 't1', priority: 'P0' });
+      const t2 = makeTask({ id: 't2', priority: 'P2' });
       deps.getQueuedTasks.mockReturnValue([t2, t1]);
 
       queue.recomputePositions('proj-1');
@@ -137,8 +137,8 @@ describe('TaskQueue', () => {
     });
 
     it('puts blocked tasks after ready ones', () => {
-      const ready = makeTask({ id: 'ready', priority: 'normal' });
-      const blocked = makeTask({ id: 'blocked', priority: 'urgent', depends_on: 'dep-1' });
+      const ready = makeTask({ id: 'ready', priority: 'P2' });
+      const blocked = makeTask({ id: 'blocked', priority: 'P0', depends_on: 'dep-1' });
       deps.getQueuedTasks.mockReturnValue([blocked, ready]);
       deps.getTaskById.mockReturnValue(makeTask({ id: 'dep-1', status: 'queued' }));
 
