@@ -12,8 +12,16 @@ const diffText = ref('');
 const stats = ref('');
 const loading = ref(true);
 const error = ref('');
-const diffContainer = ref<HTMLElement | null>(null);
-const fileListVisible = ref(false);
+const activeFileIndex = ref(0);
+
+interface FileDiff {
+  fileName: string;
+  html: string;
+  additions: number;
+  deletions: number;
+}
+
+const fileDiffs = ref<FileDiff[]>([]);
 
 onMounted(async () => {
   try {
@@ -27,72 +35,80 @@ onMounted(async () => {
   }
 });
 
-const renderedHtml = computed(() => {
-  if (!diffText.value) return '';
-  return diff2html(diffText.value, {
-    drawFileList: true,
-    matching: 'lines',
-    outputFormat: 'side-by-side',
-  });
-});
+// Parse the unified diff into per-file diffs
+function parseDiffIntoFiles(diff: string): string[] {
+  const files: string[] = [];
+  const lines = diff.split('\n');
+  let current: string[] = [];
 
-function toggleFileList() {
-  fileListVisible.value = !fileListVisible.value;
-  if (!diffContainer.value) return;
-  const wrapper = diffContainer.value.querySelector('.d2h-file-list-wrapper') as HTMLElement;
-  if (wrapper) {
-    wrapper.style.display = fileListVisible.value ? '' : 'none';
+  for (const line of lines) {
+    if (line.startsWith('diff --git') && current.length > 0) {
+      files.push(current.join('\n'));
+      current = [];
+    }
+    current.push(line);
   }
+  if (current.length > 0) {
+    files.push(current.join('\n'));
+  }
+  return files;
 }
 
-function toggleFileDiff(header: HTMLElement) {
-  const fileWrapper = header.closest('.d2h-file-wrapper');
-  if (!fileWrapper) return;
-  const diff = fileWrapper.querySelector('.d2h-file-diff') as HTMLElement;
-  if (!diff) return;
-  const isHidden = diff.style.display === 'none';
-  diff.style.display = isHidden ? '' : 'none';
-  header.classList.toggle('is-collapsed', !isHidden);
+function extractFileName(singleDiff: string): string {
+  // Try to get filename from +++ line
+  const match = singleDiff.match(/^\+\+\+ b\/(.+)$/m);
+  if (match) return match[1];
+  // Fallback to diff --git line
+  const gitMatch = singleDiff.match(/^diff --git a\/.+ b\/(.+)$/m);
+  if (gitMatch) return gitMatch[1];
+  return 'unknown';
 }
 
-watch(renderedHtml, async () => {
-  await nextTick();
-  if (!diffContainer.value) return;
-
-  // Hide file list by default
-  const fileListWrapper = diffContainer.value.querySelector('.d2h-file-list-wrapper') as HTMLElement;
-  if (fileListWrapper) {
-    fileListWrapper.style.display = 'none';
+function countChanges(singleDiff: string): { additions: number; deletions: number } {
+  let additions = 0;
+  let deletions = 0;
+  const lines = singleDiff.split('\n');
+  let inHunk = false;
+  for (const line of lines) {
+    if (line.startsWith('@@')) {
+      inHunk = true;
+      continue;
+    }
+    if (!inHunk) continue;
+    if (line.startsWith('+') && !line.startsWith('+++')) additions++;
+    else if (line.startsWith('-') && !line.startsWith('---')) deletions++;
   }
+  return { additions, deletions };
+}
 
-  // Remove the default non-functional toggle button from diff2html
-  const defaultToggles = diffContainer.value.querySelectorAll('.d2h-file-list-title');
-  defaultToggles.forEach((el) => {
-    (el as HTMLElement).style.display = 'none';
+watch(diffText, () => {
+  if (!diffText.value) return;
+
+  const rawFiles = parseDiffIntoFiles(diffText.value);
+  fileDiffs.value = rawFiles.map((raw) => {
+    const fileName = extractFileName(raw);
+    const { additions, deletions } = countChanges(raw);
+    const html = diff2html(raw, {
+      drawFileList: false,
+      matching: 'lines',
+      outputFormat: 'side-by-side',
+    });
+    return { fileName, html, additions, deletions };
   });
 
-  // Add click-to-collapse on each file header
-  const fileHeaders = diffContainer.value.querySelectorAll('.d2h-file-header');
-  fileHeaders.forEach((header) => {
-    (header as HTMLElement).style.cursor = 'pointer';
-    header.addEventListener('click', () => toggleFileDiff(header as HTMLElement));
-  });
+  activeFileIndex.value = 0;
 });
+
+function shortName(fullPath: string): string {
+  const parts = fullPath.split('/');
+  return parts[parts.length - 1];
+}
 </script>
 
 <template>
   <div class="space-y-1">
-    <!-- Stats summary + file list toggle -->
-    <div v-if="stats || renderedHtml" class="flex items-center gap-2">
-      <div v-if="stats" class="text-xs text-gray-500 font-mono whitespace-pre flex-1">{{ stats }}</div>
-      <button
-        v-if="renderedHtml"
-        class="text-xs text-gray-500 hover:text-gray-300 transition-colors shrink-0 px-1.5 py-0.5 rounded bg-gray-800 hover:bg-gray-700"
-        @click="toggleFileList"
-      >
-        {{ fileListVisible ? 'Hide' : 'Show' }} file list
-      </button>
-    </div>
+    <!-- Stats summary -->
+    <div v-if="stats" class="text-xs text-gray-500 font-mono whitespace-pre">{{ stats }}</div>
 
     <!-- Loading -->
     <div v-if="loading" class="text-sm text-gray-500 py-4 text-center">Loading diff...</div>
@@ -103,14 +119,38 @@ watch(renderedHtml, async () => {
     <!-- No changes -->
     <div v-else-if="!diffText" class="text-sm text-gray-500 py-4 text-center">No changes</div>
 
-    <!-- Diff display -->
-    <div
-      v-else
-      ref="diffContainer"
-      class="diff-container overflow-x-auto overflow-y-auto rounded border border-gray-800"
-      style="max-height: 70vh;"
-      v-html="renderedHtml"
-    />
+    <!-- Tabbed diff display -->
+    <div v-else-if="fileDiffs.length" class="rounded border border-gray-800 overflow-hidden">
+      <!-- Tab bar -->
+      <div class="diff-tab-bar flex overflow-x-auto border-b border-gray-800 bg-[#0d1117]">
+        <button
+          v-for="(file, idx) in fileDiffs"
+          :key="file.fileName"
+          class="diff-tab shrink-0 px-3 py-1.5 text-xs font-mono border-r border-gray-800 transition-colors whitespace-nowrap"
+          :class="idx === activeFileIndex
+            ? 'bg-[#161b22] text-[#58a6ff] border-b-2 border-b-[#58a6ff]'
+            : 'text-gray-400 hover:text-gray-200 hover:bg-[#161b22]/50'"
+          :title="file.fileName"
+          @click="activeFileIndex = idx"
+        >
+          {{ shortName(file.fileName) }}
+          <span v-if="file.additions" class="text-green-400 ml-1">+{{ file.additions }}</span>
+          <span v-if="file.deletions" class="text-red-400 ml-1">-{{ file.deletions }}</span>
+        </button>
+      </div>
+
+      <!-- Full path of active file -->
+      <div class="px-2 py-1 bg-[#161b22] text-xs text-gray-500 font-mono border-b border-gray-800 truncate">
+        {{ fileDiffs[activeFileIndex]?.fileName }}
+      </div>
+
+      <!-- Active file diff -->
+      <div
+        class="diff-container overflow-x-auto overflow-y-auto"
+        style="max-height: 65vh;"
+        v-html="fileDiffs[activeFileIndex]?.html"
+      />
+    </div>
   </div>
 </template>
 
@@ -126,13 +166,6 @@ watch(renderedHtml, async () => {
   border-color: #30363d;
   color: #c9d1d9;
   padding: 4px 8px;
-  user-select: none;
-}
-.diff-container .d2h-file-header:hover {
-  background: #1c2330;
-}
-.diff-container .d2h-file-header.is-collapsed {
-  opacity: 0.7;
 }
 .diff-container .d2h-file-name-wrapper {
   font-size: 12px;
@@ -200,26 +233,9 @@ watch(renderedHtml, async () => {
 .diff-container .d2h-file-diff .d2h-ins.d2h-change {
   background: #1a3324;
 }
-.diff-container .d2h-file-list-wrapper {
-  background: #161b22;
-  border-color: #30363d;
-  margin: 0;
-  padding: 4px 0;
-}
-.diff-container .d2h-file-list-header {
-  display: none;
-}
-.diff-container .d2h-file-list-line {
-  color: #c9d1d9;
-  font-size: 12px;
-  padding: 2px 8px;
-}
-.diff-container .d2h-file-list td {
-  padding: 2px 4px;
-}
 /* Compact spacing between files */
 .diff-container .d2h-file-wrapper {
-  margin-bottom: 2px;
+  margin-bottom: 0;
   border: none;
 }
 .diff-container .d2h-files-diff {
@@ -250,5 +266,21 @@ watch(renderedHtml, async () => {
   overflow: auto;
   white-space: nowrap;
   font-size: 0; /* Remove inline-block whitespace gap */
+}
+
+/* Tab bar styling */
+.diff-tab-bar {
+  scrollbar-width: thin;
+  scrollbar-color: #30363d transparent;
+}
+.diff-tab-bar::-webkit-scrollbar {
+  height: 4px;
+}
+.diff-tab-bar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.diff-tab-bar::-webkit-scrollbar-thumb {
+  background: #30363d;
+  border-radius: 2px;
 }
 </style>
