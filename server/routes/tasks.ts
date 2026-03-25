@@ -286,7 +286,7 @@ export function createTaskRoutes(ctx: AppContext) {
     });
     queries.createTaskEvent(id, 'rejected', null);
     serverLog.info(`Task rejected`, id);
-    sseManager.broadcast('task:removed', { id });
+    sseManager.broadcast('task:updated', updated);
 
     // Unblock children that depended on or followed up from this task
     const dependents = getDependentTasks(queries, id);
