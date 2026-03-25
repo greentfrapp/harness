@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
 import type { Task, TagConfig } from '@shared/types';
 import { api } from '../api';
+import { useCheckouts } from '../stores/useCheckouts';
 import TaskDetail from './TaskDetail.vue';
 
 const TAG_COLORS: Record<string, { bg: string; text: string }> = {
@@ -40,10 +41,14 @@ const emit = defineEmits<{
   maximize: [id: string];
 }>();
 
+const checkoutsStore = useCheckouts();
+
 const expanded = ref(false);
 const autoFollowUp = ref(false);
 const confirmingDelete = ref(false);
 const deleting = ref(false);
+const collapsedCheckingOut = ref(false);
+const collapsedReturning = ref(false);
 
 const isTerminal = computed(() =>
   ['approved', 'rejected', 'cancelled'].includes(props.task.status),
@@ -216,6 +221,28 @@ function handleRetry(id: string) {
   expanded.value = false;
   emit('retry', id);
 }
+
+const isTaskCheckedOut = computed(() => checkoutsStore.isCheckedOut(props.task.id));
+
+async function handleCollapsedCheckout(e: Event) {
+  e.stopPropagation();
+  collapsedCheckingOut.value = true;
+  try {
+    await api.tasks.checkout(props.task.id);
+  } finally {
+    collapsedCheckingOut.value = false;
+  }
+}
+
+async function handleCollapsedReturn(e: Event) {
+  e.stopPropagation();
+  collapsedReturning.value = true;
+  try {
+    await api.tasks.return_(props.task.id);
+  } finally {
+    collapsedReturning.value = false;
+  }
+}
 </script>
 
 <template>
@@ -358,6 +385,24 @@ function handleRetry(id: string) {
           >
             Defer
           </button>
+          <template v-if="task.branch_name">
+            <button
+              v-if="isTaskCheckedOut"
+              class="px-2 py-1 text-xs font-medium rounded bg-amber-900 hover:bg-amber-800 text-amber-300 transition-colors disabled:opacity-50"
+              :disabled="collapsedReturning"
+              @click="handleCollapsedReturn"
+            >
+              {{ collapsedReturning ? 'Returning...' : 'Return' }}
+            </button>
+            <button
+              v-else-if="!actionsDisabled"
+              class="px-2 py-1 text-xs font-medium rounded bg-teal-900 hover:bg-teal-800 text-teal-300 transition-colors disabled:opacity-50"
+              :disabled="collapsedCheckingOut"
+              @click="handleCollapsedCheckout"
+            >
+              {{ collapsedCheckingOut ? 'Checking out...' : 'Checkout' }}
+            </button>
+          </template>
         </template>
       </div>
 
@@ -374,6 +419,24 @@ function handleRetry(id: string) {
           >
             {{ collapsedRetrying ? 'Retrying...' : 'Retry' }}
           </button>
+          <template v-if="task.branch_name">
+            <button
+              v-if="isTaskCheckedOut"
+              class="px-2 py-1 text-xs font-medium rounded bg-amber-900 hover:bg-amber-800 text-amber-300 transition-colors disabled:opacity-50"
+              :disabled="collapsedReturning"
+              @click="handleCollapsedReturn"
+            >
+              {{ collapsedReturning ? 'Returning...' : 'Return' }}
+            </button>
+            <button
+              v-else-if="!actionsDisabled"
+              class="px-2 py-1 text-xs font-medium rounded bg-teal-900 hover:bg-teal-800 text-teal-300 transition-colors disabled:opacity-50"
+              :disabled="collapsedCheckingOut"
+              @click="handleCollapsedCheckout"
+            >
+              {{ collapsedCheckingOut ? 'Checking out...' : 'Checkout' }}
+            </button>
+          </template>
         </template>
       </div>
 
