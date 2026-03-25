@@ -373,17 +373,44 @@ export class AgentPool {
         taskId,
       );
 
+      // Extract tool input from the progress buffer before killing
+      // (the preceding assistant message has the tool_use block with full input)
+      const progressBuf = this.progressBuffers.get(taskId) ?? [];
+      let pendingToolInput: Record<string, unknown> | null = null;
+      for (let i = progressBuf.length - 1; i >= 0; i--) {
+        const raw = progressBuf[i] as any;
+        if (raw?.type === 'assistant' && Array.isArray(raw?.message?.content)) {
+          for (const block of raw.message.content) {
+            if (block.type === 'tool_use' && block.name === event.toolName) {
+              pendingToolInput = block.input ?? null;
+              break;
+            }
+          }
+          if (pendingToolInput) break;
+        }
+      }
+
       this.killAgent(taskId);
 
+      // Build a descriptive error message with tool details
+      let toolDetail = '';
+      if (event.toolName === 'Bash' && pendingToolInput?.command) {
+        toolDetail = ` — ${pendingToolInput.command}`;
+      } else if (event.toolName === 'Write' && pendingToolInput?.file_path) {
+        toolDetail = ` — ${pendingToolInput.file_path}`;
+      } else if (event.toolName === 'Edit' && pendingToolInput?.file_path) {
+        toolDetail = ` — ${pendingToolInput.file_path}`;
+      }
       const toolInfo = event.toolName
-        ? `Tool requiring permission: ${event.toolName}`
+        ? `Tool requiring permission: ${event.toolName}${toolDetail}`
         : 'Agent requested permission for a tool';
 
-      // Store pending_tool in session data so grant-permission can read it
+      // Store pending_tool and its input in session data
       const currentTask = this.deps.getTaskById(taskId);
       const sessionData = parseSessionData(currentTask?.agent_session_data ?? null)
         ?? { session_id: null, pid: 0 };
       (sessionData as any).pending_tool = event.toolName ?? null;
+      (sessionData as any).pending_tool_input = pendingToolInput;
 
       this.deps.updateTask(taskId, {
         status: 'permission',

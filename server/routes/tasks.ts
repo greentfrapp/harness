@@ -346,15 +346,22 @@ export function createTaskRoutes(ctx: AppContext) {
     const project = queries.getProjectById(task.project_id);
     if (!project) return c.json({ error: 'Project not found' }, 404);
 
-    // Add the blocked tool to the cumulative granted_tools list
+    // Add the blocked tool to the cumulative granted_tools list.
+    // For Bash, use command-level patterns like Bash(curl:*) instead of blanket Bash.
     const sessionData = task.agent_session_data ? JSON.parse(task.agent_session_data) : {};
     const grantedTools = new Set<string>(sessionData.granted_tools ?? []);
     if (sessionData.pending_tool) {
-      grantedTools.add(sessionData.pending_tool);
-      serverLog.info(`Granting tool: ${sessionData.pending_tool}`, id);
+      let grantPattern = sessionData.pending_tool;
+      if (sessionData.pending_tool === 'Bash' && sessionData.pending_tool_input?.command) {
+        const firstWord = sessionData.pending_tool_input.command.trim().split(/\s+/)[0];
+        if (firstWord) grantPattern = `Bash(${firstWord}:*)`;
+      }
+      grantedTools.add(grantPattern);
+      serverLog.info(`Granting tool: ${grantPattern}`, id);
     }
     sessionData.granted_tools = [...grantedTools];
     delete sessionData.pending_tool;
+    delete sessionData.pending_tool_input;
 
     const updated = queries.updateTask(id, {
       status: 'queued',

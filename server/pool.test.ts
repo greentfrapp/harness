@@ -359,12 +359,15 @@ describe('AgentPool progress broadcasting', () => {
     // Should have killed the agent
     expect(spawnedProc.kill).toHaveBeenCalledWith('SIGTERM');
 
-    // Should have updated status to permission with tool name and pending_tool in session data
+    // Should have updated status to permission with tool name, command, and pending_tool_input
     expect(updateTask).toHaveBeenCalledWith('task-1', {
       status: 'permission',
-      error_message: 'Tool requiring permission: Bash',
+      error_message: 'Tool requiring permission: Bash — curl example.com',
       agent_session_data: expect.stringContaining('"pending_tool":"Bash"'),
     });
+    // Verify pending_tool_input is stored in session data
+    const sessionArg = JSON.parse(updateTask.mock.calls[0][1].agent_session_data);
+    expect(sessionArg.pending_tool_input).toEqual({ command: 'curl example.com' });
 
     // Should have created a task event with the tool name
     expect(createTaskEvent).toHaveBeenCalledWith(
