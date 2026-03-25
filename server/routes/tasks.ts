@@ -233,6 +233,7 @@ export function createTaskRoutes(ctx: AppContext) {
     const updated = queries.updateTask(id, {
       status: 'approved',
       worktree_path: null,
+      branch_name: null,
     });
     queries.createTaskEvent(id, 'approved', null);
     serverLog.info(`Task approved`, id);
@@ -272,6 +273,7 @@ export function createTaskRoutes(ctx: AppContext) {
     const updated = queries.updateTask(id, {
       status: 'rejected',
       worktree_path: null,
+      branch_name: null,
     });
     queries.createTaskEvent(id, 'rejected', null);
     serverLog.info(`Task rejected`, id);
@@ -613,6 +615,7 @@ export function createTaskRoutes(ctx: AppContext) {
     const updated = queries.updateTask(id, {
       status: 'cancelled',
       worktree_path: null,
+      branch_name: null,
     });
     queries.createTaskEvent(id, 'cancelled', null);
     sseManager.broadcast('task:updated', updated);
