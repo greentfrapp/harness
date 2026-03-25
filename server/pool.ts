@@ -269,14 +269,14 @@ export class AgentPool {
       );
     });
 
-    // Store PID immediately (pid is undefined if spawn fails)
+    // Store PID immediately, preserving existing session data (e.g. granted_tools)
     if (proc.pid) {
-      const sessionData: AgentSessionData = {
-        session_id: opts.resumeSessionId,
-        pid: proc.pid,
-      };
+      const existing = parseSessionData(task.agent_session_data)
+        ?? { session_id: null, pid: 0 };
+      existing.session_id = opts.resumeSessionId;
+      existing.pid = proc.pid;
       this.deps.updateTask(task.id, {
-        agent_session_data: JSON.stringify(sessionData),
+        agent_session_data: JSON.stringify(existing),
       });
     }
 
@@ -317,12 +317,14 @@ export class AgentPool {
         // Capture session_id
         if (event.sessionId && !agent.sessionId) {
           agent.sessionId = event.sessionId;
-          const updated: AgentSessionData = {
-            session_id: event.sessionId,
-            pid: proc.pid!,
-          };
+          // Preserve existing session data (e.g. granted_tools) when capturing session_id
+          const currentData = this.deps.getTaskById(task.id);
+          const existing = parseSessionData(currentData?.agent_session_data ?? null)
+            ?? { session_id: null, pid: proc.pid! };
+          existing.session_id = event.sessionId;
+          existing.pid = proc.pid!;
           this.deps.updateTask(task.id, {
-            agent_session_data: JSON.stringify(updated),
+            agent_session_data: JSON.stringify(existing),
           });
         }
 
