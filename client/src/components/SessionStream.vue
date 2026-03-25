@@ -2,71 +2,15 @@
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue';
 import { marked } from 'marked';
 import { api } from '../api';
+import { extractText, hasDisplayableContent, getAssistantText, type StreamMessage } from '@shared/streamFilters';
 
 const props = defineProps<{
   taskId: string;
 }>();
 
-interface StreamMessage {
-  type: string;
-  message?: string;
-  content?: unknown;
-  tool?: string;
-  subtype?: string;
-  is_error?: boolean;
-  result?: string;
-  // Metadata fields we want to exclude from display
-  cost_usd?: number;
-  duration_ms?: number;
-  duration_api_ms?: number;
-  session_id?: string;
-  [key: string]: unknown;
-}
-
 const messages = ref<StreamMessage[]>([]);
 const containerRef = ref<HTMLElement | null>(null);
 const collapsedToolResults = ref<Set<number>>(new Set());
-
-/** Metadata-only fields to exclude from the prettified view. */
-const METADATA_FIELDS = new Set([
-  'cost_usd', 'duration_ms', 'duration_api_ms', 'session_id',
-  'model', 'stop_reason', 'cwd', 'num_turns',
-]);
-
-/**
- * Extract displayable text from a message's content field.
- * Claude Code may send content as:
- *   - a plain string
- *   - an array of content blocks: [{type:"text", text:"..."}]
- *   - an object (tool input)
- */
-function extractText(content: unknown): string {
-  if (typeof content === 'string') return content;
-  if (Array.isArray(content)) {
-    return content
-      .filter((b: any) => b && (b.type === 'text' || b.text))
-      .map((b: any) => b.text ?? '')
-      .join('');
-  }
-  return '';
-}
-
-/** Determine if a message has meaningful content worth displaying. */
-function hasDisplayableContent(msg: StreamMessage): boolean {
-  // Always show these types if they have content
-  if (msg.type === 'assistant') return !!(msg.message || extractText(msg.content));
-  if (msg.type === 'tool_use') return true;
-  if (msg.type === 'tool_result') return msg.content !== undefined;
-  if (msg.type === 'result') return !!msg.result;
-  if (msg.type === 'system') return !!msg.message;
-  if (msg.type === 'error') return true;
-
-  // Filter out messages that only carry metadata (e.g. usage updates)
-  const hasNonMetadata = Object.keys(msg).some(
-    (k) => k !== 'type' && !METADATA_FIELDS.has(k),
-  );
-  return hasNonMetadata;
-}
 
 /** Filtered messages — excludes usage/metadata-only entries. */
 const displayMessages = computed(() =>
@@ -83,14 +27,10 @@ function handleProgress(event: CustomEvent<{ task_id: string; message: StreamMes
   });
 }
 
-onMounted(async () => {
-  window.addEventListener('task:progress', handleProgress as EventListener);
-
-  // Fetch buffered progress messages for tasks already in progress
+async function fetchBufferedProgress() {
   try {
     const { messages: buffered } = await api.tasks.progress(props.taskId);
     if (buffered.length > 0) {
-      // Prepend buffered messages (avoid duplicates with any that arrived via SSE)
       const existing = new Set(messages.value.map((m) => JSON.stringify(m)));
       for (const msg of buffered) {
         const key = JSON.stringify(msg);
@@ -104,6 +44,15 @@ onMounted(async () => {
     }
   } catch {
     // Ignore fetch errors — live stream still works
+  }
+}
+
+onMounted(async () => {
+  window.addEventListener('task:progress', handleProgress as EventListener);
+  await fetchBufferedProgress();
+  // Retry once after 2s if nothing arrived yet (handles race where agent just started)
+  if (messages.value.length === 0) {
+    setTimeout(() => fetchBufferedProgress(), 2000);
   }
 });
 
@@ -119,12 +68,6 @@ function renderMarkdown(text: string): string {
 /** Get a human-readable tool name. */
 function formatToolName(tool: string | undefined): string {
   return tool ?? 'Unknown Tool';
-}
-
-/** Get displayable text for an assistant message (handles string and array content). */
-function getAssistantText(msg: StreamMessage): string {
-  if (msg.message) return msg.message;
-  return extractText(msg.content);
 }
 
 /** Format tool input for display. */
@@ -194,8 +137,14 @@ function isToolResultLong(msg: StreamMessage): boolean {
   <div ref="containerRef" class="overflow-y-auto max-h-[32rem] text-sm p-3 bg-gray-950 rounded-lg border border-gray-800">
     <!-- Empty state -->
     <div v-if="displayMessages.length === 0" class="text-gray-600 text-center py-8">
-      <div class="text-lg mb-1">⏳</div>
-      Waiting for agent output…
+      <template v-if="messages.length === 0">
+        <div class="text-lg mb-1">⏳</div>
+        Waiting for agent output…
+      </template>
+      <template v-else>
+        <div class="text-lg mb-1">⏳</div>
+        Receiving events ({{ messages.length }} received, filtering…)
+      </template>
     </div>
 
     <div class="space-y-3">

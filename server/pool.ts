@@ -307,6 +307,9 @@ export class AgentPool {
     // Buffer the message for late-joining clients
     let buffer = this.progressBuffers.get(taskId);
     if (!buffer) {
+      serverLog.info(`First progress event for task (type=${(event.raw as any)?.type ?? event.type})`, taskId);
+    }
+    if (!buffer) {
       buffer = [];
       this.progressBuffers.set(taskId, buffer);
     }

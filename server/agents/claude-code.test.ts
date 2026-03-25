@@ -164,5 +164,101 @@ describe('ClaudeCodeAdapter', () => {
       const event = adapter.parseMessage(JSON.stringify(original));
       expect(event!.raw).toEqual(original);
     });
+
+    it('parses real Claude Code assistant format (message is API object)', () => {
+      const original = {
+        type: 'assistant',
+        message: {
+          model: 'claude-opus-4-6',
+          type: 'message',
+          role: 'assistant',
+          content: [{ type: 'text', text: 'I will help you.' }],
+          stop_reason: null,
+          usage: { input_tokens: 10, output_tokens: 5 },
+        },
+        session_id: 'sess-1',
+      };
+      const event = adapter.parseMessage(JSON.stringify(original));
+      expect(event).not.toBeNull();
+      expect(event!.type).toBe('progress');
+      expect(event!.raw).toEqual(original);
+    });
+
+    it('parses assistant with array content blocks', () => {
+      const original = {
+        type: 'assistant',
+        session_id: 'sess-1',
+        content: [{ type: 'text', text: 'I will help you.' }],
+      };
+      const event = adapter.parseMessage(JSON.stringify(original));
+      expect(event).not.toBeNull();
+      expect(event!.type).toBe('progress');
+      expect(event!.raw).toEqual(original);
+    });
+
+    it('parses assistant with thinking-only content', () => {
+      const original = {
+        type: 'assistant',
+        session_id: 'sess-1',
+        content: [{ type: 'thinking', thinking: 'Let me consider...' }],
+      };
+      const event = adapter.parseMessage(JSON.stringify(original));
+      expect(event).not.toBeNull();
+      expect(event!.raw).toEqual(original);
+    });
+
+    it('parses system init message (metadata-only)', () => {
+      const original = {
+        type: 'system',
+        subtype: 'init',
+        session_id: 'sess-1',
+        cwd: '/home/user/project',
+        model: 'claude-sonnet-4-20250514',
+        tools: ['Read', 'Write', 'Bash'],
+      };
+      const event = adapter.parseMessage(JSON.stringify(original));
+      expect(event).not.toBeNull();
+      expect(event!.type).toBe('progress');
+      expect(event!.sessionId).toBe('sess-1');
+      expect(event!.raw).toEqual(original);
+    });
+
+    it('parses tool_use with object content', () => {
+      const original = {
+        type: 'tool_use',
+        tool: 'Read',
+        session_id: 'sess-1',
+        content: { file_path: '/src/index.ts' },
+      };
+      const event = adapter.parseMessage(JSON.stringify(original));
+      expect(event).not.toBeNull();
+      expect(event!.type).toBe('progress');
+      expect(event!.toolName).toBe('Read');
+      expect(event!.raw).toEqual(original);
+    });
+
+    it('parses tool_result with string content', () => {
+      const original = {
+        type: 'tool_result',
+        tool: 'Read',
+        session_id: 'sess-1',
+        content: 'const x = 1;\n',
+      };
+      const event = adapter.parseMessage(JSON.stringify(original));
+      expect(event).not.toBeNull();
+      expect(event!.raw).toEqual(original);
+    });
+
+    it('parses metadata-only assistant message', () => {
+      const original = {
+        type: 'assistant',
+        cost_usd: 0.01,
+        duration_ms: 500,
+        model: 'claude-sonnet-4-20250514',
+      };
+      const event = adapter.parseMessage(JSON.stringify(original));
+      expect(event).not.toBeNull();
+      expect(event!.raw).toEqual(original);
+    });
   });
 });
