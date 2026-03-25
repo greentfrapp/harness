@@ -1,6 +1,7 @@
 // Task types
 export type TaskType = 'do' | 'discuss' | (string & {});
 export type TaskStatus =
+  | 'draft'
   | 'queued'
   | 'in_progress'
   | 'retrying'
@@ -14,6 +15,9 @@ export type TaskStatus =
   | 'cancelled';
 export type Priority = 'P0' | 'P1' | 'P2' | 'P3';
 export type SubtaskProposalStatus = 'pending' | 'approved' | 'dismissed';
+
+// Statuses for draft tasks (saved but not queued)
+export const DRAFT_STATUSES: TaskStatus[] = ['draft'];
 
 // Statuses that appear in the outbox
 export const OUTBOX_STATUSES: TaskStatus[] = [
@@ -124,6 +128,7 @@ export interface CreateTaskInput {
   priority?: Priority;
   depends_on?: string | null;
   agent_type?: string;
+  as_draft?: boolean;
 }
 
 export interface UpdateTaskInput {
