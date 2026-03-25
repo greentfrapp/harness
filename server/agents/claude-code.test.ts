@@ -208,7 +208,7 @@ describe('ClaudeCodeAdapter', () => {
       expect(event!.costUsd).toBe(0.05);
     });
 
-    it('parses a permission request from tool_result error', () => {
+    it('parses a permission request from "requires approval" format', () => {
       const msg = JSON.stringify({
         type: 'user',
         message: {
@@ -226,6 +226,27 @@ describe('ClaudeCodeAdapter', () => {
       const event = adapter.parseMessage(msg);
       expect(event).not.toBeNull();
       expect(event!.type).toBe('permission_request');
+    });
+
+    it('parses a permission request from "haven\'t granted" format and extracts tool name', () => {
+      const msg = JSON.stringify({
+        type: 'user',
+        message: {
+          role: 'user',
+          content: [{
+            type: 'tool_result',
+            content: "Claude requested permissions to use WebSearch, but you haven't granted it yet.",
+            is_error: true,
+            tool_use_id: 'toolu_014DxoQmHMKg4AUBY6eJAmZp',
+          }],
+        },
+        tool_use_result: "Error: Claude requested permissions to use WebSearch, but you haven't granted it yet.",
+        session_id: 'sess-1',
+      });
+      const event = adapter.parseMessage(msg);
+      expect(event).not.toBeNull();
+      expect(event!.type).toBe('permission_request');
+      expect(event!.toolName).toBe('WebSearch');
     });
 
     it('parses an error message', () => {

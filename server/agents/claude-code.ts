@@ -100,14 +100,19 @@ export class ClaudeCodeAdapter implements AgentAdapter {
       };
     }
 
-    // Detect permission request: in -p mode, the CLI returns a tool_result
-    // with "requires approval" when a tool needs permission
+    // Detect permission denial: in -p mode, the CLI returns a user message with
+    // a tool_result error when a tool needs permission. Known formats:
+    //   Bash:      "Error: This command requires approval"
+    //   WebSearch: "Error: Claude requested permissions to use WebSearch, but you haven't granted it yet."
     if (
       msg.type === 'user' &&
       typeof msg.tool_use_result === 'string' &&
-      msg.tool_use_result.includes('requires approval')
+      (msg.tool_use_result.includes('requires approval') ||
+       msg.tool_use_result.includes("haven't granted"))
     ) {
-      return { ...base, type: 'permission_request' };
+      // Extract tool name from "to use <Tool>," pattern when present
+      const toolMatch = (msg.tool_use_result as string).match(/to use (\w+)/);
+      return { ...base, type: 'permission_request', toolName: toolMatch?.[1] ?? base.toolName };
     }
 
     if (msg.is_error) {
