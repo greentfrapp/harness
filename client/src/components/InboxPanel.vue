@@ -22,6 +22,10 @@ async function handleReject(_id: string) {
   await inbox.fetchItems();
 }
 
+async function handleRetry(_id: string) {
+  await inbox.fetchItems();
+}
+
 async function handleDefer(id: string) {
   await inbox.updateTaskStatus(id, 'deferred');
 }
@@ -73,6 +77,7 @@ async function handleDelete(id: string) {
         context="inbox"
         @approve="handleApprove"
         @reject="handleReject"
+        @retry="handleRetry"
         @defer="handleDefer"
         @delete="handleDelete"
       />

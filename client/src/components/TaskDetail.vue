@@ -15,6 +15,7 @@ const emit = defineEmits<{
   cancel: [id: string];
   approve: [id: string];
   reject: [id: string];
+  retry: [id: string];
   defer: [id: string];
   delete: [id: string];
 }>();
@@ -22,6 +23,7 @@ const emit = defineEmits<{
 const events = ref<TaskEvent[]>([]);
 const approving = ref(false);
 const rejecting = ref(false);
+const retrying = ref(false);
 const actionError = ref('');
 const deleting = ref(false);
 const confirmingDelete = ref(false);
@@ -77,6 +79,19 @@ async function handleReject() {
     actionError.value = e instanceof Error ? e.message : 'Reject failed';
   } finally {
     rejecting.value = false;
+  }
+}
+
+async function handleRetry() {
+  retrying.value = true;
+  actionError.value = '';
+  try {
+    await api.tasks.retry(props.task.id);
+    emit('retry', props.task.id);
+  } catch (e) {
+    actionError.value = e instanceof Error ? e.message : 'Retry failed';
+  } finally {
+    retrying.value = false;
   }
 }
 
@@ -206,6 +221,14 @@ function formatTime(ts: number): string {
           @click="handleReject"
         >
           {{ rejecting ? 'Rejecting...' : 'Reject' }}
+        </button>
+        <button
+          v-if="task.status === 'error'"
+          class="px-3 py-1.5 text-xs font-medium rounded bg-yellow-900 hover:bg-yellow-800 text-yellow-300 transition-colors disabled:opacity-50"
+          :disabled="retrying"
+          @click="handleRetry"
+        >
+          {{ retrying ? 'Retrying...' : 'Retry' }}
         </button>
         <button
           class="px-3 py-1.5 text-xs font-medium rounded bg-gray-800 hover:bg-gray-700 text-gray-400 transition-colors"

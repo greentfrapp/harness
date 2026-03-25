@@ -69,6 +69,8 @@ export const api = {
         `/api/tasks/${id}/reject`,
         { method: 'POST' },
       ),
+    retry: (id: string) =>
+      request<Task>(`/api/tasks/${id}/retry`, { method: 'POST' }),
     diff: (id: string) =>
       request<{ diff: string; stats: string }>(`/api/tasks/${id}/diff`),
     events: (id: string) =>

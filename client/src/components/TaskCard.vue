@@ -13,6 +13,7 @@ const emit = defineEmits<{
   cancel: [id: string];
   approve: [id: string];
   reject: [id: string];
+  retry: [id: string];
   defer: [id: string];
   delete: [id: string];
 }>();
@@ -26,11 +27,16 @@ const isTerminal = computed(() =>
 );
 
 const needsInput = computed(() =>
-  props.context === 'inbox' && (props.task.status === 'ready' || props.task.status === 'error'),
+  props.context === 'inbox' && props.task.status === 'ready',
+);
+
+const isError = computed(() =>
+  props.context === 'inbox' && props.task.status === 'error',
 );
 
 const collapsedApproving = ref(false);
 const collapsedRejecting = ref(false);
+const collapsedRetrying = ref(false);
 
 function handleDelete(e: Event) {
   e.stopPropagation();
@@ -132,6 +138,22 @@ function handleCollapsedDefer(e: Event) {
   e.stopPropagation();
   emit('defer', props.task.id);
 }
+
+async function handleCollapsedRetry(e: Event) {
+  e.stopPropagation();
+  collapsedRetrying.value = true;
+  try {
+    await api.tasks.retry(props.task.id);
+    emit('retry', props.task.id);
+  } finally {
+    collapsedRetrying.value = false;
+  }
+}
+
+function handleRetry(id: string) {
+  expanded.value = false;
+  emit('retry', id);
+}
 </script>
 
 <template>
@@ -202,6 +224,17 @@ function handleCollapsedDefer(e: Event) {
         </button>
       </div>
 
+      <!-- Retry button (visible in collapsed state for error tasks) -->
+      <div v-if="isError && !expanded" class="flex items-center gap-1 shrink-0" @click.stop>
+        <button
+          class="px-2 py-1 text-xs font-medium rounded bg-yellow-900 hover:bg-yellow-800 text-yellow-300 transition-colors disabled:opacity-50"
+          :disabled="collapsedRetrying"
+          @click="handleCollapsedRetry"
+        >
+          {{ collapsedRetrying ? 'Retrying...' : 'Retry' }}
+        </button>
+      </div>
+
       <!-- Delete button (visible in collapsed state for terminal tasks) -->
       <div v-if="isTerminal && !expanded" class="flex items-center gap-1 shrink-0" @click.stop>
         <button
@@ -243,6 +276,7 @@ function handleCollapsedDefer(e: Event) {
       @cancel="emit('cancel', $event)"
       @approve="handleApprove($event)"
       @reject="handleReject($event)"
+      @retry="handleRetry($event)"
       @defer="emit('defer', $event)"
       @delete="emit('delete', $event)"
     />
