@@ -88,7 +88,7 @@ export const api = {
     send: (id: string, body?: { prompt?: string; priority?: string; depends_on?: string | null }) =>
       request<Task>(`/api/tasks/${id}/send`, json(body ?? {})),
     diff: (id: string) =>
-      request<{ diff: string; stats: string }>(`/api/tasks/${id}/diff`),
+      request<{ diff: string; stats: string; uncommitted?: boolean }>(`/api/tasks/${id}/diff`),
     events: (id: string) =>
       request<TaskEvent[]>(`/api/tasks/${id}/events`),
     progress: (id: string) =>

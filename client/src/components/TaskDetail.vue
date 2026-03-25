@@ -294,7 +294,7 @@ function formatTime(ts: number): string {
     <!-- Diff viewer for completed Do tasks in inbox -->
     <div v-if="showDiffViewer">
       <h4 class="text-xs font-medium text-zinc-500 uppercase mb-2">Changes</h4>
-      <DiffViewer :task-id="task.id" />
+      <DiffViewer :task-id="task.id" @revised="showRevise = false" />
     </div>
 
     <!-- Diff stats (when no full diff viewer, but stats exist) -->
