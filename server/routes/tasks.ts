@@ -295,7 +295,7 @@ export function createTaskRoutes(ctx: AppContext) {
     return c.json(updated);
   });
 
-  /** Fix: re-queue a ready task whose merge failed so the agent can resolve conflicts on a fresh worktree. */
+  /** Fix: re-queue a ready task whose merge failed so the agent can resolve conflicts in its existing worktree. */
   app.post('/tasks/:id/fix', (c) => {
     const id = c.req.param('id');
     const task = queries.getTaskById(id);
@@ -307,31 +307,22 @@ export function createTaskRoutes(ctx: AppContext) {
     const project = queries.getProjectById(task.project_id);
     if (!project) return c.json({ error: 'Project not found' }, 404);
 
-    // Clean up old worktree and branch
-    if (task.worktree_path) {
-      serverLog.info(`Removing worktree ${task.worktree_path}`, id);
-      git.removeWorktree(project.repo_path, task.worktree_path);
-    }
-    if (task.branch_name) {
-      serverLog.info(`Deleting branch ${task.branch_name}`, id);
-      git.deleteBranch(project.repo_path, task.branch_name);
-    }
+    // Auto-return if this task is currently checked out
+    autoReturnIfCheckedOut(id);
 
     // Augment prompt so the agent knows to resolve merge conflicts
-    const fixPrefix = `[MERGE CONFLICT FIX] The previous attempt completed successfully but failed to merge into ${project.target_branch} due to merge conflicts. Please redo the work on a fresh worktree, ensuring compatibility with the latest ${project.target_branch}.\n\nOriginal task:\n`;
-    const augmentedPrompt = task.prompt.startsWith('[MERGE CONFLICT FIX]')
+    const fixPrefix = `[MERGE CONFLICT] Your branch failed to merge into ${project.target_branch} due to conflicts. Merge ${project.target_branch} into your branch and resolve all conflicts, then verify the code still works.\n\nOriginal task:\n`;
+    const augmentedPrompt = task.prompt.startsWith('[MERGE CONFLICT]')
       ? task.prompt
       : fixPrefix + task.prompt;
 
+    // Preserve worktree, branch, and session so the agent resumes in place
     const updated = queries.updateTask(id, {
       status: 'queued',
       prompt: augmentedPrompt,
       error_message: null,
-      agent_session_data: null,
       agent_summary: null,
       diff_summary: null,
-      worktree_path: null,
-      branch_name: null,
     });
     queries.createTaskEvent(id, 'fix_merge_conflict', null);
     serverLog.info(`Task re-queued to fix merge conflict`, id);
