@@ -35,7 +35,7 @@ onBeforeUnmount(() => {
 
 const statusConfig: Record<string, { color: string; label: string }> = {
   queued: { color: 'text-gray-400', label: 'Queued' },
-  in_progress: { color: 'text-blue-400', label: 'Running' },
+  in_progress: { color: 'text-zinc-400', label: 'Running' },
   retrying: { color: 'text-yellow-400', label: 'Retrying' },
   ready: { color: 'text-green-400', label: 'Ready' },
   held: { color: 'text-gray-400', label: 'Held' },

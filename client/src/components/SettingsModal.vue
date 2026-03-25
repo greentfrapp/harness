@@ -110,7 +110,7 @@ async function handleSave() {
               v-model="content"
               rows="20"
               spellcheck="false"
-              class="w-full bg-gray-800 border rounded-md px-3 py-2 text-sm font-mono leading-relaxed focus:outline-none focus:ring-2 focus:ring-blue-600 resize-y"
+              class="w-full bg-gray-800 border rounded-md px-3 py-2 text-sm font-mono leading-relaxed focus:outline-none focus:ring-2 focus:ring-zinc-600 resize-y"
               :class="hasParseErrors ? 'border-red-600' : 'border-gray-700'"
               autofocus
             />
@@ -142,7 +142,7 @@ async function handleSave() {
             </button>
             <button
               :disabled="!canSave"
-              class="px-4 py-2 text-sm font-medium bg-blue-600 hover:bg-blue-500 rounded-md transition-colors disabled:opacity-50"
+              class="px-4 py-2 text-sm font-medium bg-zinc-600 hover:bg-zinc-500 rounded-md transition-colors disabled:opacity-50"
               @click="handleSave"
             >
               {{ saving ? 'Saving...' : 'Save' }}

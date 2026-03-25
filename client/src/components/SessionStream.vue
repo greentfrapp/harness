@@ -16,7 +16,7 @@ const userScrolledUp = ref(false);
 /** Filter toggles for each display type. All enabled by default. */
 type FilterType = 'text' | 'tool_use' | 'tool_result' | 'result' | 'system' | 'error';
 const filterLabels: { type: FilterType; label: string; color: string; activeColor: string }[] = [
-  { type: 'text', label: 'Text', color: 'text-blue-400', activeColor: 'bg-blue-900/60 border-blue-700 text-blue-300' },
+  { type: 'text', label: 'Text', color: 'text-zinc-400', activeColor: 'bg-zinc-800/60 border-zinc-700 text-zinc-300' },
   { type: 'tool_use', label: 'Tools', color: 'text-yellow-400', activeColor: 'bg-yellow-900/60 border-yellow-700 text-yellow-300' },
   { type: 'tool_result', label: 'Results', color: 'text-green-400', activeColor: 'bg-green-900/60 border-green-700 text-green-300' },
   { type: 'error', label: 'Errors', color: 'text-red-400', activeColor: 'bg-red-900/60 border-red-700 text-red-300' },
@@ -217,7 +217,7 @@ function isToolResultLong(item: DisplayItem): boolean {
         <!-- ── Text (assistant message) ── -->
         <div v-if="item.displayType === 'text'" class="session-assistant">
           <div class="flex items-start gap-2">
-            <span class="shrink-0 mt-0.5 text-blue-400">●</span>
+            <span class="shrink-0 mt-0.5 text-zinc-400">●</span>
             <div
               class="prose prose-invert prose-sm max-w-none text-gray-200"
               v-html="renderMarkdown(item.text ?? '')"

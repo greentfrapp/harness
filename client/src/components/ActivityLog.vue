@@ -63,7 +63,7 @@ function formatTime(ts: number): string {
         Activity Log
         <span
           v-if="unreadCount > 0"
-          class="px-1.5 py-0.5 rounded-full bg-blue-600 text-white text-[10px] font-bold"
+          class="px-1.5 py-0.5 rounded-full bg-zinc-600 text-white text-[10px] font-bold"
         >
           {{ unreadCount }}
         </span>

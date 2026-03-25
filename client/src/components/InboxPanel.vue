@@ -151,7 +151,7 @@ async function handleMaximizeDelete(id: string) {
             :class="
               inbox.hasPermissionRequests
                 ? 'bg-red-600 text-white animate-pulse'
-                : 'bg-blue-600 text-white'
+                : 'bg-zinc-600 text-white'
             "
           >
             {{ inbox.pendingCount }}

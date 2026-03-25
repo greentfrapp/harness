@@ -170,7 +170,7 @@ const priorities: { value: Priority; label: string }[] = [
             </button>
             <button
               type="button"
-              class="px-4 py-2 text-sm font-medium bg-blue-600 hover:bg-blue-500 rounded-md transition-colors"
+              class="px-4 py-2 text-sm font-medium bg-zinc-600 hover:bg-zinc-500 rounded-md transition-colors"
               @click="emit('settings')"
             >
               Open Settings
@@ -184,7 +184,7 @@ const priorities: { value: Priority; label: string }[] = [
             <label class="block text-xs font-medium text-gray-400 mb-1">Project</label>
             <select
               v-model="projectId"
-              class="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
+              class="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-600"
             >
               <option v-for="p in projects" :key="p.id" :value="p.id">
                 {{ p.name }}
@@ -197,7 +197,7 @@ const priorities: { value: Priority; label: string }[] = [
             <label class="block text-xs font-medium text-gray-400 mb-1">Type</label>
             <select
               v-model="taskType"
-              class="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
+              class="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-600"
             >
               <option v-for="t in taskTypes" :key="t" :value="t">
                 {{ t }}
@@ -212,7 +212,7 @@ const priorities: { value: Priority; label: string }[] = [
               ref="promptInput"
               v-model="prompt"
               rows="5"
-              class="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600 resize-y"
+              class="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-600 resize-y"
               placeholder="Describe the task..."
             />
           </div>
@@ -228,7 +228,7 @@ const priorities: { value: Priority; label: string }[] = [
                 class="px-3 py-1.5 text-xs font-medium rounded-md transition-colors"
                 :class="
                   priority === p.value
-                    ? 'bg-blue-600 text-white'
+                    ? 'bg-zinc-600 text-white'
                     : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
                 "
                 @click="priority = p.value"
@@ -263,7 +263,7 @@ const priorities: { value: Priority; label: string }[] = [
             </label>
             <select
               v-model="dependsOn"
-              class="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-600"
+              class="w-full bg-gray-800 border border-gray-700 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-600"
             >
               <option :value="null">None</option>
               <option
@@ -300,7 +300,7 @@ const priorities: { value: Priority; label: string }[] = [
             <button
               type="submit"
               :disabled="submitting"
-              class="px-4 py-2 text-sm font-medium bg-blue-600 hover:bg-blue-500 rounded-md transition-colors disabled:opacity-50"
+              class="px-4 py-2 text-sm font-medium bg-zinc-600 hover:bg-zinc-500 rounded-md transition-colors disabled:opacity-50"
             >
               {{ submitting ? 'Creating...' : 'Create Task' }}
               <kbd class="ml-1 text-xs opacity-60">⌘↵</kbd>
