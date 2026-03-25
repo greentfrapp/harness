@@ -13,8 +13,39 @@ const containerRef = ref<HTMLElement | null>(null);
 const collapsedToolResults = ref<Set<number>>(new Set());
 const userScrolledUp = ref(false);
 
+/** Filter toggles for each display type. All enabled by default. */
+type FilterType = 'text' | 'tool_use' | 'tool_result' | 'result' | 'system' | 'error';
+const filterLabels: { type: FilterType; label: string; color: string; activeColor: string }[] = [
+  { type: 'text', label: 'Text', color: 'text-blue-400', activeColor: 'bg-blue-900/60 border-blue-700 text-blue-300' },
+  { type: 'tool_use', label: 'Tools', color: 'text-yellow-400', activeColor: 'bg-yellow-900/60 border-yellow-700 text-yellow-300' },
+  { type: 'tool_result', label: 'Results', color: 'text-green-400', activeColor: 'bg-green-900/60 border-green-700 text-green-300' },
+  { type: 'error', label: 'Errors', color: 'text-red-400', activeColor: 'bg-red-900/60 border-red-700 text-red-300' },
+];
+const activeFilters = ref<Set<FilterType>>(new Set(['text', 'tool_use', 'tool_result', 'result', 'system', 'error']));
+
+function toggleFilter(type: FilterType) {
+  const s = new Set(activeFilters.value);
+  if (s.has(type)) {
+    // Don't allow disabling all filters
+    if (s.size <= 1) return;
+    s.delete(type);
+  } else {
+    s.add(type);
+  }
+  activeFilters.value = s;
+}
+
 /** Expand raw messages into flat display items. */
-const displayItems = computed(() => expandMessages(messages.value));
+const allDisplayItems = computed(() => expandMessages(messages.value));
+
+/** Filtered display items based on active type filters. */
+const displayItems = computed(() =>
+  allDisplayItems.value.filter((item) => {
+    // 'unknown' always shown; 'result' and 'system' follow their own type but are always shown
+    if (item.displayType === 'unknown' || item.displayType === 'result' || item.displayType === 'system') return true;
+    return activeFilters.value.has(item.displayType as FilterType);
+  }),
+);
 
 /** Check if the container is scrolled to the bottom (within a small threshold). */
 function isScrolledToBottom(): boolean {
@@ -149,6 +180,25 @@ function isToolResultLong(item: DisplayItem): boolean {
 </script>
 
 <template>
+  <div>
+    <!-- Header with label and filters -->
+    <div class="flex items-center gap-3 mb-2">
+      <h4 class="text-xs font-medium text-gray-500 uppercase shrink-0">Live Session</h4>
+      <div class="flex items-center gap-1 flex-wrap">
+        <button
+          v-for="f in filterLabels"
+          :key="f.type"
+          class="px-1.5 py-0.5 text-[10px] font-medium rounded border transition-colors"
+          :class="activeFilters.has(f.type)
+            ? f.activeColor
+            : 'bg-gray-900 border-gray-700 text-gray-600 hover:text-gray-400'"
+          @click="toggleFilter(f.type)"
+          :title="`Toggle ${f.label} messages`"
+        >
+          {{ f.label }}
+        </button>
+      </div>
+    </div>
   <div ref="containerRef" class="overflow-y-auto max-h-[32rem] text-sm p-3 bg-gray-950 rounded-lg border border-gray-800" @scroll="handleScroll">
     <!-- Empty state -->
     <div v-if="displayItems.length === 0" class="text-gray-600 text-center py-8">
@@ -245,5 +295,6 @@ function isToolResultLong(item: DisplayItem): boolean {
         </div>
       </template>
     </div>
+  </div>
   </div>
 </template>
