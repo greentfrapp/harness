@@ -258,7 +258,7 @@ function handleMaximizeCancel(id: string) {
         context="outbox"
         :hasSelection="hasSelection"
         :selected="isSelected(task.id)"
-        :tag-configs="tagConfigs?.value"
+        :tag-configs="tagConfigs"
         @cancel="handleCancel"
         @delete="handleDelete"
         @toggleSelect="toggle"
