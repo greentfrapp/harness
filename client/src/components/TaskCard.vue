@@ -13,6 +13,7 @@ const emit = defineEmits<{
   cancel: [id: string];
   approve: [id: string];
   reject: [id: string];
+  retry: [id: string];
   defer: [id: string];
   delete: [id: string];
 }>();
@@ -132,6 +133,11 @@ function handleCollapsedDefer(e: Event) {
   e.stopPropagation();
   emit('defer', props.task.id);
 }
+
+function handleRetry(id: string) {
+  expanded.value = false;
+  emit('retry', id);
+}
 </script>
 
 <template>
@@ -243,6 +249,7 @@ function handleCollapsedDefer(e: Event) {
       @cancel="emit('cancel', $event)"
       @approve="handleApprove($event)"
       @reject="handleReject($event)"
+      @retry="handleRetry($event)"
       @defer="emit('defer', $event)"
       @delete="emit('delete', $event)"
     />

@@ -230,6 +230,48 @@ export function createTaskRoutes(ctx: AppContext) {
     return c.json(updated);
   });
 
+  /** Retry: clean up old worktree/branch, re-queue for a fresh run. */
+  app.post('/tasks/:id/retry', (c) => {
+    const id = c.req.param('id');
+    const task = queries.getTaskById(id);
+    if (!task) return c.json({ error: 'Task not found' }, 404);
+    if (task.status !== 'error') {
+      return c.json({ error: 'Only error tasks can be retried' }, 400);
+    }
+
+    const project = queries.getProjectById(task.project_id);
+    if (!project) return c.json({ error: 'Project not found' }, 404);
+
+    // Clean up old worktree and branch
+    if (task.worktree_path) {
+      serverLog.info(`Removing worktree ${task.worktree_path}`, id);
+      git.removeWorktree(project.repo_path, task.worktree_path);
+    }
+    if (task.branch_name) {
+      serverLog.info(`Deleting branch ${task.branch_name}`, id);
+      git.deleteBranch(project.repo_path, task.branch_name);
+    }
+
+    const updated = queries.updateTask(id, {
+      status: 'queued',
+      retry_count: 0,
+      error_message: null,
+      agent_session_data: null,
+      agent_summary: null,
+      diff_summary: null,
+      worktree_path: null,
+      branch_name: null,
+    });
+    queries.createTaskEvent(id, 'retried_manual', null);
+    serverLog.info(`Task manually retried — re-queued`, id);
+
+    taskQueue.recomputePositions(task.project_id);
+    sseManager.broadcast('task:updated', updated);
+    dispatcher.tryDispatch();
+
+    return c.json(updated);
+  });
+
   /** Bulk delete: permanently remove tasks by status. */
   app.delete('/tasks', (c) => {
     const statusParam = c.req.query('status');
