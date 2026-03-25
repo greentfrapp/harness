@@ -300,8 +300,8 @@ export function createTaskRoutes(ctx: AppContext) {
     const id = c.req.param('id');
     const task = queries.getTaskById(id);
     if (!task) return c.json({ error: 'Task not found' }, 404);
-    if (task.status !== 'ready') {
-      return c.json({ error: 'Only ready tasks can be fixed' }, 400);
+    if (task.status !== 'ready' && task.status !== 'error') {
+      return c.json({ error: 'Only ready or error tasks can be fixed' }, 400);
     }
 
     const project = queries.getProjectById(task.project_id);
