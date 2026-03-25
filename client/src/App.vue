@@ -83,6 +83,9 @@ async function handleSettingsClose() {
 
 const returningCheckout = ref<string | null>(null);
 const approvingCheckout = ref<string | null>(null);
+const showReviseCheckout = ref<string | null>(null);
+const reviseCheckoutPrompt = ref('');
+const revisingCheckout = ref<string | null>(null);
 
 async function handleReturnCheckout(taskId: string) {
   returningCheckout.value = taskId;
@@ -103,6 +106,21 @@ async function handleApproveCheckout(taskId: string) {
     // Error will show via SSE or be silently handled
   } finally {
     approvingCheckout.value = null;
+  }
+}
+
+async function handleReviseCheckout(taskId: string) {
+  const prompt = reviseCheckoutPrompt.value.trim();
+  if (!prompt) return;
+  revisingCheckout.value = taskId;
+  try {
+    await api.tasks.revise(taskId, prompt);
+    showReviseCheckout.value = null;
+    reviseCheckoutPrompt.value = '';
+  } catch {
+    // Error will show via SSE or be silently handled
+  } finally {
+    revisingCheckout.value = null;
   }
 }
 
@@ -165,23 +183,56 @@ onUnmounted(() => {
 
     <!-- Checkout banner -->
     <div v-if="checkoutsStore.hasCheckouts" class="bg-amber-950 border-b border-amber-900 px-6 py-2">
-      <div v-for="co in checkoutsStore.checkouts" :key="co.taskId" class="flex items-center gap-3 text-sm">
-        <span class="text-amber-400 font-medium shrink-0">Checked out</span>
-        <span class="text-amber-200 truncate">{{ co.projectName }}: {{ co.taskPrompt }}</span>
-        <div class="ml-auto flex gap-2 shrink-0">
+      <div v-for="co in checkoutsStore.checkouts" :key="co.taskId" class="space-y-2">
+        <div class="flex items-center gap-3 text-sm">
+          <span class="text-amber-400 font-medium shrink-0">Checked out</span>
+          <span class="text-amber-200 truncate">{{ co.projectName }}: {{ co.taskPrompt }}</span>
+          <div class="ml-auto flex gap-2 shrink-0">
+            <button
+              class="px-3 py-1 text-xs font-medium rounded bg-amber-900 hover:bg-amber-800 text-amber-300 transition-colors disabled:opacity-50"
+              :disabled="returningCheckout === co.taskId"
+              @click="handleReturnCheckout(co.taskId)"
+            >
+              {{ returningCheckout === co.taskId ? 'Returning...' : 'Return' }}
+            </button>
+            <button
+              class="px-3 py-1 text-xs font-medium rounded bg-green-900 hover:bg-green-800 text-green-300 transition-colors disabled:opacity-50"
+              :disabled="approvingCheckout === co.taskId"
+              @click="handleApproveCheckout(co.taskId)"
+            >
+              {{ approvingCheckout === co.taskId ? 'Merging...' : 'Approve' }}
+            </button>
+            <button
+              class="px-3 py-1 text-xs font-medium rounded bg-purple-900 hover:bg-purple-800 text-purple-300 transition-colors"
+              @click="showReviseCheckout = showReviseCheckout === co.taskId ? null : co.taskId"
+            >
+              Revise
+            </button>
+          </div>
+        </div>
+        <div v-if="showReviseCheckout === co.taskId" class="flex gap-2 items-start">
+          <textarea
+            v-model="reviseCheckoutPrompt"
+            class="flex-1 bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-zinc-200 placeholder-zinc-500 focus:border-purple-600 focus:outline-none resize-y"
+            rows="2"
+            placeholder="Enter feedback for the agent..."
+            :disabled="revisingCheckout === co.taskId"
+            @keydown.meta.enter="handleReviseCheckout(co.taskId)"
+            @keydown.ctrl.enter="handleReviseCheckout(co.taskId)"
+          />
           <button
-            class="px-3 py-1 text-xs font-medium rounded bg-amber-900 hover:bg-amber-800 text-amber-300 transition-colors disabled:opacity-50"
-            :disabled="returningCheckout === co.taskId"
-            @click="handleReturnCheckout(co.taskId)"
+            class="px-3 py-1.5 text-xs font-medium rounded bg-purple-900 hover:bg-purple-800 text-purple-300 transition-colors disabled:opacity-50 shrink-0"
+            :disabled="revisingCheckout === co.taskId || !reviseCheckoutPrompt.trim()"
+            @click="handleReviseCheckout(co.taskId)"
           >
-            {{ returningCheckout === co.taskId ? 'Returning...' : 'Return' }}
+            {{ revisingCheckout === co.taskId ? 'Sending...' : 'Send' }}
           </button>
           <button
-            class="px-3 py-1 text-xs font-medium rounded bg-green-900 hover:bg-green-800 text-green-300 transition-colors disabled:opacity-50"
-            :disabled="approvingCheckout === co.taskId"
-            @click="handleApproveCheckout(co.taskId)"
+            class="px-3 py-1.5 text-xs font-medium rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-400 transition-colors shrink-0"
+            :disabled="revisingCheckout === co.taskId"
+            @click="showReviseCheckout = null; reviseCheckoutPrompt = ''"
           >
-            {{ approvingCheckout === co.taskId ? 'Merging...' : 'Approve' }}
+            Cancel
           </button>
         </div>
       </div>
