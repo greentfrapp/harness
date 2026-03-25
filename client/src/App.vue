@@ -20,6 +20,7 @@ const checkoutsStore = useCheckouts();
 const log = useLog();
 
 const showNewTask = ref(false);
+const editingDraft = ref<import('@shared/types').Task | null>(null);
 const showSettings = ref(false);
 const projects = ref<Project[]>([]);
 const taskTypes = ref<string[]>([]);
@@ -56,6 +57,23 @@ async function handleCreateTask(input: CreateTaskInput) {
 
 async function handleDraftTask(input: CreateTaskInput) {
   await outbox.createTask({ ...input, as_draft: true });
+}
+
+function handleEditDraft(draft: import('@shared/types').Task) {
+  editingDraft.value = draft;
+  showNewTask.value = true;
+}
+
+async function handleUpdateDraft(id: string, input: CreateTaskInput) {
+  await outbox.updateDraft(id, {
+    prompt: input.prompt,
+    priority: input.priority,
+    type: input.type,
+  });
+  // If the update came from "Send Task" (no as_draft flag), also send it
+  if (!input.as_draft) {
+    await outbox.sendDraft(id);
+  }
 }
 
 async function handleSettingsClose() {
@@ -171,7 +189,7 @@ onUnmounted(() => {
 
     <!-- Main two-column layout -->
     <main class="flex-1 min-h-0 grid grid-cols-2 divide-x divide-zinc-800 overflow-hidden">
-      <OutboxPanel />
+      <OutboxPanel @editDraft="handleEditDraft" />
       <InboxPanel />
     </main>
 
@@ -185,9 +203,11 @@ onUnmounted(() => {
       :task-types="taskTypes"
       :existing-tasks="outbox.tasks"
       :tag-configs="tagConfigs"
-      @close="showNewTask = false"
+      :editing-draft="editingDraft"
+      @close="showNewTask = false; editingDraft = null"
       @create="handleCreateTask"
       @draft="handleDraftTask"
+      @updateDraft="handleUpdateDraft"
       @settings="handleOpenSettingsFromTask"
     />
 

@@ -77,6 +77,10 @@ async function handleDeleteDraft(id: string) {
   await outbox.deleteDraft(id);
 }
 
+const emit = defineEmits<{
+  editDraft: [draft: Task];
+}>();
+
 const maximizedTask = ref<Task | null>(null);
 
 function handleMaximize(id: string) {
@@ -194,7 +198,8 @@ function handleMaximizeCancel(id: string) {
           <div
             v-for="draft in outbox.sortedDrafts"
             :key="draft.id"
-            class="group rounded-lg border border-dashed border-zinc-700 bg-zinc-900/50 hover:border-zinc-600 transition-colors"
+            class="group rounded-lg border border-dashed border-zinc-700 bg-zinc-900/50 hover:border-zinc-600 transition-colors cursor-pointer"
+            @click="emit('editDraft', draft)"
           >
             <div class="px-4 py-3 flex items-start gap-3">
               <!-- Draft icon -->
@@ -234,13 +239,13 @@ function handleMaximizeCancel(id: string) {
               <div class="flex items-center gap-1 shrink-0">
                 <button
                   class="px-2 py-1 text-xs font-medium rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors"
-                  @click="handleSendDraft(draft.id)"
+                  @click.stop="handleSendDraft(draft.id)"
                 >
                   Send
                 </button>
                 <button
                   class="px-2 py-1 text-xs font-medium rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-500 hover:text-red-400 transition-colors"
-                  @click="handleDeleteDraft(draft.id)"
+                  @click.stop="handleDeleteDraft(draft.id)"
                 >
                   Delete
                 </button>
