@@ -516,6 +516,16 @@ export function createTaskRoutes(ctx: AppContext) {
     return c.json(queries.getTaskEvents(id));
   });
 
+  /** Get buffered progress messages for an in-progress task (for late-joining clients). */
+  app.get('/tasks/:id/progress', (c) => {
+    const id = c.req.param('id');
+    const task = queries.getTaskById(id);
+    if (!task) return c.json({ error: 'Task not found' }, 404);
+
+    const messages = pool.getProgressBuffer(id);
+    return c.json({ messages });
+  });
+
   return app;
 }
 

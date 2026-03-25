@@ -79,6 +79,8 @@ export const api = {
       request<{ diff: string; stats: string }>(`/api/tasks/${id}/diff`),
     events: (id: string) =>
       request<TaskEvent[]>(`/api/tasks/${id}/events`),
+    progress: (id: string) =>
+      request<{ messages: unknown[] }>(`/api/tasks/${id}/progress`),
   },
   log: {
     recent: () => request<LogEntry[]>('/api/log'),

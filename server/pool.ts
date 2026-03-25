@@ -44,9 +44,17 @@ interface PoolDeps {
 export class AgentPool {
   private agents = new Map<string, ActiveAgent>();
   private deps: PoolDeps;
+  /** Per-task buffer of recent progress messages for late-joining clients. */
+  private progressBuffers = new Map<string, unknown[]>();
+  private static readonly MAX_BUFFER_SIZE = 200;
 
   constructor(deps: PoolDeps) {
     this.deps = deps;
+  }
+
+  /** Get buffered progress messages for a task (for clients that connect mid-stream). */
+  getProgressBuffer(taskId: string): unknown[] {
+    return this.progressBuffers.get(taskId) ?? [];
   }
 
   get activeWorktreeCount(): number {
@@ -272,6 +280,7 @@ export class AgentPool {
     // Handle process exit
     proc.on('close', (code) => {
       this.agents.delete(task.id);
+      this.progressBuffers.delete(task.id);
 
       const currentTask = this.deps.getTaskById(task.id);
       if (!currentTask || currentTask.status === 'cancelled') return;
@@ -295,6 +304,17 @@ export class AgentPool {
     _agent: ActiveAgent,
     event: AgentProgressEvent,
   ): void {
+    // Buffer the message for late-joining clients
+    let buffer = this.progressBuffers.get(taskId);
+    if (!buffer) {
+      buffer = [];
+      this.progressBuffers.set(taskId, buffer);
+    }
+    buffer.push(event.raw);
+    if (buffer.length > AgentPool.MAX_BUFFER_SIZE) {
+      buffer.splice(0, buffer.length - AgentPool.MAX_BUFFER_SIZE);
+    }
+
     // Forward as progress event
     this.deps.broadcast('task:progress', {
       task_id: taskId,
