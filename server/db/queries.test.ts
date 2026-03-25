@@ -9,6 +9,8 @@ import {
   updateTask,
   createTaskEvent,
   getTaskEvents,
+  clearParentReferences,
+  deleteTaskById,
 } from './queries.ts';
 import type { HarnessConfig } from '../../shared/types.ts';
 
@@ -127,6 +129,54 @@ describe('DB Queries', () => {
 
       expect(updated?.status).toBe('in_progress');
       expect(updated!.updated_at).toBeGreaterThanOrEqual(originalUpdatedAt);
+    });
+  });
+
+  describe('clearParentReferences', () => {
+    it('nulls depends_on on child tasks when parent is removed', () => {
+      const projectId = getAllProjects()[0].id;
+      const parent = createTask({ project_id: projectId, type: 'do', prompt: 'parent' });
+      const child = createTask({
+        project_id: projectId,
+        type: 'do',
+        prompt: 'child',
+        depends_on: parent.id,
+      });
+
+      expect(getTaskById(child.id)!.depends_on).toBe(parent.id);
+
+      clearParentReferences(parent.id);
+
+      expect(getTaskById(child.id)!.depends_on).toBeNull();
+    });
+
+    it('nulls parent_task_id on follow-up tasks when parent is removed', () => {
+      const projectId = getAllProjects()[0].id;
+      const parent = createTask({ project_id: projectId, type: 'do', prompt: 'parent' });
+      const followUp = createTask({ project_id: projectId, type: 'do', prompt: 'follow-up' });
+      updateTask(followUp.id, { parent_task_id: parent.id });
+
+      expect(getTaskById(followUp.id)!.parent_task_id).toBe(parent.id);
+
+      clearParentReferences(parent.id);
+
+      expect(getTaskById(followUp.id)!.parent_task_id).toBeNull();
+    });
+
+    it('is called automatically by deleteTaskById', () => {
+      const projectId = getAllProjects()[0].id;
+      const parent = createTask({ project_id: projectId, type: 'do', prompt: 'parent' });
+      const child = createTask({
+        project_id: projectId,
+        type: 'do',
+        prompt: 'child',
+        depends_on: parent.id,
+      });
+
+      deleteTaskById(parent.id);
+
+      // Child should have depends_on nulled out
+      expect(getTaskById(child.id)!.depends_on).toBeNull();
     });
   });
 

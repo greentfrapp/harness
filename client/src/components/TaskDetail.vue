@@ -34,6 +34,9 @@ const blockedDependents = ref<Array<{ id: string; prompt: string; status: string
 const followUpPrompt = ref('');
 const followingUp = ref(false);
 const showFollowUp = ref(false);
+const revisePrompt = ref('');
+const revising = ref(false);
+const showRevise = ref(false);
 
 onMounted(async () => {
   try {
@@ -136,6 +139,21 @@ async function handleDelete() {
   }
 }
 
+async function handleRevise() {
+  if (!revisePrompt.value.trim()) return;
+  revising.value = true;
+  actionError.value = '';
+  try {
+    await api.tasks.revise(props.task.id, revisePrompt.value.trim());
+    revisePrompt.value = '';
+    showRevise.value = false;
+  } catch (e) {
+    actionError.value = e instanceof Error ? e.message : 'Revise failed';
+  } finally {
+    revising.value = false;
+  }
+}
+
 async function handleFollowUp() {
   if (!followUpPrompt.value.trim()) return;
   followingUp.value = true;
@@ -159,6 +177,11 @@ function formatTime(ts: number): string {
 
 <template>
   <div class="border-t border-gray-800 px-4 py-3 space-y-4 bg-gray-900/50">
+    <!-- Parent task lineage -->
+    <div v-if="task.parent_task_id" class="text-xs text-gray-500">
+      Follow-up of <span class="font-mono text-gray-400">{{ task.parent_task_id.slice(0, 8) }}</span>
+    </div>
+
     <!-- Full prompt -->
     <div>
       <h4 class="text-xs font-medium text-gray-500 uppercase mb-1">Prompt</h4>
@@ -241,6 +264,47 @@ function formatTime(ts: number): string {
         >
           <span class="text-gray-600 font-mono">{{ formatTime(event.created_at) }}</span>
           <span class="text-gray-400">{{ event.event_type }}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Revise for ready/error tasks in inbox -->
+    <div v-if="context === 'inbox' && (task.status === 'ready' || task.status === 'error')" class="space-y-2">
+      <div v-if="!showRevise">
+        <button
+          class="px-3 py-1.5 text-xs font-medium rounded bg-purple-900 hover:bg-purple-800 text-purple-300 transition-colors"
+          @click="showRevise = true"
+        >
+          Revise
+        </button>
+      </div>
+      <div v-else class="space-y-2">
+        <h4 class="text-xs font-medium text-gray-500 uppercase">Revise Task</h4>
+        <textarea
+          v-model="revisePrompt"
+          class="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-200 placeholder-gray-500 focus:border-purple-600 focus:outline-none resize-y"
+          rows="3"
+          placeholder="Enter feedback for the agent..."
+          :disabled="revising"
+          @keydown.meta.enter="handleRevise"
+          @keydown.ctrl.enter="handleRevise"
+        />
+        <div class="flex gap-2">
+          <button
+            class="px-3 py-1.5 text-xs font-medium rounded bg-purple-900 hover:bg-purple-800 text-purple-300 transition-colors disabled:opacity-50"
+            :disabled="revising || !revisePrompt.trim()"
+            @click="handleRevise"
+          >
+            {{ revising ? 'Sending...' : 'Send Revision' }}
+          </button>
+          <button
+            class="px-3 py-1.5 text-xs font-medium rounded bg-gray-800 hover:bg-gray-700 text-gray-400 transition-colors"
+            :disabled="revising"
+            @click="showRevise = false; revisePrompt = ''"
+          >
+            Cancel
+          </button>
+          <span class="text-xs text-gray-600 self-center ml-auto">Cmd+Enter to send</span>
         </div>
       </div>
     </div>

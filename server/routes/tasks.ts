@@ -213,8 +213,9 @@ export function createTaskRoutes(ctx: AppContext) {
     serverLog.info(`Task rejected`, id);
     sseManager.broadcast('task:removed', { id });
 
-    // Check for dependent tasks
+    // Unblock children that depended on or followed up from this task
     const dependents = getDependentTasks(queries, id);
+    queries.clearParentReferences(id);
     if (dependents.length > 0) {
       // Return info about blocked dependents so frontend can warn the user
       return c.json({
@@ -468,6 +469,9 @@ export function createTaskRoutes(ctx: AppContext) {
       }
     }
 
+    // Unblock children that depended on or followed up from this task
+    queries.clearParentReferences(id);
+
     const updated = queries.updateTask(id, {
       status: 'cancelled',
       worktree_path: null,
@@ -481,6 +485,40 @@ export function createTaskRoutes(ctx: AppContext) {
     return c.json(updated);
   });
 
+  /** Revise: return a ready/error task to the outbox with feedback, preserving worktree and session. */
+  app.post('/tasks/:id/revise', async (c) => {
+    const id = c.req.param('id');
+    const task = queries.getTaskById(id);
+    if (!task) return c.json({ error: 'Task not found' }, 404);
+    if (task.status !== 'ready' && task.status !== 'error') {
+      return c.json({ error: 'Only ready or error tasks can be revised' }, 400);
+    }
+
+    const body = await c.req.json<{ prompt: string }>();
+    if (!body.prompt?.trim()) {
+      return c.json({ error: 'prompt is required' }, 400);
+    }
+
+    // Replace prompt with the revise feedback — the original prompt is already
+    // in the agent's session history and will be replayed via --resume
+    const updated = queries.updateTask(id, {
+      status: 'queued',
+      prompt: body.prompt.trim(),
+      error_message: null,
+      agent_summary: null,
+      diff_summary: null,
+      // Preserve: agent_session_data (for --resume), worktree_path, branch_name
+    });
+    queries.createTaskEvent(id, 'revised', JSON.stringify({ feedback: body.prompt.trim() }));
+    serverLog.info(`Task revised and re-queued`, id);
+
+    taskQueue.recomputePositions(task.project_id);
+    sseManager.broadcast('task:updated', updated);
+    dispatcher.tryDispatch();
+
+    return c.json(updated);
+  });
+
   /** Follow up: create a new task that resumes the conversation from an approved task. */
   app.post('/tasks/:id/follow-up', async (c) => {
     const id = c.req.param('id');
@@ -488,6 +526,17 @@ export function createTaskRoutes(ctx: AppContext) {
     if (!task) return c.json({ error: 'Task not found' }, 404);
     if (task.status !== 'approved') {
       return c.json({ error: 'Only approved tasks can have follow-ups' }, 400);
+    }
+
+    // Guard: only one active follow-up per parent task
+    const activeFollowUps = queries.getTasksByStatus([
+      'queued', 'in_progress', 'retrying', 'ready', 'error',
+    ]).filter((t) => t.parent_task_id === id);
+    if (activeFollowUps.length > 0) {
+      return c.json({
+        error: 'A follow-up for this task is already in progress',
+        active_follow_up_id: activeFollowUps[0].id,
+      }, 409);
     }
 
     const body = await c.req.json<{ prompt: string }>();
@@ -504,25 +553,24 @@ export function createTaskRoutes(ctx: AppContext) {
     const taskTypeConfig = config.task_types[task.type];
     const agentType = taskTypeConfig?.agent ?? task.agent_type ?? 'claude-code';
 
-    // Create follow-up task with parent's session ID pre-populated
+    // Create follow-up task with parent_task_id for lineage (not depends_on)
     const followUpTask = queries.createTask({
       project_id: task.project_id,
       type: task.type,
       prompt: body.prompt.trim(),
       priority: task.priority,
-      depends_on: task.id,
       agent_type: agentType,
     });
 
-    // Pre-populate session data so the dispatcher uses --resume
+    // Set parent_task_id and pre-populate session data for --resume
+    const sessionUpdate: Record<string, any> = { parent_task_id: id };
     if (parentSession?.session_id) {
-      queries.updateTask(followUpTask.id, {
-        agent_session_data: JSON.stringify({
-          session_id: parentSession.session_id,
-          pid: 0,
-        }),
+      sessionUpdate.agent_session_data = JSON.stringify({
+        session_id: parentSession.session_id,
+        pid: 0,
       });
     }
+    queries.updateTask(followUpTask.id, sessionUpdate);
 
     taskQueue.recomputePositions(followUpTask.project_id);
     const updated = queries.getTaskById(followUpTask.id)!;

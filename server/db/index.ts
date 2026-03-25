@@ -31,6 +31,7 @@ const CREATE_TABLES_SQL = `
     prompt TEXT NOT NULL,
     priority TEXT NOT NULL DEFAULT 'normal',
     depends_on TEXT REFERENCES tasks(id),
+    parent_task_id TEXT,
     agent_type TEXT NOT NULL DEFAULT 'claude-code',
     agent_session_data TEXT,
     worktree_path TEXT,
@@ -77,6 +78,11 @@ export function initDatabase(): void {
   // Migrations for existing databases
   try {
     sqlite.exec('ALTER TABLE projects ADD COLUMN auto_push INTEGER NOT NULL DEFAULT 0');
+  } catch {
+    // Column already exists
+  }
+  try {
+    sqlite.exec('ALTER TABLE tasks ADD COLUMN parent_task_id TEXT');
   } catch {
     // Column already exists
   }

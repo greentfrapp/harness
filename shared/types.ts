@@ -82,6 +82,7 @@ export interface Task {
   prompt: string;
   priority: Priority;
   depends_on: string | null;
+  parent_task_id: string | null;
   agent_type: string;
   agent_session_data: string | null;
   worktree_path: string | null;
@@ -129,12 +130,14 @@ export interface UpdateTaskInput {
   status?: TaskStatus;
   prompt?: string;
   priority?: Priority;
-  agent_session_data?: string;
-  worktree_path?: string;
-  branch_name?: string;
-  diff_summary?: string;
-  agent_summary?: string;
-  error_message?: string;
+  depends_on?: string | null;
+  parent_task_id?: string | null;
+  agent_session_data?: string | null;
+  worktree_path?: string | null;
+  branch_name?: string | null;
+  diff_summary?: string | null;
+  agent_summary?: string | null;
+  error_message?: string | null;
 }
 
 // Server log entry
