@@ -16,15 +16,19 @@ vi.mock('../git.ts', async (importOriginal) => {
     checkoutTask: vi.fn(),
     returnCheckout: vi.fn(),
     cleanupCheckoutBranches: vi.fn(),
+    removeWorktree: vi.fn(),
+    deleteBranch: vi.fn(),
   };
 });
 
 import { readConfigRaw, saveConfigRaw } from '../config.ts';
-import { checkoutTask, returnCheckout } from '../git.ts';
+import { checkoutTask, returnCheckout, removeWorktree, deleteBranch } from '../git.ts';
 const mockReadConfigRaw = readConfigRaw as ReturnType<typeof vi.fn>;
 const mockSaveConfigRaw = saveConfigRaw as ReturnType<typeof vi.fn>;
 const mockCheckoutTask = checkoutTask as ReturnType<typeof vi.fn>;
 const mockReturnCheckout = returnCheckout as ReturnType<typeof vi.fn>;
+const mockRemoveWorktree = removeWorktree as ReturnType<typeof vi.fn>;
+const mockDeleteBranch = deleteBranch as ReturnType<typeof vi.fn>;
 
 function makeTask(overrides: Partial<Task> = {}): Task {
   return {
@@ -94,6 +98,9 @@ function makeContext(): AppContext {
       createTaskEvent: vi.fn(),
       getTaskEvents: vi.fn().mockReturnValue([]),
       clearParentReferences: vi.fn(),
+      deleteTaskById: vi.fn(),
+      deleteTasksByIds: vi.fn().mockReturnValue([]),
+      deleteTasksByStatus: vi.fn().mockReturnValue([]),
     } as any,
     checkoutState: new Map(),
   };
@@ -108,6 +115,8 @@ describe('Task Routes', () => {
     app = createTaskRoutes(ctx);
     mockCheckoutTask.mockReset();
     mockReturnCheckout.mockReset();
+    mockRemoveWorktree.mockReset();
+    mockDeleteBranch.mockReset();
   });
 
   describe('GET /projects', () => {
@@ -297,6 +306,43 @@ describe('Task Routes', () => {
       expect(ctx.pool.killAgent).toHaveBeenCalledWith('task-1');
       expect(ctx.queries.createTaskEvent).toHaveBeenCalledWith('task-1', 'cancelled', null);
       expect(ctx.dispatcher.tryDispatch).toHaveBeenCalled();
+    });
+
+    it('deletes worktree and branch when cancelling a task with a branch', async () => {
+      const existing = makeTask({
+        status: 'in_progress',
+        worktree_path: '/tmp/test/.harness-worktrees/harness-abc-test',
+        branch_name: 'harness/abc-test',
+      });
+      const cancelled = makeTask({ status: 'cancelled', worktree_path: null, branch_name: null });
+      (ctx.queries.getTaskById as any).mockReturnValue(existing);
+      (ctx.queries.updateTask as any).mockReturnValue(cancelled);
+
+      const res = await app.request('/tasks/task-1', { method: 'DELETE' });
+
+      expect(res.status).toBe(200);
+      expect(mockRemoveWorktree).toHaveBeenCalledWith('/tmp/test', '/tmp/test/.harness-worktrees/harness-abc-test');
+      expect(mockDeleteBranch).toHaveBeenCalledWith('/tmp/test', 'harness/abc-test');
+      // branch_name should be nulled in the DB update
+      expect(ctx.queries.updateTask).toHaveBeenCalledWith('task-1', expect.objectContaining({
+        status: 'cancelled',
+        worktree_path: null,
+        branch_name: null,
+      }));
+    });
+
+    it('deletes branch when permanently deleting a terminal task', async () => {
+      const existing = makeTask({
+        status: 'cancelled',
+        worktree_path: null,
+        branch_name: 'harness/abc-test',
+      });
+      (ctx.queries.getTaskById as any).mockReturnValue(existing);
+
+      const res = await app.request('/tasks/task-1?permanent=true', { method: 'DELETE' });
+
+      expect(res.status).toBe(200);
+      expect(mockDeleteBranch).toHaveBeenCalledWith('/tmp/test', 'harness/abc-test');
     });
 
     it('returns 404 for unknown task', async () => {
