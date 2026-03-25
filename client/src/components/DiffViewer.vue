@@ -112,7 +112,7 @@ function shortName(fullPath: string): string {
 async function requestCommit() {
   requesting.value = true;
   try {
-    await api.tasks.revise(props.taskId, 'Please commit all your changes.');
+    await api.tasks.fix(props.taskId, 'needs-commit');
     emit('revised');
   } catch {
     // Error will propagate via SSE

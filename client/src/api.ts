@@ -77,8 +77,8 @@ export const api = {
       ),
     retry: (id: string) =>
       request<Task>(`/api/tasks/${id}/retry`, { method: 'POST' }),
-    fix: (id: string) =>
-      request<Task>(`/api/tasks/${id}/fix`, { method: 'POST' }),
+    fix: (id: string, type?: 'merge-conflict' | 'checkout-failed' | 'needs-commit') =>
+      request<Task>(`/api/tasks/${id}/fix`, type ? json({ type }) : { method: 'POST' }),
     grantPermission: (id: string) =>
       request<Task>(`/api/tasks/${id}/grant-permission`, { method: 'POST' }),
     approvePlan: (id: string) =>

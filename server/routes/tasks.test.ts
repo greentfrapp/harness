@@ -478,13 +478,14 @@ describe('Task Routes', () => {
   });
 
   describe('POST /tasks/:id/fix', () => {
-    it('fixes a ready task preserving session data, worktree, and branch', async () => {
+    it('fixes a ready task by adding tag and preserving original prompt', async () => {
       const task = makeTask({
         status: 'ready',
         agent_session_data: '{"session_id":"sess-1","pid":123}',
         worktree_path: '/tmp/wt',
         branch_name: 'harness/abc-test',
         prompt: 'Add login form',
+        tags: [],
       });
       (ctx.queries.getTaskById as any).mockReturnValue(task);
       (ctx.queries.updateTask as any).mockImplementation((id: string, updates: any) =>
@@ -494,18 +495,18 @@ describe('Task Routes', () => {
       const res = await app.request('/tasks/task-1/fix', { method: 'POST' });
       expect(res.status).toBe(200);
 
-      // Should preserve session, worktree, and branch — only clear summaries
+      // Should add merge-conflict tag and preserve original prompt
       expect(ctx.queries.updateTask).toHaveBeenCalledWith('task-1', {
         status: 'queued',
-        prompt: expect.stringContaining('[MERGE CONFLICT]'),
+        tags: ['merge-conflict'],
         error_message: null,
         agent_summary: null,
         diff_summary: null,
       });
 
-      // Prompt should include original task
+      // Prompt should NOT be modified
       const updateCall = (ctx.queries.updateTask as any).mock.calls[0][1];
-      expect(updateCall.prompt).toContain('Add login form');
+      expect(updateCall).not.toHaveProperty('prompt');
 
       // Should NOT clear session data, worktree, or branch
       expect(updateCall).not.toHaveProperty('agent_session_data');
@@ -516,6 +517,29 @@ describe('Task Routes', () => {
       expect(ctx.dispatcher.tryDispatch).toHaveBeenCalled();
     });
 
+    it('accepts a fix type parameter', async () => {
+      const task = makeTask({
+        status: 'ready',
+        prompt: 'Add login form',
+        tags: [],
+      });
+      (ctx.queries.getTaskById as any).mockReturnValue(task);
+      (ctx.queries.updateTask as any).mockImplementation((id: string, updates: any) =>
+        makeTask({ id, ...updates }),
+      );
+
+      const res = await app.request('/tasks/task-1/fix', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'needs-commit' }),
+      });
+      expect(res.status).toBe(200);
+
+      const updateCall = (ctx.queries.updateTask as any).mock.calls[0][1];
+      expect(updateCall.tags).toEqual(['needs-commit']);
+      expect(ctx.queries.createTaskEvent).toHaveBeenCalledWith('task-1', 'fix_needs_commit', null);
+    });
+
     it('rejects fix on non-ready task', async () => {
       (ctx.queries.getTaskById as any).mockReturnValue(makeTask({ status: 'queued' }));
 
@@ -523,10 +547,11 @@ describe('Task Routes', () => {
       expect(res.status).toBe(400);
     });
 
-    it('does not double-prefix on repeated fix', async () => {
+    it('does not duplicate tag on repeated fix', async () => {
       const task = makeTask({
         status: 'ready',
-        prompt: '[MERGE CONFLICT] Your branch failed to merge into main due to conflicts. Merge main into your branch and resolve all conflicts, then verify the code still works.\n\nOriginal task:\nAdd login form',
+        prompt: 'Add login form',
+        tags: ['merge-conflict'],
       });
       (ctx.queries.getTaskById as any).mockReturnValue(task);
       (ctx.queries.updateTask as any).mockImplementation((id: string, updates: any) =>
@@ -537,8 +562,8 @@ describe('Task Routes', () => {
       expect(res.status).toBe(200);
 
       const updateCall = (ctx.queries.updateTask as any).mock.calls[0][1];
-      // Should not have nested [MERGE CONFLICT] prefixes
-      expect(updateCall.prompt.match(/\[MERGE CONFLICT\]/g)).toHaveLength(1);
+      // Should not have duplicate tags
+      expect(updateCall.tags.filter((t: string) => t === 'merge-conflict')).toHaveLength(1);
     });
   });
 

@@ -306,8 +306,8 @@ export function createTaskRoutes(ctx: AppContext) {
     return c.json(updated);
   });
 
-  /** Fix: re-queue a ready task whose merge failed so the agent can resolve conflicts in its existing worktree. */
-  app.post('/tasks/:id/fix', (c) => {
+  /** Fix: re-queue a ready/error task to address an issue (merge conflict, checkout failure, uncommitted changes, etc.). */
+  app.post('/tasks/:id/fix', async (c) => {
     const id = c.req.param('id');
     const task = queries.getTaskById(id);
     if (!task) return c.json({ error: 'Task not found' }, 404);
@@ -321,22 +321,30 @@ export function createTaskRoutes(ctx: AppContext) {
     // Auto-return if this task is currently checked out
     autoReturnIfCheckedOut(id);
 
-    // Augment prompt so the agent knows to resolve merge conflicts
-    const fixPrefix = `[MERGE CONFLICT] Your branch failed to merge into ${project.target_branch} due to conflicts. Merge ${project.target_branch} into your branch and resolve all conflicts, then verify the code still works.\n\nOriginal task:\n`;
-    const augmentedPrompt = task.prompt.startsWith('[MERGE CONFLICT]')
-      ? task.prompt
-      : fixPrefix + task.prompt;
+    // Determine fix type from request body (default: merge-conflict)
+    let fixType = 'merge-conflict';
+    try {
+      const body = await c.req.json<{ type?: string }>();
+      if (body.type && ['merge-conflict', 'checkout-failed', 'needs-commit'].includes(body.type)) {
+        fixType = body.type;
+      }
+    } catch {
+      // No body or invalid JSON — use default
+    }
+
+    // Add the fix type as a tag (don't modify the original prompt)
+    const tags = task.tags.includes(fixType) ? task.tags : [...task.tags, fixType];
 
     // Preserve worktree, branch, and session so the agent resumes in place
     const updated = queries.updateTask(id, {
       status: 'queued',
-      prompt: augmentedPrompt,
+      tags,
       error_message: null,
       agent_summary: null,
       diff_summary: null,
     });
-    queries.createTaskEvent(id, 'fix_merge_conflict', null);
-    serverLog.info(`Task re-queued to fix merge conflict`, id);
+    queries.createTaskEvent(id, `fix_${fixType.replace(/-/g, '_')}`, null);
+    serverLog.info(`Task re-queued to fix ${fixType}`, id);
 
     taskQueue.recomputePositions(task.project_id);
     sseManager.broadcast('task:updated', updated);

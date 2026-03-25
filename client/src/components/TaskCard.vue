@@ -142,16 +142,8 @@ const elapsed = computed(() => {
   return `${hours}h ${minutes % 60}m`;
 });
 
-const isFix = computed(() => props.task.prompt.startsWith('[MERGE CONFLICT FIX]'));
-
-const originalPrompt = computed(() => {
-  const text = props.task.prompt;
-  if (!isFix.value) return text;
-  // Strip the "[MERGE CONFLICT FIX] ... Original task:\n" prefix to show the real prompt
-  const marker = 'Original task:\n';
-  const idx = text.indexOf(marker);
-  return idx !== -1 ? text.slice(idx + marker.length) : text;
-});
+const FIX_TAGS = ['merge-conflict', 'checkout-failed', 'needs-commit'];
+const isFix = computed(() => props.task.tags.some(tag => FIX_TAGS.includes(tag)));
 
 function getTagClasses(tag: string): string {
   const config = props.tagConfigs?.[tag];
@@ -161,7 +153,7 @@ function getTagClasses(tag: string): string {
 }
 
 const truncatedPrompt = computed(() => {
-  const text = originalPrompt.value;
+  const text = props.task.prompt;
   return text.length > 120 ? text.slice(0, 120) + '...' : text;
 });
 
@@ -280,7 +272,7 @@ async function handleCollapsedCheckoutFix(e: Event) {
   e.stopPropagation();
   collapsedFixing.value = true;
   try {
-    await api.tasks.fix(props.task.id);
+    await api.tasks.fix(props.task.id, 'checkout-failed');
     collapsedCheckoutError.value = '';
     emit('approve', props.task.id);
   } finally {
@@ -373,13 +365,14 @@ async function handleCollapsedReturn(e: Event) {
             follow-up
           </span>
           <span
-            v-if="isFix"
+            v-for="fixTag in task.tags.filter(t => FIX_TAGS.includes(t))"
+            :key="'fix-' + fixTag"
             class="text-xs font-medium px-1.5 py-0.5 rounded bg-yellow-900 text-yellow-300"
           >
-            Fix
+            {{ fixTag }}
           </span>
           <span
-            v-for="tag in task.tags"
+            v-for="tag in task.tags.filter(t => !FIX_TAGS.includes(t))"
             :key="tag"
             class="text-xs font-medium px-1.5 py-0.5 rounded"
             :class="getTagClasses(tag)"

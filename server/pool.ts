@@ -43,6 +43,23 @@ interface PoolDeps {
   onTaskCompleted: (taskId: string) => void;
 }
 
+/**
+ * Build a fix-specific resume prompt based on task tags.
+ * Returns null if no fix tags are present (use the normal task.prompt).
+ */
+function buildFixPrompt(task: Task, project: Project): string | null {
+  if (task.tags.includes('merge-conflict')) {
+    return `Your branch failed to merge into ${project.target_branch} due to conflicts. Merge ${project.target_branch} into your branch and resolve all conflicts, then verify the code still works.\n\nOriginal task:\n${task.prompt}`;
+  }
+  if (task.tags.includes('checkout-failed')) {
+    return `The checkout of your branch failed. Please investigate and fix any issues with your branch so it can be checked out cleanly.\n\nOriginal task:\n${task.prompt}`;
+  }
+  if (task.tags.includes('needs-commit')) {
+    return 'Please commit all your changes.';
+  }
+  return null;
+}
+
 export class AgentPool {
   private agents = new Map<string, ActiveAgent>();
   private deps: PoolDeps;
@@ -121,6 +138,7 @@ export class AgentPool {
         resumeSessionId: existingSession.session_id,
         permissionMode,
         allowedTools: grantedTools,
+        resumePromptOverride: buildFixPrompt(task, project),
       });
       return;
     }
@@ -158,6 +176,7 @@ export class AgentPool {
       resumeSessionId: sessionData?.session_id ?? null,
       permissionMode,
       allowedTools: sessionData?.granted_tools,
+      resumePromptOverride: sessionData?.session_id ? buildFixPrompt(task, project) : null,
     });
   }
 
@@ -178,6 +197,7 @@ export class AgentPool {
       resumeSessionId: sessionData.session_id,
       permissionMode,
       allowedTools: sessionData.granted_tools,
+      resumePromptOverride: buildFixPrompt(task, project),
     });
   }
 
@@ -223,20 +243,22 @@ export class AgentPool {
       resumeSessionId: string | null;
       permissionMode?: string;
       allowedTools?: string[];
+      resumePromptOverride?: string | null;
     },
   ): void {
     const adapter = this.deps.agentRegistry.getOrDefault(task.agent_type);
 
+    const agentPrompt = opts.resumePromptOverride ?? task.prompt;
     const args = opts.resumeSessionId
       ? adapter.buildResumeArgs({
-          prompt: task.prompt,
+          prompt: agentPrompt,
           sessionId: opts.resumeSessionId,
           usesWorktree: opts.usesWorktree,
           permissionMode: opts.permissionMode,
           allowedTools: opts.allowedTools,
         })
       : adapter.buildArgs({
-          prompt: task.prompt,
+          prompt: agentPrompt,
           systemPrompt: opts.systemPrompt,
           usesWorktree: opts.usesWorktree,
           permissionMode: opts.permissionMode,
