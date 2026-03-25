@@ -15,7 +15,17 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': 'http://localhost:3001',
-      '/events': 'http://localhost:3001',
+      '/events': {
+        target: 'http://localhost:3001',
+        // SSE requires unbuffered responses
+        configure: (proxy) => {
+          proxy.on('proxyRes', (proxyRes) => {
+            proxyRes.headers['X-Accel-Buffering'] = 'no';
+            proxyRes.headers['Cache-Control'] = 'no-cache';
+            proxyRes.headers['Connection'] = 'keep-alive';
+          });
+        },
+      },
     },
   },
   build: {
