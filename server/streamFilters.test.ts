@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { hasDisplayableContent, extractText, getAssistantText } from '../shared/streamFilters.ts';
+import { hasDisplayableContent, extractText, getAssistantText, expandMessages } from '../shared/streamFilters.ts';
 
 describe('extractText', () => {
   it('returns string content as-is', () => {
@@ -91,7 +91,7 @@ describe('getAssistantText', () => {
 
 describe('hasDisplayableContent', () => {
   describe('real Claude Code message formats', () => {
-    it('shows assistant with nested API message object', () => {
+    it('shows assistant with nested API message object containing text', () => {
       expect(hasDisplayableContent({
         type: 'assistant',
         message: {
@@ -101,6 +101,40 @@ describe('hasDisplayableContent', () => {
         },
         session_id: 'sess-1',
       })).toBe(true);
+    });
+
+    it('shows assistant with tool_use content block', () => {
+      expect(hasDisplayableContent({
+        type: 'assistant',
+        message: {
+          role: 'assistant',
+          content: [{ type: 'tool_use', id: 'toolu_1', name: 'Read', input: { file_path: '/src/index.ts' } }],
+        },
+        session_id: 'sess-1',
+      })).toBe(true);
+    });
+
+    it('shows user message with tool_result content block', () => {
+      expect(hasDisplayableContent({
+        type: 'user',
+        message: {
+          role: 'user',
+          content: [{ type: 'tool_result', tool_use_id: 'toolu_1', content: 'file contents' }],
+        },
+        session_id: 'sess-1',
+      })).toBe(true);
+    });
+
+    it('filters user message with only synthetic text (hook feedback)', () => {
+      expect(hasDisplayableContent({
+        type: 'user',
+        message: {
+          role: 'user',
+          content: [{ type: 'text', text: 'Stop hook feedback: ...' }],
+        },
+        isSynthetic: true,
+        session_id: 'sess-1',
+      })).toBe(false);
     });
 
     it('filters system init (no displayable content)', () => {
@@ -148,7 +182,9 @@ describe('hasDisplayableContent', () => {
     it('filters assistant with only thinking content blocks', () => {
       expect(hasDisplayableContent({
         type: 'assistant',
-        content: [{ type: 'thinking', thinking: 'pondering...' }],
+        message: {
+          content: [{ type: 'thinking', thinking: 'pondering...' }],
+        },
       })).toBe(false);
     });
 
@@ -164,12 +200,14 @@ describe('hasDisplayableContent', () => {
     it('filters assistant with empty content array', () => {
       expect(hasDisplayableContent({
         type: 'assistant',
-        content: [],
+        message: {
+          content: [],
+        },
       })).toBe(false);
     });
   });
 
-  describe('tool messages', () => {
+  describe('legacy tool messages', () => {
     it('shows tool_use', () => {
       expect(hasDisplayableContent({
         type: 'tool_use',
@@ -255,5 +293,203 @@ describe('hasDisplayableContent', () => {
         duration_ms: 1000,
       })).toBe(false);
     });
+  });
+});
+
+describe('expandMessages', () => {
+  it('expands assistant text block into text display item', () => {
+    const items = expandMessages([{
+      type: 'assistant',
+      message: {
+        role: 'assistant',
+        content: [{ type: 'text', text: 'Hello!' }],
+      },
+    }]);
+    expect(items).toHaveLength(1);
+    expect(items[0].displayType).toBe('text');
+    expect(items[0].text).toBe('Hello!');
+  });
+
+  it('expands assistant tool_use block into tool_use display item', () => {
+    const items = expandMessages([{
+      type: 'assistant',
+      message: {
+        role: 'assistant',
+        content: [{
+          type: 'tool_use',
+          id: 'toolu_123',
+          name: 'Read',
+          input: { file_path: '/src/index.ts' },
+        }],
+      },
+    }]);
+    expect(items).toHaveLength(1);
+    expect(items[0].displayType).toBe('tool_use');
+    expect(items[0].toolName).toBe('Read');
+    expect(items[0].toolInput).toEqual({ file_path: '/src/index.ts' });
+    expect(items[0].toolUseId).toBe('toolu_123');
+  });
+
+  it('expands assistant with text + tool_use into two items', () => {
+    const items = expandMessages([{
+      type: 'assistant',
+      message: {
+        role: 'assistant',
+        content: [
+          { type: 'text', text: 'Let me read that file.' },
+          { type: 'tool_use', id: 'toolu_1', name: 'Read', input: { file_path: '/foo' } },
+        ],
+      },
+    }]);
+    expect(items).toHaveLength(2);
+    expect(items[0].displayType).toBe('text');
+    expect(items[0].text).toBe('Let me read that file.');
+    expect(items[1].displayType).toBe('tool_use');
+    expect(items[1].toolName).toBe('Read');
+  });
+
+  it('expands user tool_result block into tool_result display item', () => {
+    const items = expandMessages([{
+      type: 'user',
+      message: {
+        role: 'user',
+        content: [{
+          type: 'tool_result',
+          tool_use_id: 'toolu_123',
+          content: 'file contents here',
+        }],
+      },
+    }]);
+    expect(items).toHaveLength(1);
+    expect(items[0].displayType).toBe('tool_result');
+    expect(items[0].toolResult).toBe('file contents here');
+    expect(items[0].toolUseId).toBe('toolu_123');
+  });
+
+  it('skips thinking-only assistant messages', () => {
+    const items = expandMessages([{
+      type: 'assistant',
+      message: {
+        role: 'assistant',
+        content: [{ type: 'thinking', thinking: 'pondering...' }],
+      },
+    }]);
+    expect(items).toHaveLength(0);
+  });
+
+  it('skips synthetic user messages (hook feedback)', () => {
+    const items = expandMessages([{
+      type: 'user',
+      message: {
+        role: 'user',
+        content: [{ type: 'text', text: 'Hook feedback...' }],
+      },
+      isSynthetic: true,
+    }]);
+    expect(items).toHaveLength(0);
+  });
+
+  it('filters rate_limit_event', () => {
+    const items = expandMessages([{
+      type: 'rate_limit_event',
+      rate_limit_info: { status: 'allowed' },
+    }]);
+    expect(items).toHaveLength(0);
+  });
+
+  it('handles result messages', () => {
+    const items = expandMessages([{
+      type: 'result',
+      result: 'Done!',
+    }]);
+    expect(items).toHaveLength(1);
+    expect(items[0].displayType).toBe('result');
+    expect(items[0].resultText).toBe('Done!');
+  });
+
+  it('handles system messages', () => {
+    const items = expandMessages([{
+      type: 'system',
+      message: 'Session started',
+    }]);
+    expect(items).toHaveLength(1);
+    expect(items[0].displayType).toBe('system');
+    expect(items[0].text).toBe('Session started');
+  });
+
+  it('handles error messages', () => {
+    const items = expandMessages([{
+      type: 'error',
+      message: 'Something failed',
+    }]);
+    expect(items).toHaveLength(1);
+    expect(items[0].displayType).toBe('error');
+    expect(items[0].text).toBe('Something failed');
+  });
+
+  it('handles legacy top-level tool_use', () => {
+    const items = expandMessages([{
+      type: 'tool_use',
+      tool: 'Bash',
+      content: { command: 'ls' },
+    }]);
+    expect(items).toHaveLength(1);
+    expect(items[0].displayType).toBe('tool_use');
+    expect(items[0].toolName).toBe('Bash');
+    expect(items[0].toolInput).toEqual({ command: 'ls' });
+  });
+
+  it('handles legacy top-level tool_result', () => {
+    const items = expandMessages([{
+      type: 'tool_result',
+      content: 'output text',
+    }]);
+    expect(items).toHaveLength(1);
+    expect(items[0].displayType).toBe('tool_result');
+    expect(items[0].toolResult).toBe('output text');
+  });
+
+  it('expands a realistic full conversation', () => {
+    const items = expandMessages([
+      // System init — filtered
+      { type: 'system', subtype: 'init', session_id: 's1', cwd: '/proj', model: 'claude-opus-4-6' },
+      // Assistant with tool call
+      {
+        type: 'assistant',
+        message: {
+          role: 'assistant',
+          content: [{ type: 'tool_use', id: 'toolu_1', name: 'Read', input: { file_path: '/pkg.json' } }],
+        },
+      },
+      // Rate limit — filtered
+      { type: 'rate_limit_event', rate_limit_info: { status: 'allowed' } },
+      // User with tool result
+      {
+        type: 'user',
+        message: {
+          role: 'user',
+          content: [{ type: 'tool_result', tool_use_id: 'toolu_1', content: '{"name":"harness"}' }],
+        },
+      },
+      // Assistant text reply
+      {
+        type: 'assistant',
+        message: {
+          role: 'assistant',
+          content: [{ type: 'text', text: 'The project is called harness.' }],
+        },
+      },
+      // Result
+      { type: 'result', result: 'Identified the project name.' },
+    ]);
+
+    expect(items).toHaveLength(4);
+    expect(items[0].displayType).toBe('tool_use');
+    expect(items[0].toolName).toBe('Read');
+    expect(items[1].displayType).toBe('tool_result');
+    expect(items[1].toolResult).toBe('{"name":"harness"}');
+    expect(items[2].displayType).toBe('text');
+    expect(items[2].text).toBe('The project is called harness.');
+    expect(items[3].displayType).toBe('result');
   });
 });

@@ -2,7 +2,7 @@
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue';
 import { marked } from 'marked';
 import { api } from '../api';
-import { extractText, hasDisplayableContent, getAssistantText, type StreamMessage } from '@shared/streamFilters';
+import { expandMessages, type StreamMessage, type DisplayItem } from '@shared/streamFilters';
 
 const props = defineProps<{
   taskId: string;
@@ -12,12 +12,8 @@ const messages = ref<StreamMessage[]>([]);
 const containerRef = ref<HTMLElement | null>(null);
 const collapsedToolResults = ref<Set<number>>(new Set());
 
-/** Filtered messages — excludes usage/metadata-only entries. */
-const displayMessages = computed(() =>
-  messages.value
-    .map((msg, index) => ({ msg, index }))
-    .filter(({ msg }) => hasDisplayableContent(msg)),
-);
+/** Expand raw messages into flat display items. */
+const displayItems = computed(() => expandMessages(messages.value));
 
 function handleProgress(event: CustomEvent<{ task_id: string; message: StreamMessage }>) {
   if (event.detail.task_id !== props.taskId) return;
@@ -65,41 +61,36 @@ function renderMarkdown(text: string): string {
   return marked.parse(text, { async: false }) as string;
 }
 
-/** Get a human-readable tool name. */
-function formatToolName(tool: string | undefined): string {
-  return tool ?? 'Unknown Tool';
-}
-
 /** Format tool input for display. */
-function formatToolInput(msg: StreamMessage): string {
-  if (!msg.content) return '';
-  if (typeof msg.content === 'string') return msg.content;
+function formatToolInput(input: unknown): string {
+  if (!input) return '';
+  if (typeof input === 'string') return input;
   try {
-    return JSON.stringify(msg.content, null, 2);
+    return JSON.stringify(input, null, 2);
   } catch {
-    return String(msg.content);
+    return String(input);
   }
 }
 
 /** Format tool result content for display. */
-function formatToolResult(msg: StreamMessage): string {
-  if (typeof msg.content === 'string') return msg.content;
-  if (msg.content === undefined || msg.content === null) return '';
+function formatToolResult(result: unknown): string {
+  if (typeof result === 'string') return result;
+  if (result === undefined || result === null) return '';
   try {
-    return JSON.stringify(msg.content, null, 2);
+    return JSON.stringify(result, null, 2);
   } catch {
-    return String(msg.content);
+    return String(result);
   }
 }
 
 /** Get a short summary of tool input for the collapsed header. */
-function toolInputSummary(msg: StreamMessage): string {
-  if (!msg.content) return '';
-  if (typeof msg.content === 'string') {
-    return msg.content.length > 80 ? msg.content.slice(0, 80) + '…' : msg.content;
+function toolInputSummary(input: unknown): string {
+  if (!input) return '';
+  if (typeof input === 'string') {
+    return input.length > 80 ? input.slice(0, 80) + '…' : input;
   }
-  if (typeof msg.content === 'object' && msg.content !== null) {
-    const obj = msg.content as Record<string, unknown>;
+  if (typeof input === 'object' && input !== null) {
+    const obj = input as Record<string, unknown>;
     // For common tools, show useful summary
     if (obj.file_path) return String(obj.file_path);
     if (obj.command) {
@@ -127,8 +118,8 @@ function toggleToolResult(index: number) {
   collapsedToolResults.value = s;
 }
 
-function isToolResultLong(msg: StreamMessage): boolean {
-  const text = formatToolResult(msg);
+function isToolResultLong(item: DisplayItem): boolean {
+  const text = formatToolResult(item.toolResult);
   return text.length > 500 || text.split('\n').length > 10;
 }
 </script>
@@ -136,7 +127,7 @@ function isToolResultLong(msg: StreamMessage): boolean {
 <template>
   <div ref="containerRef" class="overflow-y-auto max-h-[32rem] text-sm p-3 bg-gray-950 rounded-lg border border-gray-800">
     <!-- Empty state -->
-    <div v-if="displayMessages.length === 0" class="text-gray-600 text-center py-8">
+    <div v-if="displayItems.length === 0" class="text-gray-600 text-center py-8">
       <template v-if="messages.length === 0">
         <div class="text-lg mb-1">⏳</div>
         Waiting for agent output…
@@ -148,77 +139,76 @@ function isToolResultLong(msg: StreamMessage): boolean {
     </div>
 
     <div class="space-y-3">
-      <template v-for="{ msg, index } in displayMessages" :key="index">
-        <!-- ── Assistant message ── -->
-        <div v-if="msg.type === 'assistant'" class="session-assistant">
+      <template v-for="(item, index) in displayItems" :key="index">
+        <!-- ── Text (assistant message) ── -->
+        <div v-if="item.displayType === 'text'" class="session-assistant">
           <div class="flex items-start gap-2">
             <span class="shrink-0 mt-0.5 text-blue-400">●</span>
             <div
-              v-if="getAssistantText(msg)"
               class="prose prose-invert prose-sm max-w-none text-gray-200"
-              v-html="renderMarkdown(getAssistantText(msg))"
+              v-html="renderMarkdown(item.text ?? '')"
             />
           </div>
         </div>
 
         <!-- ── Tool use ── -->
-        <div v-else-if="msg.type === 'tool_use'" class="session-tool-use">
+        <div v-else-if="item.displayType === 'tool_use'" class="session-tool-use">
           <div class="flex items-center gap-2 text-yellow-400">
             <span class="shrink-0">⏺</span>
-            <span class="font-semibold text-xs uppercase tracking-wide">{{ formatToolName(msg.tool) }}</span>
-            <span v-if="toolInputSummary(msg)" class="text-gray-500 text-xs font-normal truncate">
-              {{ toolInputSummary(msg) }}
+            <span class="font-semibold text-xs uppercase tracking-wide">{{ item.toolName ?? 'Unknown Tool' }}</span>
+            <span v-if="toolInputSummary(item.toolInput)" class="text-gray-500 text-xs font-normal truncate">
+              {{ toolInputSummary(item.toolInput) }}
             </span>
           </div>
-          <div v-if="formatToolInput(msg)" class="ml-5 mt-1">
-            <pre class="text-xs text-gray-400 bg-gray-900 rounded px-2 py-1.5 overflow-x-auto max-h-40 whitespace-pre-wrap break-all">{{ formatToolInput(msg) }}</pre>
+          <div v-if="formatToolInput(item.toolInput)" class="ml-5 mt-1">
+            <pre class="text-xs text-gray-400 bg-gray-900 rounded px-2 py-1.5 overflow-x-auto max-h-40 whitespace-pre-wrap break-all">{{ formatToolInput(item.toolInput) }}</pre>
           </div>
         </div>
 
         <!-- ── Tool result ── -->
-        <div v-else-if="msg.type === 'tool_result'" class="session-tool-result ml-5">
+        <div v-else-if="item.displayType === 'tool_result'" class="session-tool-result ml-5">
           <div
-            v-if="isToolResultLong(msg)"
+            v-if="isToolResultLong(item)"
             class="cursor-pointer select-none"
             @click="toggleToolResult(index)"
           >
             <span class="text-xs text-gray-500 hover:text-gray-400 transition-colors">
               {{ collapsedToolResults.has(index) ? '▶' : '▼' }}
               <span class="ml-1">Output</span>
-              <span class="text-gray-600 ml-1">({{ formatToolResult(msg).split('\n').length }} lines)</span>
+              <span class="text-gray-600 ml-1">({{ formatToolResult(item.toolResult).split('\n').length }} lines)</span>
             </span>
           </div>
           <pre
-            v-if="!isToolResultLong(msg) || !collapsedToolResults.has(index)"
+            v-if="!isToolResultLong(item) || !collapsedToolResults.has(index)"
             class="text-xs bg-gray-900 rounded px-2 py-1.5 overflow-x-auto whitespace-pre-wrap break-all"
-            :class="msg.is_error ? 'text-red-400 border border-red-900/50' : 'text-green-400/80'"
-          >{{ formatToolResult(msg) }}</pre>
+            :class="item.isError ? 'text-red-400 border border-red-900/50' : 'text-green-400/80'"
+          >{{ formatToolResult(item.toolResult) }}</pre>
         </div>
 
         <!-- ── Result (final summary) ── -->
-        <div v-else-if="msg.type === 'result'" class="session-result border-t border-gray-800 pt-3 mt-3">
+        <div v-else-if="item.displayType === 'result'" class="session-result border-t border-gray-800 pt-3 mt-3">
           <div class="flex items-start gap-2">
             <span class="shrink-0 mt-0.5 text-emerald-400">✓</span>
             <div
               class="prose prose-invert prose-sm max-w-none text-gray-200"
-              v-html="renderMarkdown(msg.result ?? '')"
+              v-html="renderMarkdown(item.resultText ?? '')"
             />
           </div>
         </div>
 
         <!-- ── System message ── -->
-        <div v-else-if="msg.type === 'system'" class="session-system">
+        <div v-else-if="item.displayType === 'system'" class="session-system">
           <div class="flex items-center gap-2 text-gray-500 text-xs">
             <span class="shrink-0">ℹ</span>
-            <span>{{ msg.message }}</span>
+            <span>{{ item.text }}</span>
           </div>
         </div>
 
         <!-- ── Error ── -->
-        <div v-else-if="msg.type === 'error' || msg.is_error" class="session-error">
+        <div v-else-if="item.displayType === 'error'" class="session-error">
           <div class="flex items-start gap-2 text-red-400 bg-red-950/30 rounded px-2 py-1.5">
             <span class="shrink-0 mt-0.5">✗</span>
-            <span class="text-sm">{{ msg.message || formatToolResult(msg) || 'An error occurred' }}</span>
+            <span class="text-sm">{{ item.text || 'An error occurred' }}</span>
           </div>
         </div>
 
@@ -226,7 +216,7 @@ function isToolResultLong(msg: StreamMessage): boolean {
         <div v-else class="session-unknown">
           <div class="flex items-start gap-2 text-gray-500 text-xs">
             <span class="shrink-0 mt-0.5">…</span>
-            <span class="text-gray-400">{{ msg.type }}: {{ msg.message || extractText(msg.content) || '' }}</span>
+            <span class="text-gray-400">{{ item.raw?.type }}: {{ item.text || '' }}</span>
           </div>
         </div>
       </template>
