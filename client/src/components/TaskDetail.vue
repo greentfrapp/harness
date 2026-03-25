@@ -11,6 +11,7 @@ const props = defineProps<{
   task: Task;
   context: 'outbox' | 'inbox';
   autoFollowUp?: boolean;
+  actionsDisabled?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -306,7 +307,7 @@ function formatTime(ts: number): string {
     </div>
 
     <!-- Revise for ready/error tasks in inbox -->
-    <div v-if="context === 'inbox' && (task.status === 'ready' || task.status === 'error')" class="space-y-2">
+    <div v-if="context === 'inbox' && (task.status === 'ready' || task.status === 'error') && !actionsDisabled" class="space-y-2">
       <div v-if="!showRevise">
         <button
           class="px-3 py-1.5 text-xs font-medium rounded bg-purple-900 hover:bg-purple-800 text-purple-300 transition-colors"
@@ -399,34 +400,40 @@ function formatTime(ts: number): string {
         </button>
       </template>
       <template v-if="context === 'inbox' && (task.status === 'ready' || task.status === 'error')">
-        <button
-          class="px-3 py-1.5 text-xs font-medium rounded bg-green-900 hover:bg-green-800 text-green-300 transition-colors disabled:opacity-50"
-          :disabled="approving"
-          @click="handleApprove"
-        >
-          {{ approving ? 'Merging...' : 'Approve' }}
-        </button>
-        <button
-          class="px-3 py-1.5 text-xs font-medium rounded bg-red-900 hover:bg-red-800 text-red-300 transition-colors disabled:opacity-50"
-          :disabled="rejecting"
-          @click="handleReject"
-        >
-          {{ rejecting ? 'Rejecting...' : 'Reject' }}
-        </button>
-        <button
-          v-if="task.status === 'error'"
-          class="px-3 py-1.5 text-xs font-medium rounded bg-yellow-900 hover:bg-yellow-800 text-yellow-300 transition-colors disabled:opacity-50"
-          :disabled="retrying"
-          @click="handleRetry"
-        >
-          {{ retrying ? 'Retrying...' : 'Retry' }}
-        </button>
-        <button
-          class="px-3 py-1.5 text-xs font-medium rounded bg-gray-800 hover:bg-gray-700 text-gray-400 transition-colors"
-          @click="emit('defer', task.id)"
-        >
-          Defer
-        </button>
+        <!-- Warning when actions are disabled due to another task being checked out -->
+        <span v-if="actionsDisabled" class="text-xs text-gray-500 italic self-center" title="Return the checked-out task first">
+          Actions locked — another task in this repo is checked out
+        </span>
+        <template v-else>
+          <button
+            class="px-3 py-1.5 text-xs font-medium rounded bg-green-900 hover:bg-green-800 text-green-300 transition-colors disabled:opacity-50"
+            :disabled="approving"
+            @click="handleApprove"
+          >
+            {{ approving ? 'Merging...' : 'Approve' }}
+          </button>
+          <button
+            class="px-3 py-1.5 text-xs font-medium rounded bg-red-900 hover:bg-red-800 text-red-300 transition-colors disabled:opacity-50"
+            :disabled="rejecting"
+            @click="handleReject"
+          >
+            {{ rejecting ? 'Rejecting...' : 'Reject' }}
+          </button>
+          <button
+            v-if="task.status === 'error'"
+            class="px-3 py-1.5 text-xs font-medium rounded bg-yellow-900 hover:bg-yellow-800 text-yellow-300 transition-colors disabled:opacity-50"
+            :disabled="retrying"
+            @click="handleRetry"
+          >
+            {{ retrying ? 'Retrying...' : 'Retry' }}
+          </button>
+          <button
+            class="px-3 py-1.5 text-xs font-medium rounded bg-gray-800 hover:bg-gray-700 text-gray-400 transition-colors"
+            @click="emit('defer', task.id)"
+          >
+            Defer
+          </button>
+        </template>
         <template v-if="task.branch_name">
           <button
             v-if="isTaskCheckedOut"
@@ -437,7 +444,7 @@ function formatTime(ts: number): string {
             {{ returning ? 'Returning...' : 'Return' }}
           </button>
           <button
-            v-else
+            v-else-if="!actionsDisabled"
             class="px-3 py-1.5 text-xs font-medium rounded bg-teal-900 hover:bg-teal-800 text-teal-300 transition-colors disabled:opacity-50"
             :disabled="checkingOut"
             @click="handleCheckout"

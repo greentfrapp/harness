@@ -707,6 +707,7 @@ describe('Task Routes', () => {
         taskPrompt: 'implement feature X',
         repoPath: '/tmp/test',
         projectName: 'test',
+        projectId: 'proj-1',
       });
     });
   });

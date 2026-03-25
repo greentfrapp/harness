@@ -2,6 +2,7 @@
 import { ref, computed, inject } from 'vue';
 import type { Task, TagConfig } from '@shared/types';
 import { useInbox } from '../stores/useInbox';
+import { useCheckouts } from '../stores/useCheckouts';
 import { useTaskSelection } from '../composables/useTaskSelection';
 import TaskCard from './TaskCard.vue';
 import TaskModal from './TaskModal.vue';
@@ -9,6 +10,7 @@ import TaskModal from './TaskModal.vue';
 const tagConfigs = inject<import('vue').Ref<Record<string, TagConfig>>>('tagConfigs');
 
 const inbox = useInbox();
+const checkoutsStore = useCheckouts();
 const confirming = ref(false);
 const {
   selectedCount,
@@ -200,6 +202,8 @@ async function handleMaximizeDelete(id: string) {
         :hasSelection="hasSelection"
         :selected="isSelected(item.id)"
         :tag-configs="tagConfigs?.value"
+        :is-checked-out="checkoutsStore.isCheckedOut(item.id)"
+        :actions-disabled="checkoutsStore.isProjectLockedByOtherTask(item.project_id, item.id)"
         @approve="handleApprove"
         @reject="handleReject"
         @retry="handleRetry"
