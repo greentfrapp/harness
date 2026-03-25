@@ -2,7 +2,6 @@ import { ref, computed } from 'vue';
 
 export function useTaskSelection() {
   const selectedIds = ref<Set<string>>(new Set());
-  const selectionMode = ref(false);
 
   const selectedCount = computed(() => selectedIds.value.size);
   const hasSelection = computed(() => selectedIds.value.size > 0);
@@ -29,25 +28,13 @@ export function useTaskSelection() {
     selectedIds.value = new Set();
   }
 
-  function exitSelectionMode() {
-    selectionMode.value = false;
-    clearSelection();
-  }
-
-  function enterSelectionMode() {
-    selectionMode.value = true;
-  }
-
   return {
     selectedIds,
-    selectionMode,
     selectedCount,
     hasSelection,
     toggle,
     isSelected,
     selectAll,
     clearSelection,
-    exitSelectionMode,
-    enterSelectionMode,
   };
 }
