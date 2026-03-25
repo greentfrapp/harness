@@ -8,6 +8,7 @@ import TaskModal from './TaskModal.vue';
 
 const outbox = useOutbox();
 const confirming = ref(false);
+const draftsCollapsed = ref(false);
 const {
   selectedCount,
   hasSelection,
@@ -66,10 +67,19 @@ async function handleDelete(id: string) {
   if (maximizedTask.value?.id === id) maximizedTask.value = null;
 }
 
+async function handleSendDraft(id: string) {
+  await outbox.sendDraft(id);
+}
+
+async function handleDeleteDraft(id: string) {
+  await outbox.deleteDraft(id);
+}
+
 const maximizedTask = ref<Task | null>(null);
 
 function handleMaximize(id: string) {
-  const task = outbox.sortedTasks.find((t) => t.id === id);
+  const task = outbox.sortedTasks.find((t) => t.id === id)
+    || outbox.sortedDrafts.find((t) => t.id === id);
   if (task) maximizedTask.value = task;
 }
 
@@ -155,6 +165,90 @@ function handleMaximizeCancel(id: string) {
     </div>
 
     <div class="flex-1 overflow-y-auto p-3 space-y-2">
+      <!-- Drafts Section -->
+      <div v-if="outbox.sortedDrafts.length" class="mb-3">
+        <button
+          class="w-full flex items-center gap-2 px-1 py-1.5 text-left group"
+          @click="draftsCollapsed = !draftsCollapsed"
+        >
+          <svg
+            class="w-3.5 h-3.5 text-gray-500 transition-transform shrink-0"
+            :class="draftsCollapsed ? '' : 'rotate-90'"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+          </svg>
+          <span class="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+            Drafts
+          </span>
+          <span class="text-xs bg-gray-800 text-gray-500 px-1.5 py-0.5 rounded-full">
+            {{ outbox.sortedDrafts.length }}
+          </span>
+        </button>
+
+        <div v-if="!draftsCollapsed" class="space-y-2 mt-1">
+          <div
+            v-for="draft in outbox.sortedDrafts"
+            :key="draft.id"
+            class="group rounded-lg border border-dashed border-gray-700 bg-gray-900/50 hover:border-gray-600 transition-colors"
+          >
+            <div class="px-4 py-3 flex items-start gap-3">
+              <!-- Draft icon -->
+              <span class="mt-1 w-4 h-4 shrink-0 flex items-center justify-center">
+                <svg class="w-3.5 h-3.5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+              </span>
+
+              <!-- Content -->
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2 mb-1">
+                  <span class="text-xs font-medium px-1.5 py-0.5 rounded bg-gray-800 text-gray-400">
+                    {{ draft.type }}
+                  </span>
+                  <span class="text-xs font-medium px-1.5 py-0.5 rounded bg-gray-800/60 text-gray-500 italic">
+                    draft
+                  </span>
+                  <span
+                    class="text-xs font-medium px-1.5 py-0.5 rounded"
+                    :class="{
+                      'bg-red-900 text-red-300': draft.priority === 'P0',
+                      'bg-orange-900 text-orange-300': draft.priority === 'P1',
+                      'bg-gray-800 text-gray-400': draft.priority === 'P2',
+                      'bg-gray-800 text-gray-500': draft.priority === 'P3',
+                    }"
+                  >
+                    {{ draft.priority }}
+                  </span>
+                </div>
+                <p class="text-sm text-gray-400 leading-snug">
+                  {{ draft.prompt.length > 120 ? draft.prompt.slice(0, 120) + '...' : draft.prompt }}
+                </p>
+              </div>
+
+              <!-- Actions -->
+              <div class="flex items-center gap-1 shrink-0">
+                <button
+                  class="px-2 py-1 text-xs font-medium rounded bg-blue-900 hover:bg-blue-800 text-blue-300 transition-colors"
+                  @click="handleSendDraft(draft.id)"
+                >
+                  Send
+                </button>
+                <button
+                  class="px-2 py-1 text-xs font-medium rounded bg-gray-800 hover:bg-gray-700 text-gray-500 hover:text-red-400 transition-colors"
+                  @click="handleDeleteDraft(draft.id)"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Outbox Tasks -->
       <TaskCard
         v-for="task in outbox.sortedTasks"
         :key="task.id"
@@ -168,7 +262,7 @@ function handleMaximizeCancel(id: string) {
         @maximize="handleMaximize"
       />
       <div
-        v-if="!outbox.sortedTasks.length && !outbox.loading"
+        v-if="!outbox.sortedTasks.length && !outbox.sortedDrafts.length && !outbox.loading"
         class="text-center text-gray-600 py-12 text-sm"
       >
         No tasks in queue

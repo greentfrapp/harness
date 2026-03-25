@@ -11,6 +11,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   close: [];
   create: [input: CreateTaskInput];
+  draft: [input: CreateTaskInput];
   settings: [];
 }>();
 
@@ -31,6 +32,10 @@ onMounted(async () => {
 function onKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape') {
     emit('close');
+  }
+  if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'Enter') {
+    handleSaveDraft();
+    return;
   }
   if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
     handleSubmit();
@@ -61,6 +66,24 @@ async function handleSubmit() {
   } finally {
     submitting.value = false;
   }
+}
+
+function handleSaveDraft() {
+  if (!projectId.value || !prompt.value.trim()) {
+    error.value = 'Project and prompt are required';
+    return;
+  }
+
+  const input: CreateTaskInput = {
+    project_id: projectId.value,
+    type: taskType.value,
+    prompt: prompt.value.trim(),
+    priority: priority.value,
+    depends_on: dependsOn.value || null,
+    as_draft: true,
+  };
+  emit('draft', input);
+  emit('close');
 }
 
 const priorities: { value: Priority; label: string }[] = [
@@ -203,6 +226,15 @@ const priorities: { value: Priority; label: string }[] = [
               @click="emit('close')"
             >
               Cancel
+            </button>
+            <button
+              type="button"
+              :disabled="submitting"
+              class="px-4 py-2 text-sm font-medium bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-md transition-colors disabled:opacity-50"
+              @click="handleSaveDraft"
+            >
+              Save Draft
+              <kbd class="ml-1 text-xs opacity-60">⌘⇧↵</kbd>
             </button>
             <button
               type="submit"

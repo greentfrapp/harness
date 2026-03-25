@@ -67,7 +67,7 @@ export function createTask(input: CreateTaskInput): Task {
     id,
     project_id: input.project_id,
     type: input.type,
-    status: 'queued',
+    status: input.as_draft ? 'draft' : 'queued',
     prompt: input.prompt,
     priority: input.priority ?? 'P2',
     depends_on: input.depends_on ?? null,

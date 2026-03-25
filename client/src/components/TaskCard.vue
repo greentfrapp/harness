@@ -67,6 +67,7 @@ const statusConfig: Record<
   string,
   { color: string; label: string; pulse?: boolean }
 > = {
+  draft: { color: 'bg-gray-600', label: 'Draft' },
   queued: { color: 'bg-gray-500', label: 'Queued' },
   in_progress: { color: 'bg-blue-500', label: 'Running', pulse: true },
   retrying: { color: 'bg-yellow-500', label: 'Retrying', pulse: true },

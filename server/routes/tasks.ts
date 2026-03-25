@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import type { AppContext } from '../context.ts';
 import type { CreateTaskInput, UpdateTaskInput } from '../../shared/types.ts';
-import { OUTBOX_STATUSES, INBOX_STATUSES } from '../../shared/types.ts';
+import { OUTBOX_STATUSES, INBOX_STATUSES, DRAFT_STATUSES } from '../../shared/types.ts';
 import * as git from '../git.ts';
 import { readConfigRaw, saveConfigRaw, CONFIG_PATH } from '../config.ts';
 import { serverLog } from '../log.ts';
@@ -61,7 +61,7 @@ export function createTaskRoutes(ctx: AppContext) {
       return c.json(queries.getTasksByProject(projectId));
     }
     return c.json(
-      queries.getTasksByStatus([...OUTBOX_STATUSES, ...INBOX_STATUSES]),
+      queries.getTasksByStatus([...DRAFT_STATUSES, ...OUTBOX_STATUSES, ...INBOX_STATUSES]),
     );
   });
 
@@ -89,6 +89,13 @@ export function createTaskRoutes(ctx: AppContext) {
     }
 
     const task = queries.createTask(body);
+
+    if (body.as_draft) {
+      // Drafts don't enter the queue
+      sseManager.broadcast('task:created', task);
+      return c.json(task, 201);
+    }
+
     taskQueue.recomputePositions(task.project_id);
     const updated = queries.getTaskById(task.id)!;
 
@@ -98,6 +105,34 @@ export function createTaskRoutes(ctx: AppContext) {
     dispatcher.tryDispatch();
 
     return c.json(updated, 201);
+  });
+
+  /** Send a draft: transition from draft to queued. */
+  app.post('/tasks/:id/send', async (c) => {
+    const id = c.req.param('id');
+    const task = queries.getTaskById(id);
+    if (!task) return c.json({ error: 'Task not found' }, 404);
+    if (task.status !== 'draft') {
+      return c.json({ error: 'Only draft tasks can be sent' }, 400);
+    }
+
+    // Allow updating prompt/priority/depends_on when sending
+    const body = await c.req.json<{ prompt?: string; priority?: string; depends_on?: string | null }>().catch(() => ({} as { prompt?: string; priority?: string; depends_on?: string | null }));
+    const updateFields: Record<string, any> = { status: 'queued' };
+    if (body.prompt?.trim()) updateFields.prompt = body.prompt.trim();
+    if (body.priority) updateFields.priority = body.priority;
+    if (body.depends_on !== undefined) updateFields.depends_on = body.depends_on;
+
+    const updated = queries.updateTask(id, updateFields);
+    queries.createTaskEvent(id, 'sent', JSON.stringify({ previous: 'draft' }));
+    serverLog.info(`Draft task sent to queue`, id);
+
+    taskQueue.recomputePositions(task.project_id);
+    const final = queries.getTaskById(id)!;
+    sseManager.broadcast('task:updated', final);
+    dispatcher.tryDispatch();
+
+    return c.json(final);
   });
 
   app.patch('/tasks/:id', async (c) => {
@@ -423,9 +458,10 @@ export function createTaskRoutes(ctx: AppContext) {
 
     const terminalStatuses = ['approved', 'rejected', 'cancelled'];
     const forcePermanent = c.req.query('permanent') === 'true';
+    const isDraft = existing.status === 'draft';
     const isTerminal = terminalStatuses.includes(existing.status);
 
-    if (isTerminal || forcePermanent) {
+    if (isTerminal || isDraft || forcePermanent) {
       // Kill running agent if any (relevant when force-deleting active tasks)
       pool.killAgent(id);
 

@@ -48,6 +48,10 @@ async function handleCreateTask(input: CreateTaskInput) {
   await outbox.createTask(input);
 }
 
+async function handleDraftTask(input: CreateTaskInput) {
+  await outbox.createTask({ ...input, as_draft: true });
+}
+
 async function handleSettingsClose() {
   showSettings.value = false;
   await refreshConfig();
@@ -126,6 +130,7 @@ onUnmounted(() => {
       :existing-tasks="outbox.tasks"
       @close="showNewTask = false"
       @create="handleCreateTask"
+      @draft="handleDraftTask"
       @settings="handleOpenSettingsFromTask"
     />
 
