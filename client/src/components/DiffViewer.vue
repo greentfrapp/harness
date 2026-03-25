@@ -222,7 +222,7 @@ watch(renderedHtml, async () => {
 }
 .diff-container .d2h-files-diff {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   gap: 2px;
 }
 /* Reduce diff table cell padding */
