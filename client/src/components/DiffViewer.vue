@@ -117,6 +117,8 @@ watch(renderedHtml, async () => {
 <style>
 /* diff2html theme overrides for dark mode — compact variant */
 .diff-container .d2h-wrapper {
+  --d2h-del-highlight-bg-color: #6e3630;
+  --d2h-ins-highlight-bg-color: #265a38;
   background: #0d1117;
 }
 .diff-container .d2h-file-header {
