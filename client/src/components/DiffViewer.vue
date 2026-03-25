@@ -166,13 +166,17 @@ watch(renderedHtml, async () => {
   background: #1a3324;
   color: #7ee787;
 }
-.diff-container .d2h-code-linenumber {
+.diff-container .d2h-code-linenumber,
+.diff-container .d2h-code-side-linenumber {
   background: #161b22;
   border-color: #30363d;
   color: #8b949e;
   font-size: 11px;
   line-height: 1.3;
   padding: 0 4px;
+  position: sticky !important;
+  left: 0;
+  z-index: 1;
 }
 .diff-container .d2h-diff-table {
   border-color: #30363d;
@@ -224,8 +228,19 @@ watch(renderedHtml, async () => {
 /* Reduce diff table cell padding */
 .diff-container .d2h-diff-table td {
   padding: 0;
+  position: relative;
 }
 .diff-container .d2h-diff-tbody tr td {
   line-height: 1.3;
+}
+/* Ensure side-by-side containers establish proper overflow context */
+.diff-container .d2h-file-side-diff {
+  position: relative;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+/* Prevent diff wrapper from breaking out of container */
+.diff-container .d2h-file-diff {
+  overflow: auto;
 }
 </style>
