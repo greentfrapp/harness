@@ -233,7 +233,7 @@ function handleMaximizeCancel(id: string) {
               <!-- Actions -->
               <div class="flex items-center gap-1 shrink-0">
                 <button
-                  class="px-2 py-1 text-xs font-medium rounded bg-blue-900 hover:bg-blue-800 text-blue-300 transition-colors"
+                  class="px-2 py-1 text-xs font-medium rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors"
                   @click="handleSendDraft(draft.id)"
                 >
                   Send

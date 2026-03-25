@@ -84,7 +84,7 @@ const statusConfig: Record<
 > = {
   draft: { color: 'bg-gray-600', label: 'Draft' },
   queued: { color: 'bg-gray-500', label: 'Queued' },
-  in_progress: { color: 'bg-blue-500', label: 'Running', pulse: true },
+  in_progress: { color: 'bg-zinc-500', label: 'Running', pulse: true },
   retrying: { color: 'bg-yellow-500', label: 'Retrying', pulse: true },
   ready: { color: 'bg-green-500', label: 'Ready' },
   held: { color: 'bg-gray-500', label: 'Held' },
@@ -219,7 +219,7 @@ function handleRetry(id: string) {
 <template>
   <div class="group rounded-lg border overflow-hidden" :class="[
     task.status === 'approved' ? 'border-green-900/50 bg-gray-900/60 opacity-75' : 'border-gray-800 bg-gray-900',
-    selected ? 'ring-1 ring-blue-500/60 border-blue-500/40' : ''
+    selected ? 'ring-1 ring-zinc-500/60 border-zinc-500/40' : ''
   ]">
     <!-- Summary row -->
     <button
@@ -231,7 +231,7 @@ function handleRetry(id: string) {
         v-if="selected || hasSelection"
         class="mt-1 w-4 h-4 rounded border shrink-0 flex items-center justify-center transition-colors cursor-pointer"
         :class="selected
-          ? 'bg-blue-600 border-blue-500 text-white'
+          ? 'bg-zinc-600 border-zinc-500 text-white'
           : 'border-gray-600 bg-gray-800 hover:border-gray-400'"
         @click.stop="emit('toggleSelect', task.id)"
       >
@@ -271,7 +271,7 @@ function handleRetry(id: string) {
           </span>
           <span
             v-if="task.parent_task_id"
-            class="text-xs font-medium px-1.5 py-0.5 rounded bg-blue-900 text-blue-300"
+            class="text-xs font-medium px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-300"
           >
             follow-up
           </span>
@@ -364,7 +364,7 @@ function handleRetry(id: string) {
       <div v-if="isTerminal" class="flex items-center gap-1 shrink-0" @click.stop>
         <button
           v-if="task.status === 'approved'"
-          class="px-2 py-1 text-xs font-medium rounded bg-blue-900 hover:bg-blue-800 text-blue-300 transition-colors"
+          class="px-2 py-1 text-xs font-medium rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors"
           @click="(e: Event) => { e.stopPropagation(); autoFollowUp = true; expanded = true; }"
         >
           Follow Up

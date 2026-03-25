@@ -124,11 +124,11 @@ onUnmounted(() => {
           </svg>
         </button>
         <button
-          class="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-sm font-medium rounded-md transition-colors"
+          class="px-4 py-1.5 bg-zinc-600 hover:bg-zinc-500 text-sm font-medium rounded-md transition-colors"
           @click="showNewTask = true"
         >
           New Task
-          <kbd class="ml-2 text-xs text-blue-300 opacity-70">C</kbd>
+          <kbd class="ml-2 text-xs text-zinc-300 opacity-70">C</kbd>
         </button>
       </div>
     </header>

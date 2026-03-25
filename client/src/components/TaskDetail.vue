@@ -350,7 +350,7 @@ function formatTime(ts: number): string {
     <div v-if="task.status === 'approved'" class="space-y-2">
       <div v-if="!showFollowUp">
         <button
-          class="px-3 py-1.5 text-xs font-medium rounded bg-blue-900 hover:bg-blue-800 text-blue-300 transition-colors"
+          class="px-3 py-1.5 text-xs font-medium rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors"
           @click="showFollowUp = true; nextTick(() => followUpTextarea?.focus())"
         >
           Follow Up
@@ -361,7 +361,7 @@ function formatTime(ts: number): string {
         <textarea
           ref="followUpTextarea"
           v-model="followUpPrompt"
-          class="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-200 placeholder-gray-500 focus:border-blue-600 focus:outline-none resize-y"
+          class="w-full bg-gray-800 border border-gray-700 rounded px-3 py-2 text-sm text-gray-200 placeholder-gray-500 focus:border-zinc-600 focus:outline-none resize-y"
           rows="3"
           placeholder="Enter your follow-up request..."
           :disabled="followingUp"
@@ -370,7 +370,7 @@ function formatTime(ts: number): string {
         />
         <div class="flex gap-2">
           <button
-            class="px-3 py-1.5 text-xs font-medium rounded bg-blue-900 hover:bg-blue-800 text-blue-300 transition-colors disabled:opacity-50"
+            class="px-3 py-1.5 text-xs font-medium rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors disabled:opacity-50"
             :disabled="followingUp || !followUpPrompt.trim()"
             @click="handleFollowUp"
           >
