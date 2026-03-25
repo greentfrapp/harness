@@ -428,4 +428,102 @@ describe('AgentPool progress broadcasting', () => {
     expect(sessionData.granted_tools).toEqual(['Bash(curl:*)', 'WebSearch']);
     expect(sessionData.session_id).toBe('sess-1');
   });
+
+  it('flushes remaining buffer on close to capture result event without trailing newline', async () => {
+    const updateTask = vi.fn(() => makeTask());
+    const createTaskEvent = vi.fn();
+    const onTaskCompleted = vi.fn();
+
+    const config: HarnessConfig = {
+      projects: [],
+      task_types: {
+        do: { prompt_template: '{user_prompt}', uses_worktree: true },
+      },
+      concurrency: { max_worktrees: 2, max_conversations: 2 },
+    } as any;
+
+    const flushPool = new AgentPool({
+      config,
+      agentRegistry: fakeRegistry,
+      getProjectById: () => makeProject(),
+      updateTask,
+      createTaskEvent,
+      broadcast,
+      getTaskById: () => makeTask({ branch_name: 'harness/test-branch' }),
+      onTaskCompleted,
+    });
+
+    const task = makeTask({ branch_name: 'harness/test-branch' });
+    const project = makeProject();
+    await flushPool.dispatchDoTask(task, project);
+
+    // Emit a result event WITHOUT a trailing newline (stays in buffer)
+    const resultMsg = { type: 'result', result: 'I updated the README with new docs.', session_id: 'sess-1' };
+    spawnedProc.stdout.emit('data', Buffer.from(JSON.stringify(resultMsg)));
+
+    // Clear setup calls
+    updateTask.mockClear();
+
+    // Close with success
+    spawnedProc.emit('close', 0);
+
+    // Should have stored the agent_summary from the flushed buffer
+    expect(updateTask).toHaveBeenCalledWith('task-1', expect.objectContaining({
+      status: 'ready',
+      agent_summary: 'I updated the README with new docs.',
+    }));
+  });
+
+  it('falls back to last assistant text when result has no summary', async () => {
+    const updateTask = vi.fn(() => makeTask());
+    const createTaskEvent = vi.fn();
+    const onTaskCompleted = vi.fn();
+
+    const config: HarnessConfig = {
+      projects: [],
+      task_types: {
+        do: { prompt_template: '{user_prompt}', uses_worktree: true },
+      },
+      concurrency: { max_worktrees: 2, max_conversations: 2 },
+    } as any;
+
+    const fallbackPool = new AgentPool({
+      config,
+      agentRegistry: fakeRegistry,
+      getProjectById: () => makeProject(),
+      updateTask,
+      createTaskEvent,
+      broadcast,
+      getTaskById: () => makeTask({ branch_name: 'harness/test-branch' }),
+      onTaskCompleted,
+    });
+
+    const task = makeTask({ branch_name: 'harness/test-branch' });
+    const project = makeProject();
+    await fallbackPool.dispatchDoTask(task, project);
+
+    // Emit an assistant message with text
+    const assistantMsg = {
+      type: 'assistant',
+      message: {
+        role: 'assistant',
+        content: [{ type: 'text', text: 'Done! I fixed the bug in server.ts.' }],
+      },
+      session_id: 'sess-1',
+    };
+    spawnedProc.stdout.emit('data', Buffer.from(JSON.stringify(assistantMsg) + '\n'));
+
+    // Result event without a result string (no summary)
+    const resultMsg = { type: 'result', session_id: 'sess-1' };
+    spawnedProc.stdout.emit('data', Buffer.from(JSON.stringify(resultMsg) + '\n'));
+
+    updateTask.mockClear();
+    spawnedProc.emit('close', 0);
+
+    // Should fall back to the last assistant text
+    expect(updateTask).toHaveBeenCalledWith('task-1', expect.objectContaining({
+      status: 'ready',
+      agent_summary: 'Done! I fixed the bug in server.ts.',
+    }));
+  });
 });
