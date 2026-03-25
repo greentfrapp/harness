@@ -182,6 +182,7 @@ export interface CheckoutInfo {
   taskPrompt: string;
   repoPath: string;
   projectName: string;
+  projectId: string;
 }
 
 export interface SSEEvent<T = unknown> {

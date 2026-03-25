@@ -648,7 +648,7 @@ export function createTaskRoutes(ctx: AppContext) {
 
   /** List all active checkouts (for initial page load). */
   app.get('/checkouts', (c) => {
-    const result: Array<{ taskId: string; taskPrompt: string; repoPath: string; projectName: string }> = [];
+    const result: Array<{ taskId: string; taskPrompt: string; repoPath: string; projectName: string; projectId: string }> = [];
     for (const [repoPath, entry] of checkoutState) {
       const task = queries.getTaskById(entry.taskId);
       const project = task ? queries.getProjectById(task.project_id) : undefined;
@@ -658,6 +658,7 @@ export function createTaskRoutes(ctx: AppContext) {
           taskPrompt: task.prompt.slice(0, 100),
           repoPath,
           projectName: project.name,
+          projectId: project.id,
         });
       }
     }
@@ -709,6 +710,7 @@ export function createTaskRoutes(ctx: AppContext) {
       taskPrompt: task.prompt.slice(0, 100),
       repoPath: project.repo_path,
       projectName: project.name,
+      projectId: project.id,
     };
     sseManager.broadcast('task:checked_out', payload);
 

@@ -2,6 +2,9 @@
 import { onMounted, onBeforeUnmount } from 'vue';
 import type { Task } from '@shared/types';
 import TaskDetail from './TaskDetail.vue';
+import { useCheckouts } from '../stores/useCheckouts';
+
+const checkoutsStore = useCheckouts();
 
 const props = defineProps<{
   task: Task;
@@ -108,6 +111,7 @@ function statusColor(status: string) {
           <TaskDetail
             :task="task"
             :context="context"
+            :actions-disabled="checkoutsStore.isProjectLockedByOtherTask(task.project_id, task.id)"
             @cancel="emit('cancel', $event)"
             @approve="emit('approve', $event)"
             @reject="emit('reject', $event)"

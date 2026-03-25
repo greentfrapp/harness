@@ -24,6 +24,8 @@ const props = defineProps<{
   hasSelection?: boolean;
   selected?: boolean;
   tagConfigs?: Record<string, TagConfig>;
+  isCheckedOut?: boolean;
+  actionsDisabled?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -218,6 +220,7 @@ function handleRetry(id: string) {
 
 <template>
   <div class="group rounded-lg border overflow-hidden" :class="[
+    isCheckedOut ? 'border-teal-500/60 bg-teal-950/30 ring-1 ring-teal-500/30' :
     task.status === 'approved' ? 'border-green-900/50 bg-gray-900/60 opacity-75' : 'border-gray-800 bg-gray-900',
     selected ? 'ring-1 ring-zinc-500/60 border-zinc-500/40' : ''
   ]">
@@ -262,6 +265,12 @@ function handleRetry(id: string) {
         <div class="flex items-center gap-2 mb-1">
           <span class="text-xs font-medium px-1.5 py-0.5 rounded bg-gray-800 text-gray-400">
             {{ task.type }}
+          </span>
+          <span
+            v-if="isCheckedOut"
+            class="text-xs font-medium px-1.5 py-0.5 rounded bg-teal-900 text-teal-300"
+          >
+            Checked Out
           </span>
           <span
             v-if="task.status === 'approved'"
@@ -315,7 +324,10 @@ function handleRetry(id: string) {
 
       <!-- Action buttons (visible in collapsed state for tasks needing input) -->
       <div v-if="needsInput" class="flex items-center gap-1 shrink-0" @click.stop>
-        <template v-if="collapsedMergeError">
+        <template v-if="actionsDisabled">
+          <span class="text-xs text-gray-500 italic" title="Another task in this repo is checked out">Locked</span>
+        </template>
+        <template v-else-if="collapsedMergeError">
           <span class="text-xs text-red-400 max-w-48 truncate" :title="collapsedMergeError">Merge failed</span>
           <button
             class="px-2 py-1 text-xs font-medium rounded bg-yellow-900 hover:bg-yellow-800 text-yellow-300 transition-colors disabled:opacity-50"
@@ -351,13 +363,18 @@ function handleRetry(id: string) {
 
       <!-- Retry button (visible in collapsed state for error tasks) -->
       <div v-if="isError" class="flex items-center gap-1 shrink-0" @click.stop>
-        <button
-          class="px-2 py-1 text-xs font-medium rounded bg-yellow-900 hover:bg-yellow-800 text-yellow-300 transition-colors disabled:opacity-50"
-          :disabled="collapsedRetrying"
-          @click="handleCollapsedRetry"
-        >
-          {{ collapsedRetrying ? 'Retrying...' : 'Retry' }}
-        </button>
+        <template v-if="actionsDisabled">
+          <span class="text-xs text-gray-500 italic" title="Another task in this repo is checked out">Locked</span>
+        </template>
+        <template v-else>
+          <button
+            class="px-2 py-1 text-xs font-medium rounded bg-yellow-900 hover:bg-yellow-800 text-yellow-300 transition-colors disabled:opacity-50"
+            :disabled="collapsedRetrying"
+            @click="handleCollapsedRetry"
+          >
+            {{ collapsedRetrying ? 'Retrying...' : 'Retry' }}
+          </button>
+        </template>
       </div>
 
       <!-- Follow Up + Delete buttons (visible in collapsed state for terminal tasks) -->
@@ -421,6 +438,7 @@ function handleRetry(id: string) {
       :task="task"
       :context="context"
       :auto-follow-up="autoFollowUp"
+      :actions-disabled="actionsDisabled"
       @cancel="emit('cancel', $event)"
       @approve="handleApprove($event)"
       @reject="handleReject($event)"

@@ -38,6 +38,20 @@ export const useCheckouts = defineStore('checkouts', () => {
     return checkouts.value.find((c) => c.repoPath === repoPath);
   }
 
+  /** Returns the checkout for a given project, if any. */
+  function getCheckoutForProject(projectId: string): CheckoutInfo | undefined {
+    return checkouts.value.find((c) => c.projectId === projectId);
+  }
+
+  /**
+   * Returns true if the project has a checked-out task that is NOT the given taskId.
+   * Used to disable actions on sibling tasks when one task is checked out.
+   */
+  function isProjectLockedByOtherTask(projectId: string, taskId: string): boolean {
+    const checkout = getCheckoutForProject(projectId);
+    return checkout != null && checkout.taskId !== taskId;
+  }
+
   return {
     checkouts,
     hasCheckouts,
@@ -46,5 +60,7 @@ export const useCheckouts = defineStore('checkouts', () => {
     onReturned,
     isCheckedOut,
     getCheckoutForRepo,
+    getCheckoutForProject,
+    isProjectLockedByOtherTask,
   };
 });
