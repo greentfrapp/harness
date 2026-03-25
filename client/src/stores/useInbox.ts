@@ -63,6 +63,12 @@ export const useInbox = defineStore('inbox', () => {
     items.value = items.value.filter((t) => t.id !== id);
   }
 
+  async function bulkDelete(ids: string[]): Promise<void> {
+    await api.tasks.bulkDelete(ids);
+    const idSet = new Set(ids);
+    items.value = items.value.filter((t) => !idSet.has(t.id));
+  }
+
   async function clearAll() {
     await api.tasks.clearAll([...INBOX_STATUSES]);
     items.value = [];
@@ -77,6 +83,7 @@ export const useInbox = defineStore('inbox', () => {
     fetchItems,
     updateTaskStatus,
     deleteTask,
+    bulkDelete,
     onInboxNew,
     onTaskUpdated,
     onTaskRemoved,

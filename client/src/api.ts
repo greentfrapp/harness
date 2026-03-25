@@ -59,6 +59,8 @@ export const api = {
       request<{ deleted: string }>(`/api/tasks/${id}?permanent=true`, { method: 'DELETE' }),
     clearAll: (statuses: string[]) =>
       request<{ deleted: string[] }>(`/api/tasks?status=${statuses.join(',')}`, { method: 'DELETE' }),
+    bulkDelete: (ids: string[]) =>
+      request<{ deleted: string[] }>('/api/tasks/bulk-delete', json({ ids })),
     approve: (id: string) =>
       request<Task & { blocked_dependents?: Array<{ id: string; prompt: string; status: string }> }>(
         `/api/tasks/${id}/approve`,
