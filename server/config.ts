@@ -3,7 +3,19 @@ import path from 'node:path';
 import os from 'node:os';
 import { execSync } from 'node:child_process';
 import { parse as parseJsonc } from 'jsonc-parser';
-import type { HarnessConfig, ProjectConfig } from '../shared/types.ts';
+import type { HarnessConfig, ProjectConfig, TagConfig } from '../shared/types.ts';
+
+const DEFAULT_TAGS: Record<string, TagConfig> = {
+  bug: { color: 'red', description: 'Bug fix' },
+  feature: { color: 'green', description: 'New feature' },
+  refactor: { color: 'purple', description: 'Code refactoring' },
+  docs: { color: 'blue', description: 'Documentation' },
+  test: { color: 'yellow', description: 'Tests' },
+  chore: { color: 'gray', description: 'Maintenance task' },
+  perf: { color: 'orange', description: 'Performance improvement' },
+  security: { color: 'red', description: 'Security-related change' },
+  ui: { color: 'pink', description: 'UI/UX change' },
+};
 
 export const HARNESS_DIR = path.join(os.homedir(), '.harness');
 export const DB_PATH = path.join(HARNESS_DIR, 'harness.db');
@@ -48,6 +60,7 @@ const DEFAULT_CONFIG: HarnessConfig = {
       default_priority: 'P2',
     },
   },
+  tags: DEFAULT_TAGS,
   projects: [],
 };
 
@@ -69,6 +82,13 @@ const DEFAULT_CONFIG_TEMPLATE = `{
       "default_priority": "P2"
     }
   },
+
+  // Tags — customize or add your own task tags
+  // Available colors: red, green, blue, yellow, purple, orange, pink, gray, cyan, indigo, teal
+  // "tags": {
+  //   "bug": { "color": "red", "description": "Bug fix" },
+  //   "feature": { "color": "green", "description": "New feature" }
+  // },
 
   // Projects — add your repositories here
   "projects": [
@@ -104,6 +124,10 @@ export function loadConfig(): HarnessConfig {
     task_types: {
       ...DEFAULT_CONFIG.task_types,
       ...(parsed.task_types ?? {}),
+    },
+    tags: {
+      ...DEFAULT_CONFIG.tags,
+      ...(parsed.tags ?? {}),
     },
     projects: parsed.projects ?? [],
   };
@@ -147,6 +171,10 @@ export function saveConfigRaw(
     task_types: {
       ...DEFAULT_CONFIG.task_types,
       ...(parsed.task_types ?? {}),
+    },
+    tags: {
+      ...DEFAULT_CONFIG.tags,
+      ...(parsed.tags ?? {}),
     },
     projects: parsed.projects ?? [],
   };

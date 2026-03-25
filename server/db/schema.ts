@@ -24,6 +24,7 @@ export const tasks = sqliteTable('tasks', {
   priority: text('priority').notNull().default('P2'),
   depends_on: text('depends_on').references(() => tasks.id),
   parent_task_id: text('parent_task_id'),
+  tags: text('tags').notNull().default('[]'),
   agent_type: text('agent_type').notNull().default('claude-code'),
   agent_session_data: text('agent_session_data'),
   worktree_path: text('worktree_path'),

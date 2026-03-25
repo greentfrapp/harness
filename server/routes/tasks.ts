@@ -19,7 +19,7 @@ export function createTaskRoutes(ctx: AppContext) {
   // --- Config (task types for frontend) ---
 
   app.get('/config', (c) => {
-    return c.json({ task_types: config.task_types });
+    return c.json({ task_types: config.task_types, tags: config.tags });
   });
 
   /** Read raw config.jsonc content for the settings editor. */
@@ -116,12 +116,13 @@ export function createTaskRoutes(ctx: AppContext) {
       return c.json({ error: 'Only draft tasks can be sent' }, 400);
     }
 
-    // Allow updating prompt/priority/depends_on when sending
-    const body = await c.req.json<{ prompt?: string; priority?: string; depends_on?: string | null }>().catch(() => ({} as { prompt?: string; priority?: string; depends_on?: string | null }));
+    // Allow updating prompt/priority/depends_on/tags when sending
+    const body = await c.req.json<{ prompt?: string; priority?: string; depends_on?: string | null; tags?: string[] }>().catch(() => ({} as { prompt?: string; priority?: string; depends_on?: string | null; tags?: string[] }));
     const updateFields: Record<string, any> = { status: 'queued' };
     if (body.prompt?.trim()) updateFields.prompt = body.prompt.trim();
     if (body.priority) updateFields.priority = body.priority;
     if (body.depends_on !== undefined) updateFields.depends_on = body.depends_on;
+    if (Array.isArray(body.tags)) updateFields.tags = body.tags;
 
     const updated = queries.updateTask(id, updateFields);
     queries.createTaskEvent(id, 'sent', JSON.stringify({ previous: 'draft' }));

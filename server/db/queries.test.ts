@@ -18,6 +18,7 @@ const testConfig: HarnessConfig = {
   worktree_limit: 3,
   conversation_limit: 5,
   task_types: {},
+  tags: {},
   projects: [
     { name: 'test-project', repo_path: '/tmp/test', target_branch: 'main' },
   ],

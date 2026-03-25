@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue';
-import type { Project, CreateTaskInput } from '@shared/types';
+import { ref, provide, onMounted, onUnmounted } from 'vue';
+import type { Project, CreateTaskInput, TagConfig } from '@shared/types';
 import { api } from './api';
 import { useEvents } from './stores/useEvents';
 import { useOutbox } from './stores/useOutbox';
@@ -21,6 +21,9 @@ const showNewTask = ref(false);
 const showSettings = ref(false);
 const projects = ref<Project[]>([]);
 const taskTypes = ref<string[]>([]);
+const tagConfigs = ref<Record<string, TagConfig>>({});
+
+provide('tagConfigs', tagConfigs);
 
 function onKeydown(e: KeyboardEvent) {
   const tag = (e.target as HTMLElement)?.tagName;
@@ -42,6 +45,7 @@ async function refreshConfig() {
     api.projects.list().then((p) => (projects.value = p)),
   ]);
   taskTypes.value = Object.keys(configData.task_types || {});
+  tagConfigs.value = configData.tags || {};
 }
 
 async function handleCreateTask(input: CreateTaskInput) {
@@ -128,6 +132,7 @@ onUnmounted(() => {
       :projects="projects"
       :task-types="taskTypes"
       :existing-tasks="outbox.tasks"
+      :tag-configs="tagConfigs"
       @close="showNewTask = false"
       @create="handleCreateTask"
       @draft="handleDraftTask"
