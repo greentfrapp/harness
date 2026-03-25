@@ -187,10 +187,13 @@ async function handleFollowUp() {
 async function handleCheckout() {
   checkingOut.value = true;
   actionError.value = '';
+  isMergeError.value = false;
   try {
     await api.tasks.checkout(props.task.id);
   } catch (e) {
-    actionError.value = e instanceof Error ? e.message : 'Checkout failed';
+    const msg = e instanceof Error ? e.message : 'Checkout failed';
+    actionError.value = msg;
+    isMergeError.value = msg.toLowerCase().includes('checkout failed');
   } finally {
     checkingOut.value = false;
   }

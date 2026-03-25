@@ -224,13 +224,33 @@ function handleRetry(id: string) {
 
 const isTaskCheckedOut = computed(() => checkoutsStore.isCheckedOut(props.task.id));
 
+const collapsedCheckoutError = ref('');
+
 async function handleCollapsedCheckout(e: Event) {
   e.stopPropagation();
   collapsedCheckingOut.value = true;
+  collapsedCheckoutError.value = '';
   try {
     await api.tasks.checkout(props.task.id);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Checkout failed';
+    if (msg.toLowerCase().includes('checkout failed')) {
+      collapsedCheckoutError.value = msg;
+    }
   } finally {
     collapsedCheckingOut.value = false;
+  }
+}
+
+async function handleCollapsedCheckoutFix(e: Event) {
+  e.stopPropagation();
+  collapsedFixing.value = true;
+  try {
+    await api.tasks.fix(props.task.id);
+    collapsedCheckoutError.value = '';
+    emit('approve', props.task.id);
+  } finally {
+    collapsedFixing.value = false;
   }
 }
 
@@ -354,12 +374,12 @@ async function handleCollapsedReturn(e: Event) {
         <template v-if="actionsDisabled">
           <span class="text-xs text-zinc-500 italic" title="Another task in this repo is checked out">Locked</span>
         </template>
-        <template v-else-if="collapsedMergeError">
-          <span class="text-xs text-red-400 max-w-48 truncate" :title="collapsedMergeError">Merge failed</span>
+        <template v-else-if="collapsedMergeError || collapsedCheckoutError">
+          <span class="text-xs text-red-400 max-w-48 truncate" :title="collapsedMergeError || collapsedCheckoutError">{{ collapsedMergeError ? 'Merge failed' : 'Checkout failed' }}</span>
           <button
             class="px-2 py-1 text-xs font-medium rounded bg-yellow-900 hover:bg-yellow-800 text-yellow-300 transition-colors disabled:opacity-50"
             :disabled="collapsedFixing"
-            @click="handleCollapsedFix"
+            @click="collapsedMergeError ? handleCollapsedFix($event) : handleCollapsedCheckoutFix($event)"
           >
             {{ collapsedFixing ? 'Re-queuing...' : 'Fix' }}
           </button>
@@ -410,6 +430,16 @@ async function handleCollapsedReturn(e: Event) {
       <div v-if="isError" class="flex items-center gap-1 shrink-0" @click.stop>
         <template v-if="actionsDisabled">
           <span class="text-xs text-zinc-500 italic" title="Another task in this repo is checked out">Locked</span>
+        </template>
+        <template v-else-if="collapsedCheckoutError">
+          <span class="text-xs text-red-400 max-w-48 truncate" :title="collapsedCheckoutError">Checkout failed</span>
+          <button
+            class="px-2 py-1 text-xs font-medium rounded bg-yellow-900 hover:bg-yellow-800 text-yellow-300 transition-colors disabled:opacity-50"
+            :disabled="collapsedFixing"
+            @click="handleCollapsedCheckoutFix"
+          >
+            {{ collapsedFixing ? 'Re-queuing...' : 'Fix' }}
+          </button>
         </template>
         <template v-else>
           <button
