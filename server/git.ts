@@ -108,6 +108,35 @@ export function getDiffStats(
   }
 }
 
+/** Get the full diff of uncommitted changes in a worktree (staged + unstaged vs HEAD). */
+export function getUncommittedDiff(worktreePath: string): string {
+  if (!fs.existsSync(worktreePath)) return '';
+  try {
+    return execSync('git diff HEAD', {
+      cwd: worktreePath,
+      encoding: 'utf-8',
+      maxBuffer: 10 * 1024 * 1024,
+    });
+  } catch (err) {
+    serverLog.warn(`getUncommittedDiff failed for ${worktreePath}: ${err instanceof Error ? err.message : String(err)}`);
+    return '';
+  }
+}
+
+/** Get a short diff summary of uncommitted changes in a worktree. */
+export function getUncommittedDiffStats(worktreePath: string): string {
+  if (!fs.existsSync(worktreePath)) return '';
+  try {
+    return execSync('git diff --stat HEAD', {
+      cwd: worktreePath,
+      encoding: 'utf-8',
+    }).trim();
+  } catch (err) {
+    serverLog.warn(`getUncommittedDiffStats failed for ${worktreePath}: ${err instanceof Error ? err.message : String(err)}`);
+    return '';
+  }
+}
+
 /** Merge a branch into the target branch using a temporary worktree.
  *  This avoids touching the main repo's working tree, so uncommitted
  *  changes in the user's checkout won't block the merge. */

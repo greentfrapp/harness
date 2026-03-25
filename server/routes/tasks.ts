@@ -840,6 +840,7 @@ export function createTaskRoutes(ctx: AppContext) {
 
     let diff = '';
     let stats = '';
+    let uncommitted = false;
 
     // Only attempt live diff if the branch still exists
     if (task.branch_name && git.branchExists(project.repo_path, task.branch_name)) {
@@ -864,7 +865,17 @@ export function createTaskRoutes(ctx: AppContext) {
     if (!diff && task.diff_full) diff = task.diff_full;
     if (!stats && task.diff_summary) stats = task.diff_summary;
 
-    return c.json({ diff, stats });
+    // If still no committed diff, check for uncommitted changes in the worktree
+    if (!diff && task.worktree_path) {
+      const uncommittedDiff = git.getUncommittedDiff(task.worktree_path);
+      if (uncommittedDiff) {
+        diff = uncommittedDiff;
+        stats = git.getUncommittedDiffStats(task.worktree_path);
+        uncommitted = true;
+      }
+    }
+
+    return c.json({ diff, stats, uncommitted });
   });
 
   app.get('/tasks/:id/events', (c) => {

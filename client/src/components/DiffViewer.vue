@@ -8,11 +8,15 @@ const props = defineProps<{
   taskId: string;
 }>();
 
+const emit = defineEmits<{ revised: [] }>();
+
 const diffText = ref('');
 const stats = ref('');
 const loading = ref(true);
 const error = ref('');
 const activeFileIndex = ref(0);
+const uncommitted = ref(false);
+const requesting = ref(false);
 
 interface FileDiff {
   fileName: string;
@@ -28,6 +32,7 @@ onMounted(async () => {
     const data = await api.tasks.diff(props.taskId);
     diffText.value = data.diff;
     stats.value = data.stats;
+    uncommitted.value = !!data.uncommitted;
   } catch (e) {
     error.value = e instanceof Error ? e.message : 'Failed to load diff';
   } finally {
@@ -103,12 +108,36 @@ function shortName(fullPath: string): string {
   const parts = fullPath.split('/');
   return parts[parts.length - 1];
 }
+
+async function requestCommit() {
+  requesting.value = true;
+  try {
+    await api.tasks.revise(props.taskId, 'Please commit all your changes.');
+    emit('revised');
+  } catch {
+    // Error will propagate via SSE
+  } finally {
+    requesting.value = false;
+  }
+}
 </script>
 
 <template>
   <div class="space-y-1">
     <!-- Stats summary -->
     <div v-if="stats" class="text-xs text-zinc-500 font-mono whitespace-pre">{{ stats }}</div>
+
+    <!-- Uncommitted changes warning -->
+    <div v-if="uncommitted" class="flex items-center justify-between gap-3 px-3 py-2 rounded border border-amber-700/50 bg-amber-950/30 text-sm">
+      <span class="text-amber-300">These changes are uncommitted in the worktree.</span>
+      <button
+        class="shrink-0 px-3 py-1 rounded bg-purple-900 hover:bg-purple-800 text-purple-300 text-xs font-medium transition-colors disabled:opacity-50"
+        :disabled="requesting"
+        @click="requestCommit"
+      >
+        {{ requesting ? 'Requesting...' : 'Request commit' }}
+      </button>
+    </div>
 
     <!-- Loading -->
     <div v-if="loading" class="text-sm text-zinc-500 py-4 text-center">Loading diff...</div>
