@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue';
 import { marked } from 'marked';
+import { api } from '../api';
 
 const props = defineProps<{
   taskId: string;
@@ -64,8 +65,28 @@ function handleProgress(event: CustomEvent<{ task_id: string; message: StreamMes
   });
 }
 
-onMounted(() => {
+onMounted(async () => {
   window.addEventListener('task:progress', handleProgress as EventListener);
+
+  // Fetch buffered progress messages for tasks already in progress
+  try {
+    const { messages: buffered } = await api.tasks.progress(props.taskId);
+    if (buffered.length > 0) {
+      // Prepend buffered messages (avoid duplicates with any that arrived via SSE)
+      const existing = new Set(messages.value.map((m) => JSON.stringify(m)));
+      for (const msg of buffered) {
+        const key = JSON.stringify(msg);
+        if (!existing.has(key)) {
+          messages.value.push(msg as StreamMessage);
+        }
+      }
+      nextTick(() => {
+        containerRef.value?.scrollTo({ top: containerRef.value.scrollHeight });
+      });
+    }
+  } catch {
+    // Ignore fetch errors — live stream still works
+  }
 });
 
 onUnmounted(() => {
