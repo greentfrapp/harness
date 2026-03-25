@@ -230,6 +230,54 @@ export function createTaskRoutes(ctx: AppContext) {
     return c.json(updated);
   });
 
+  /** Fix: re-queue a ready task whose merge failed so the agent can resolve conflicts on a fresh worktree. */
+  app.post('/tasks/:id/fix', (c) => {
+    const id = c.req.param('id');
+    const task = queries.getTaskById(id);
+    if (!task) return c.json({ error: 'Task not found' }, 404);
+    if (task.status !== 'ready') {
+      return c.json({ error: 'Only ready tasks can be fixed' }, 400);
+    }
+
+    const project = queries.getProjectById(task.project_id);
+    if (!project) return c.json({ error: 'Project not found' }, 404);
+
+    // Clean up old worktree and branch
+    if (task.worktree_path) {
+      serverLog.info(`Removing worktree ${task.worktree_path}`, id);
+      git.removeWorktree(project.repo_path, task.worktree_path);
+    }
+    if (task.branch_name) {
+      serverLog.info(`Deleting branch ${task.branch_name}`, id);
+      git.deleteBranch(project.repo_path, task.branch_name);
+    }
+
+    // Augment prompt so the agent knows to resolve merge conflicts
+    const fixPrefix = `[MERGE CONFLICT FIX] The previous attempt completed successfully but failed to merge into ${project.target_branch} due to merge conflicts. Please redo the work on a fresh worktree, ensuring compatibility with the latest ${project.target_branch}.\n\nOriginal task:\n`;
+    const augmentedPrompt = task.prompt.startsWith('[MERGE CONFLICT FIX]')
+      ? task.prompt
+      : fixPrefix + task.prompt;
+
+    const updated = queries.updateTask(id, {
+      status: 'queued',
+      prompt: augmentedPrompt,
+      error_message: null,
+      agent_session_data: null,
+      agent_summary: null,
+      diff_summary: null,
+      worktree_path: null,
+      branch_name: null,
+    });
+    queries.createTaskEvent(id, 'fix_merge_conflict', null);
+    serverLog.info(`Task re-queued to fix merge conflict`, id);
+
+    taskQueue.recomputePositions(task.project_id);
+    sseManager.broadcast('task:updated', updated);
+    dispatcher.tryDispatch();
+
+    return c.json(updated);
+  });
+
   /** Retry: clean up old worktree/branch, re-queue for a fresh run. */
   app.post('/tasks/:id/retry', (c) => {
     const id = c.req.param('id');
