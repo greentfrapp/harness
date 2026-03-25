@@ -115,7 +115,7 @@ export function getRepoStatus(repoPath: string): { dirty: boolean; fileCount: nu
       cwd: repoPath,
       encoding: 'utf-8',
     });
-    const lines = output.split('\n').filter((l) => l.trim().length > 0);
+    const lines = output.split('\n').filter((l) => l.trim().length > 0 && !l.startsWith('?? '));
     return { dirty: lines.length > 0, fileCount: lines.length };
   } catch {
     return { dirty: false, fileCount: 0 };
