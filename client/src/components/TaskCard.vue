@@ -70,6 +70,10 @@ const isHeld = computed(() =>
   props.context === 'inbox' && props.task.status === 'held',
 );
 
+const hasNoChanges = computed(() =>
+  props.task.status === 'ready' && !props.task.diff_full && !props.task.diff_summary,
+);
+
 const collapsedApproving = ref(false);
 const collapsedRejecting = ref(false);
 const collapsedRetrying = ref(false);
@@ -412,6 +416,32 @@ async function handleCollapsedReturn(e: Event) {
             @click="collapsedMergeError ? handleCollapsedFix($event) : handleCollapsedCheckoutFix($event)"
           >
             {{ collapsedFixing ? 'Re-queuing...' : 'Fix' }}
+          </button>
+        </template>
+        <!-- No changes: show Defer and Delete instead of Approve/Reject/Checkout -->
+        <template v-else-if="hasNoChanges">
+          <button
+            class="px-2 py-1 text-xs font-medium rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-400 transition-colors"
+            @click="handleCollapsedDefer"
+          >
+            Defer
+          </button>
+          <button
+            class="px-2 py-1 text-xs font-medium rounded transition-colors disabled:opacity-50"
+            :class="confirmingDelete
+              ? 'bg-red-800 hover:bg-red-700 text-red-200'
+              : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-500 hover:text-red-400'"
+            :disabled="deleting"
+            @click="handleDelete"
+          >
+            {{ deleting ? 'Deleting...' : confirmingDelete ? 'Confirm' : 'Delete' }}
+          </button>
+          <button
+            v-if="confirmingDelete && !deleting"
+            class="px-2 py-1 text-xs font-medium rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-500 transition-colors"
+            @click="cancelDelete"
+          >
+            ✕
           </button>
         </template>
         <template v-else>

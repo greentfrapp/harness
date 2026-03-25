@@ -176,6 +176,10 @@ const isTerminal = computed(() =>
   ['approved', 'rejected', 'cancelled'].includes(props.task.status),
 );
 
+const hasNoChanges = computed(() =>
+  props.task.status === 'ready' && !props.task.diff_full && !props.task.diff_summary,
+);
+
 async function handleDelete() {
   if (!confirmingDelete.value) {
     confirmingDelete.value = true;
@@ -506,6 +510,39 @@ function formatTime(ts: number): string {
         <span v-if="actionsDisabled" class="text-xs text-zinc-500 italic self-center" title="Return the checked-out task first">
           Actions locked — another task in this repo is checked out
         </span>
+        <!-- No changes: show Revise, Defer, and Delete instead of Approve/Reject/Checkout -->
+        <template v-else-if="hasNoChanges">
+          <button
+            class="px-3 py-1.5 text-xs font-medium rounded bg-purple-900 hover:bg-purple-800 text-purple-300 transition-colors"
+            @click="showRevise = true"
+          >
+            Revise
+          </button>
+          <button
+            class="px-3 py-1.5 text-xs font-medium rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-400 transition-colors"
+            @click="emit('defer', task.id)"
+          >
+            Defer
+          </button>
+          <span class="flex-1" />
+          <button
+            class="px-3 py-1.5 text-xs font-medium rounded transition-colors disabled:opacity-50"
+            :class="confirmingDelete
+              ? 'bg-red-800 hover:bg-red-700 text-red-200'
+              : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-500 hover:text-red-400'"
+            :disabled="deleting"
+            @click="handleDelete"
+          >
+            {{ deleting ? 'Deleting...' : confirmingDelete ? 'Confirm Delete' : 'Delete' }}
+          </button>
+          <button
+            v-if="confirmingDelete && !deleting"
+            class="px-3 py-1.5 text-xs font-medium rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-500 transition-colors"
+            @click="confirmingDelete = false"
+          >
+            Cancel
+          </button>
+        </template>
         <template v-else>
           <button
             class="px-3 py-1.5 text-xs font-medium rounded bg-green-900 hover:bg-green-800 text-green-300 transition-colors disabled:opacity-50"
@@ -528,7 +565,7 @@ function formatTime(ts: number): string {
             Defer
           </button>
         </template>
-        <template v-if="task.branch_name">
+        <template v-if="task.branch_name && !hasNoChanges">
           <template v-if="isTaskCheckedOut">
             <button
               class="px-3 py-1.5 text-xs font-medium rounded bg-amber-900 hover:bg-amber-800 text-amber-300 transition-colors disabled:opacity-50"
