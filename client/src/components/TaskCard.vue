@@ -103,8 +103,19 @@ const elapsed = computed(() => {
   return `${hours}h ${minutes % 60}m`;
 });
 
-const truncatedPrompt = computed(() => {
+const isFix = computed(() => props.task.prompt.startsWith('[MERGE CONFLICT FIX]'));
+
+const originalPrompt = computed(() => {
   const text = props.task.prompt;
+  if (!isFix.value) return text;
+  // Strip the "[MERGE CONFLICT FIX] ... Original task:\n" prefix to show the real prompt
+  const marker = 'Original task:\n';
+  const idx = text.indexOf(marker);
+  return idx !== -1 ? text.slice(idx + marker.length) : text;
+});
+
+const truncatedPrompt = computed(() => {
+  const text = originalPrompt.value;
   return text.length > 120 ? text.slice(0, 120) + '...' : text;
 });
 
@@ -238,6 +249,12 @@ function handleRetry(id: string) {
             class="text-xs font-medium px-1.5 py-0.5 rounded bg-blue-900 text-blue-300"
           >
             follow-up
+          </span>
+          <span
+            v-if="isFix"
+            class="text-xs font-medium px-1.5 py-0.5 rounded bg-yellow-900 text-yellow-300"
+          >
+            Fix
           </span>
           <span
             class="text-xs font-medium px-1.5 py-0.5 rounded"
