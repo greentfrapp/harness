@@ -3,6 +3,7 @@ import { ref, nextTick, onMounted, computed } from 'vue';
 import type { Task, TaskEvent } from '@shared/types';
 import { marked } from 'marked';
 import { api } from '../api';
+import { useCheckouts } from '../stores/useCheckouts';
 import SessionStream from './SessionStream.vue';
 import DiffViewer from './DiffViewer.vue';
 
@@ -39,6 +40,11 @@ const followUpTextarea = ref<HTMLTextAreaElement | null>(null);
 const revisePrompt = ref('');
 const revising = ref(false);
 const showRevise = ref(false);
+const checkingOut = ref(false);
+const returning = ref(false);
+const checkoutsStore = useCheckouts();
+
+const isTaskCheckedOut = computed(() => checkoutsStore.isCheckedOut(props.task.id));
 
 onMounted(async () => {
   try {
@@ -174,6 +180,30 @@ async function handleFollowUp() {
     actionError.value = e instanceof Error ? e.message : 'Follow-up failed';
   } finally {
     followingUp.value = false;
+  }
+}
+
+async function handleCheckout() {
+  checkingOut.value = true;
+  actionError.value = '';
+  try {
+    await api.tasks.checkout(props.task.id);
+  } catch (e) {
+    actionError.value = e instanceof Error ? e.message : 'Checkout failed';
+  } finally {
+    checkingOut.value = false;
+  }
+}
+
+async function handleReturn() {
+  returning.value = true;
+  actionError.value = '';
+  try {
+    await api.tasks.return_(props.task.id);
+  } catch (e) {
+    actionError.value = e instanceof Error ? e.message : 'Return failed';
+  } finally {
+    returning.value = false;
   }
 }
 
@@ -397,6 +427,24 @@ function formatTime(ts: number): string {
         >
           Defer
         </button>
+        <template v-if="task.branch_name">
+          <button
+            v-if="isTaskCheckedOut"
+            class="px-3 py-1.5 text-xs font-medium rounded bg-amber-900 hover:bg-amber-800 text-amber-300 transition-colors disabled:opacity-50"
+            :disabled="returning"
+            @click="handleReturn"
+          >
+            {{ returning ? 'Returning...' : 'Return' }}
+          </button>
+          <button
+            v-else
+            class="px-3 py-1.5 text-xs font-medium rounded bg-teal-900 hover:bg-teal-800 text-teal-300 transition-colors disabled:opacity-50"
+            :disabled="checkingOut"
+            @click="handleCheckout"
+          >
+            {{ checkingOut ? 'Checking out...' : 'Checkout' }}
+          </button>
+        </template>
       </template>
       <!-- Delete button for terminal-state tasks -->
       <template v-if="isTerminal">
