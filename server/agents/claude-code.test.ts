@@ -75,6 +75,31 @@ describe('ClaudeCodeAdapter', () => {
       expect(args[idx + 1]).toBe('Read,Glob,Grep,WebSearch,WebFetch');
       expect(args).not.toContain('--permission-mode');
     });
+
+    it('uses permissionMode from config when provided', () => {
+      const args = adapter.buildArgs({
+        prompt: 'test',
+        systemPrompt: null,
+        usesWorktree: true,
+        permissionMode: 'plan',
+      });
+      const idx = args.indexOf('--permission-mode');
+      expect(idx).toBeGreaterThan(-1);
+      expect(args[idx + 1]).toBe('plan');
+    });
+
+    it('permissionMode overrides default for non-worktree tasks', () => {
+      const args = adapter.buildArgs({
+        prompt: 'test',
+        systemPrompt: null,
+        usesWorktree: false,
+        permissionMode: 'bypassPermissions',
+      });
+      const idx = args.indexOf('--permission-mode');
+      expect(idx).toBeGreaterThan(-1);
+      expect(args[idx + 1]).toBe('bypassPermissions');
+      expect(args).not.toContain('--allowedTools');
+    });
   });
 
   describe('buildResumeArgs', () => {
@@ -123,6 +148,18 @@ describe('ClaudeCodeAdapter', () => {
       });
       expect(args).toContain('--allowedTools');
       expect(args).not.toContain('--permission-mode');
+    });
+
+    it('uses permissionMode from config when provided on resume', () => {
+      const args = adapter.buildResumeArgs({
+        prompt: 'continue',
+        sessionId: 'sess-123',
+        usesWorktree: true,
+        permissionMode: 'plan',
+      });
+      const idx = args.indexOf('--permission-mode');
+      expect(idx).toBeGreaterThan(-1);
+      expect(args[idx + 1]).toBe('plan');
     });
   });
 

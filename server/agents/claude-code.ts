@@ -27,6 +27,7 @@ export class ClaudeCodeAdapter implements AgentAdapter {
     prompt: string;
     systemPrompt: string | null;
     usesWorktree: boolean;
+    permissionMode?: string;
   }): string[] {
     const args: string[] = ['--output-format', 'stream-json', '--verbose'];
 
@@ -34,13 +35,7 @@ export class ClaudeCodeAdapter implements AgentAdapter {
       args.push('--system-prompt', opts.systemPrompt);
     }
 
-    if (opts.usesWorktree) {
-      // Do tasks run in isolated worktrees — grant full permissions
-      args.push('--permission-mode', 'bypassPermissions');
-    } else {
-      // Discuss tasks / plan mode — read-only
-      args.push('--allowedTools', 'Read,Glob,Grep,WebSearch,WebFetch');
-    }
+    this.applyPermissionArgs(args, opts.usesWorktree, opts.permissionMode);
 
     // The prompt is passed via -p for non-interactive mode
     args.push('-p', opts.prompt);
@@ -48,18 +43,28 @@ export class ClaudeCodeAdapter implements AgentAdapter {
     return args;
   }
 
-  buildResumeArgs(opts: { prompt: string; sessionId: string; usesWorktree: boolean }): string[] {
+  buildResumeArgs(opts: { prompt: string; sessionId: string; usesWorktree: boolean; permissionMode?: string }): string[] {
     const args: string[] = ['--output-format', 'stream-json', '--verbose'];
 
-    if (opts.usesWorktree) {
-      args.push('--permission-mode', 'bypassPermissions');
-    } else {
-      args.push('--allowedTools', 'Read,Glob,Grep,WebSearch,WebFetch');
-    }
+    this.applyPermissionArgs(args, opts.usesWorktree, opts.permissionMode);
 
     args.push('--resume', opts.sessionId);
     args.push('-p', opts.prompt);
     return args;
+  }
+
+  /** Apply permission flags based on config override or default behavior. */
+  private applyPermissionArgs(args: string[], usesWorktree: boolean, permissionMode?: string): void {
+    if (permissionMode) {
+      // Explicit config override
+      args.push('--permission-mode', permissionMode);
+    } else if (usesWorktree) {
+      // Default: Do tasks in isolated worktrees get full permissions
+      args.push('--permission-mode', 'bypassPermissions');
+    } else {
+      // Default: Discuss tasks / plan mode — read-only
+      args.push('--allowedTools', 'Read,Glob,Grep,WebSearch,WebFetch');
+    }
   }
 
   parseMessage(line: string): AgentProgressEvent | null {

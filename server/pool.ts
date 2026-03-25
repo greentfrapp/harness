@@ -96,6 +96,11 @@ export class AgentPool {
       });
     }
 
+    // Resolve task type config for system prompt and permission mode
+    const taskTypeConfig = this.deps.config.task_types[task.type] ??
+      this.deps.config.task_types['do'];
+    const permissionMode = taskTypeConfig?.permission_mode;
+
     // Check if this task has a pre-populated session ID (e.g. follow-up task)
     const existingSession = parseSessionData(task.agent_session_data);
     if (existingSession?.session_id) {
@@ -105,13 +110,12 @@ export class AgentPool {
         systemPrompt: null,
         usesWorktree: true,
         resumeSessionId: existingSession.session_id,
+        permissionMode,
       });
       return;
     }
 
     // Build system prompt from config template
-    const taskTypeConfig = this.deps.config.task_types[task.type] ??
-      this.deps.config.task_types['do'];
     const systemPrompt = taskTypeConfig
       ? taskTypeConfig.prompt_template.replace('{user_prompt}', task.prompt)
       : task.prompt;
@@ -122,6 +126,7 @@ export class AgentPool {
       systemPrompt,
       usesWorktree: true,
       resumeSessionId: null,
+      permissionMode,
     });
   }
 
@@ -129,6 +134,7 @@ export class AgentPool {
   async dispatchDiscussTask(task: Task, project: Project): Promise<void> {
     const taskTypeConfig = this.deps.config.task_types[task.type] ??
       this.deps.config.task_types['discuss'];
+    const permissionMode = taskTypeConfig?.permission_mode;
     const systemPrompt = taskTypeConfig
       ? taskTypeConfig.prompt_template.replace('{user_prompt}', task.prompt)
       : task.prompt;
@@ -138,6 +144,7 @@ export class AgentPool {
       systemPrompt,
       usesWorktree: false,
       resumeSessionId: null,
+      permissionMode,
     });
   }
 
@@ -148,12 +155,15 @@ export class AgentPool {
       throw new Error(`Cannot retry task ${task.id}: no session ID`);
     }
 
+    const taskTypeConfig = this.deps.config.task_types[task.type];
+    const permissionMode = taskTypeConfig?.permission_mode;
     const cwd = task.worktree_path ?? project.repo_path;
     this.spawnAgent(task, project, {
       cwd,
       systemPrompt: null,
       usesWorktree: !!task.worktree_path,
       resumeSessionId: sessionData.session_id,
+      permissionMode,
     });
   }
 
@@ -197,6 +207,7 @@ export class AgentPool {
       systemPrompt: string | null;
       usesWorktree: boolean;
       resumeSessionId: string | null;
+      permissionMode?: string;
     },
   ): void {
     const adapter = this.deps.agentRegistry.getOrDefault(task.agent_type);
@@ -206,11 +217,13 @@ export class AgentPool {
           prompt: task.prompt,
           sessionId: opts.resumeSessionId,
           usesWorktree: opts.usesWorktree,
+          permissionMode: opts.permissionMode,
         })
       : adapter.buildArgs({
           prompt: task.prompt,
           systemPrompt: opts.systemPrompt,
           usesWorktree: opts.usesWorktree,
+          permissionMode: opts.permissionMode,
         });
 
     // Append extra_args from config if defined
