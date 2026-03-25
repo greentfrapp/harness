@@ -302,7 +302,8 @@ async function handleCollapsedReturn(e: Event) {
 <template>
   <div class="group rounded-lg border overflow-hidden" :class="[
     isCheckedOut ? 'border-teal-500/60 bg-teal-950/30 ring-1 ring-teal-500/30' :
-    task.status === 'approved' ? 'border-green-900/50 bg-zinc-900/60 opacity-75' : 'border-zinc-800 bg-zinc-900',
+    task.status === 'approved' ? 'border-green-900/50 bg-zinc-900/60 opacity-75' :
+    task.status === 'rejected' ? 'border-red-900/50 bg-zinc-900/60 opacity-75' : 'border-zinc-800 bg-zinc-900',
     selected ? 'ring-1 ring-zinc-500/60 border-zinc-500/40' : ''
   ]">
     <!-- Summary row -->
@@ -358,6 +359,12 @@ async function handleCollapsedReturn(e: Event) {
             class="text-xs font-medium px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400"
           >
             Accepted
+          </span>
+          <span
+            v-if="task.status === 'rejected'"
+            class="text-xs font-medium px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400"
+          >
+            Rejected
           </span>
           <span
             v-if="task.parent_task_id"
