@@ -27,16 +27,34 @@ const messages = ref<StreamMessage[]>([]);
 const containerRef = ref<HTMLElement | null>(null);
 const collapsedToolResults = ref<Set<number>>(new Set());
 
-/** Metadata-only message types and fields to exclude from the prettified view. */
+/** Metadata-only fields to exclude from the prettified view. */
 const METADATA_FIELDS = new Set([
   'cost_usd', 'duration_ms', 'duration_api_ms', 'session_id',
   'model', 'stop_reason', 'cwd', 'num_turns',
 ]);
 
+/**
+ * Extract displayable text from a message's content field.
+ * Claude Code may send content as:
+ *   - a plain string
+ *   - an array of content blocks: [{type:"text", text:"..."}]
+ *   - an object (tool input)
+ */
+function extractText(content: unknown): string {
+  if (typeof content === 'string') return content;
+  if (Array.isArray(content)) {
+    return content
+      .filter((b: any) => b && (b.type === 'text' || b.text))
+      .map((b: any) => b.text ?? '')
+      .join('');
+  }
+  return '';
+}
+
 /** Determine if a message has meaningful content worth displaying. */
 function hasDisplayableContent(msg: StreamMessage): boolean {
   // Always show these types if they have content
-  if (msg.type === 'assistant') return !!(msg.message || msg.content);
+  if (msg.type === 'assistant') return !!(msg.message || extractText(msg.content));
   if (msg.type === 'tool_use') return true;
   if (msg.type === 'tool_result') return msg.content !== undefined;
   if (msg.type === 'result') return !!msg.result;
@@ -93,14 +111,20 @@ onUnmounted(() => {
   window.removeEventListener('task:progress', handleProgress as EventListener);
 });
 
-/** Render assistant / result text as markdown HTML. */
+/** Render text as markdown HTML. */
 function renderMarkdown(text: string): string {
   return marked.parse(text, { async: false }) as string;
 }
 
-/** Get a human-readable tool name (e.g. "Read" from "Read", "Bash" from "Bash"). */
+/** Get a human-readable tool name. */
 function formatToolName(tool: string | undefined): string {
   return tool ?? 'Unknown Tool';
+}
+
+/** Get displayable text for an assistant message (handles string and array content). */
+function getAssistantText(msg: StreamMessage): string {
+  if (msg.message) return msg.message;
+  return extractText(msg.content);
 }
 
 /** Format tool input for display. */
@@ -181,14 +205,9 @@ function isToolResultLong(msg: StreamMessage): boolean {
           <div class="flex items-start gap-2">
             <span class="shrink-0 mt-0.5 text-blue-400">●</span>
             <div
-              v-if="msg.message"
+              v-if="getAssistantText(msg)"
               class="prose prose-invert prose-sm max-w-none text-gray-200"
-              v-html="renderMarkdown(msg.message)"
-            />
-            <div
-              v-else-if="typeof msg.content === 'string'"
-              class="prose prose-invert prose-sm max-w-none text-gray-200"
-              v-html="renderMarkdown(msg.content)"
+              v-html="renderMarkdown(getAssistantText(msg))"
             />
           </div>
         </div>
@@ -251,6 +270,14 @@ function isToolResultLong(msg: StreamMessage): boolean {
           <div class="flex items-start gap-2 text-red-400 bg-red-950/30 rounded px-2 py-1.5">
             <span class="shrink-0 mt-0.5">✗</span>
             <span class="text-sm">{{ msg.message || formatToolResult(msg) || 'An error occurred' }}</span>
+          </div>
+        </div>
+
+        <!-- ── Fallback for unrecognized message types ── -->
+        <div v-else class="session-unknown">
+          <div class="flex items-start gap-2 text-gray-500 text-xs">
+            <span class="shrink-0 mt-0.5">…</span>
+            <span class="text-gray-400">{{ msg.type }}: {{ msg.message || extractText(msg.content) || '' }}</span>
           </div>
         </div>
       </template>
