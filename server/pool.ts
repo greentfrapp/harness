@@ -284,6 +284,7 @@ export class AgentPool {
     let buffer = '';
     let lastSummary = '';
     let lastToolName = '';
+    let lastAssistantText = '';
 
     proc.stdout?.on('data', (chunk: Buffer) => {
       buffer += chunk.toString();
@@ -303,6 +304,9 @@ export class AgentPool {
           for (const block of raw.message.content) {
             if (block.type === 'tool_use' && block.name) {
               lastToolName = block.name;
+            }
+            if (block.type === 'text' && block.text) {
+              lastAssistantText = block.text;
             }
           }
         }
@@ -343,6 +347,19 @@ export class AgentPool {
 
     // Handle process exit
     proc.on('close', (code) => {
+      // Flush remaining buffer — the result event is often the last line
+      // and may not end with \n, leaving it stuck in the buffer
+      if (buffer.trim()) {
+        const event = adapter.parseMessage(buffer);
+        if (event) {
+          if (event.type === 'result' && event.summary) {
+            lastSummary = event.summary;
+          }
+          this.handleAgentEvent(task.id, agent, event);
+        }
+        buffer = '';
+      }
+
       this.agents.delete(task.id);
       this.progressBuffers.delete(task.id);
 
@@ -350,7 +367,7 @@ export class AgentPool {
       if (!currentTask || currentTask.status === 'cancelled' || currentTask.status === 'permission') return;
 
       if (code === 0) {
-        this.handleAgentSuccess(task.id, project, lastSummary);
+        this.handleAgentSuccess(task.id, project, lastSummary || lastAssistantText);
       } else {
         this.handleAgentFailure(
           task.id,
