@@ -422,7 +422,7 @@ subtask_proposals (
 - **No conversation storage**: The agent manages its own session files. Harness only stores `agent_session_data` to resume. This avoids duplicating potentially large conversation histories. If a future agent doesn't handle its own persistence, conversation data can be stored in `task_events` as `data` payloads.
 - **Agent-agnostic fields**: `agent_type` identifies which adapter to use. `agent_session_data` is a JSON blob each adapter interprets (CC stores a session ID, Codex might store a thread ID, etc.).
 - **`subtask_proposals` as a separate table**: Clean separation from the task lifecycle. Links back to both the source Discuss task and the spawned Do task (if approved).
-- **Diff storage**: Only the summary (files changed, line counts) is stored in SQLite. The full diff is read from the git worktree on demand.
+- **Diff storage**: Only the summary (files changed, line counts) is stored in SQLite. The full diff is read from the git worktree on demand. If the committed diff is empty but the worktree has uncommitted changes (`git diff HEAD` in the worktree), those are returned with an `uncommitted` flag so the UI can prompt the user to request a commit.
 - **`parent_task_id` for lineage**: Follow-up tasks link to their parent via `parent_task_id` (separate from `depends_on`). This is purely for provenance/UI display — not a dispatch dependency. When a parent is deleted/rejected/cancelled, `clearParentReferences()` nulls out both `depends_on` and `parent_task_id` on children.
 - **Custom types**: The `type` column accepts any string, not just 'do'/'discuss'. Task type definitions (including whether a worktree is needed) live in `config.jsonc`.
 
@@ -752,6 +752,7 @@ These features were implemented during development but weren't tracked in the or
 - **Stream filters**: `server/streamFilters.ts` filters Claude Code `--json` output to extract displayable content (assistant messages, tool calls, results) from metadata noise.
 - **Settings modal**: `SettingsModal.vue` with JSONC editor, real-time parse error detection, and hot-reload via `PUT /api/config/raw`.
 - **Permission handling**: When an agent emits a `permission_request` event, `handleAgentEvent()` kills the process, sets status to `permission` (with tool name in `error_message`), and pushes to inbox. `POST /tasks/:id/grant-permission` re-queues preserving session/worktree so the agent resumes with `--permission-mode bypassPermissions`. `buildResumeArgs` now mirrors the permission logic from `buildArgs`, ensuring resumed tasks (retries, revises, fixes, follow-ups) retain their permission mode — this was the root cause of permission requests appearing in the first place.
+- **Uncommitted changes detection**: When a task's committed diff is empty (agent modified files but didn't commit), the `/tasks/:id/diff` endpoint falls back to `git diff HEAD` in the worktree to detect uncommitted changes. `DiffViewer.vue` shows these with an amber warning banner and a "Request commit" button that uses the revise flow to re-queue the task, asking the agent to commit its changes. `server/git.ts` exposes `getUncommittedDiff()` and `getUncommittedDiffStats()` for this fallback.
 
 ---
 
