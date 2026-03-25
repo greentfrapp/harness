@@ -93,11 +93,11 @@ function handleMaximizeCancel(id: string) {
 
 <template>
   <div class="flex flex-col h-full overflow-hidden">
-    <div class="px-4 h-12 border-b border-zinc-800 flex items-center justify-between">
+    <div class="px-4 h-12 border-b border-gray-800 flex items-center justify-between">
       <div class="flex items-center gap-2">
         <template v-if="hasSelection">
           <template v-if="confirmingBulkDelete">
-            <span class="text-xs text-zinc-400">Delete {{ selectedCount }} task{{ selectedCount > 1 ? 's' : '' }}?</span>
+            <span class="text-xs text-gray-400">Delete {{ selectedCount }} task{{ selectedCount > 1 ? 's' : '' }}?</span>
             <button
               class="px-2 py-1 text-xs font-medium rounded bg-red-800 hover:bg-red-700 text-red-200 transition-colors disabled:opacity-50"
               :disabled="bulkDeleting"
@@ -106,7 +106,7 @@ function handleMaximizeCancel(id: string) {
               {{ bulkDeleting ? 'Deleting...' : 'Confirm' }}
             </button>
             <button
-              class="px-2 py-1 text-xs font-medium rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-400 transition-colors"
+              class="px-2 py-1 text-xs font-medium rounded bg-gray-800 hover:bg-gray-700 text-gray-400 transition-colors"
               @click="cancelBulkDelete()"
             >
               Cancel
@@ -122,12 +122,12 @@ function handleMaximizeCancel(id: string) {
           </template>
         </template>
         <template v-else>
-          <h2 class="text-sm font-semibold text-zinc-300 uppercase tracking-wider">
+          <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wider">
             Outbox
           </h2>
           <span
             v-if="outbox.sortedTasks.length"
-            class="text-xs bg-zinc-800 text-zinc-400 px-2 py-0.5 rounded-full"
+            class="text-xs bg-gray-800 text-gray-400 px-2 py-0.5 rounded-full"
           >
             {{ outbox.sortedTasks.length }}
           </span>
@@ -136,14 +136,14 @@ function handleMaximizeCancel(id: string) {
       <div v-if="outbox.sortedTasks.length" class="flex items-center gap-2 text-xs">
         <template v-if="hasSelection">
           <button
-            class="text-zinc-400 hover:text-zinc-200 transition-colors"
+            class="text-gray-400 hover:text-gray-200 transition-colors"
             @click="toggleSelectAll()"
           >
             {{ allSelected ? 'Deselect All' : 'Select All' }}
           </button>
-          <span class="text-zinc-500">{{ selectedCount }} selected</span>
+          <span class="text-gray-500">{{ selectedCount }} selected</span>
           <button
-            class="text-zinc-500 hover:text-zinc-300 transition-colors"
+            class="text-gray-500 hover:text-gray-300 transition-colors"
             @click="clearSelection()"
           >
             Cancel
@@ -151,13 +151,13 @@ function handleMaximizeCancel(id: string) {
         </template>
         <template v-else>
           <template v-if="confirming">
-            <span class="text-zinc-400">Clear all?</span>
+            <span class="text-gray-400">Clear all?</span>
             <button class="text-red-400 hover:text-red-300 font-medium" @click="handleClear()">Yes</button>
-            <button class="text-zinc-500 hover:text-zinc-300" @click="confirming = false">No</button>
+            <button class="text-gray-500 hover:text-gray-300" @click="confirming = false">No</button>
           </template>
           <button
             v-else
-            class="text-zinc-500 hover:text-zinc-300 transition-colors"
+            class="text-gray-500 hover:text-gray-300 transition-colors"
             @click="confirming = true"
           >
             Clear
@@ -174,7 +174,7 @@ function handleMaximizeCancel(id: string) {
           @click="draftsCollapsed = !draftsCollapsed"
         >
           <svg
-            class="w-3.5 h-3.5 text-zinc-500 transition-transform shrink-0"
+            class="w-3.5 h-3.5 text-gray-500 transition-transform shrink-0"
             :class="draftsCollapsed ? '' : 'rotate-90'"
             fill="none"
             stroke="currentColor"
@@ -182,10 +182,10 @@ function handleMaximizeCancel(id: string) {
           >
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
           </svg>
-          <span class="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
+          <span class="text-xs font-semibold text-gray-400 uppercase tracking-wider">
             Drafts
           </span>
-          <span class="text-xs bg-zinc-800 text-zinc-500 px-1.5 py-0.5 rounded-full">
+          <span class="text-xs bg-gray-800 text-gray-500 px-1.5 py-0.5 rounded-full">
             {{ outbox.sortedDrafts.length }}
           </span>
         </button>
@@ -194,12 +194,12 @@ function handleMaximizeCancel(id: string) {
           <div
             v-for="draft in outbox.sortedDrafts"
             :key="draft.id"
-            class="group rounded-lg border border-dashed border-zinc-700 bg-zinc-900/50 hover:border-zinc-600 transition-colors"
+            class="group rounded-lg border border-dashed border-gray-700 bg-gray-900/50 hover:border-gray-600 transition-colors"
           >
             <div class="px-4 py-3 flex items-start gap-3">
               <!-- Draft icon -->
               <span class="mt-1 w-4 h-4 shrink-0 flex items-center justify-center">
-                <svg class="w-3.5 h-3.5 text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg class="w-3.5 h-3.5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                 </svg>
               </span>
@@ -207,10 +207,10 @@ function handleMaximizeCancel(id: string) {
               <!-- Content -->
               <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-2 mb-1">
-                  <span class="text-xs font-medium px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400">
+                  <span class="text-xs font-medium px-1.5 py-0.5 rounded bg-gray-800 text-gray-400">
                     {{ draft.type }}
                   </span>
-                  <span class="text-xs font-medium px-1.5 py-0.5 rounded bg-zinc-800/60 text-zinc-500 italic">
+                  <span class="text-xs font-medium px-1.5 py-0.5 rounded bg-gray-800/60 text-gray-500 italic">
                     draft
                   </span>
                   <span
@@ -218,14 +218,14 @@ function handleMaximizeCancel(id: string) {
                     :class="{
                       'bg-red-900 text-red-300': draft.priority === 'P0',
                       'bg-orange-900 text-orange-300': draft.priority === 'P1',
-                      'bg-zinc-800 text-zinc-400': draft.priority === 'P2',
-                      'bg-zinc-800 text-zinc-500': draft.priority === 'P3',
+                      'bg-gray-800 text-gray-400': draft.priority === 'P2',
+                      'bg-gray-800 text-gray-500': draft.priority === 'P3',
                     }"
                   >
                     {{ draft.priority }}
                   </span>
                 </div>
-                <p class="text-sm text-zinc-400 leading-snug">
+                <p class="text-sm text-gray-400 leading-snug">
                   {{ draft.prompt.length > 120 ? draft.prompt.slice(0, 120) + '...' : draft.prompt }}
                 </p>
               </div>
@@ -239,7 +239,7 @@ function handleMaximizeCancel(id: string) {
                   Send
                 </button>
                 <button
-                  class="px-2 py-1 text-xs font-medium rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-500 hover:text-red-400 transition-colors"
+                  class="px-2 py-1 text-xs font-medium rounded bg-gray-800 hover:bg-gray-700 text-gray-500 hover:text-red-400 transition-colors"
                   @click="handleDeleteDraft(draft.id)"
                 >
                   Delete
@@ -266,7 +266,7 @@ function handleMaximizeCancel(id: string) {
       />
       <div
         v-if="!outbox.sortedTasks.length && !outbox.sortedDrafts.length && !outbox.loading"
-        class="text-center text-zinc-600 py-12 text-sm"
+        class="text-center text-gray-600 py-12 text-sm"
       >
         No tasks in queue
       </div>
