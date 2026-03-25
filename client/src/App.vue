@@ -77,7 +77,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="min-h-screen flex flex-col">
+  <div class="h-screen flex flex-col overflow-hidden">
     <!-- Header -->
     <header class="border-b border-gray-800 bg-gray-900 px-6 py-3 flex items-center justify-between">
       <div class="flex items-center gap-4">
@@ -110,7 +110,7 @@ onUnmounted(() => {
     </header>
 
     <!-- Main two-column layout -->
-    <main class="flex-1 grid grid-cols-2 divide-x divide-gray-800 overflow-hidden">
+    <main class="flex-1 min-h-0 grid grid-cols-2 divide-x divide-gray-800 overflow-hidden">
       <OutboxPanel />
       <InboxPanel />
     </main>
