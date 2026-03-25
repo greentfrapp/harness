@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
-import type { Task } from '@shared/types';
+import { ref, computed, inject } from 'vue';
+import type { Task, TagConfig } from '@shared/types';
 import { useInbox } from '../stores/useInbox';
 import { useTaskSelection } from '../composables/useTaskSelection';
 import TaskCard from './TaskCard.vue';
 import TaskModal from './TaskModal.vue';
+
+const tagConfigs = inject<import('vue').Ref<Record<string, TagConfig>>>('tagConfigs');
 
 const inbox = useInbox();
 const confirming = ref(false);
@@ -197,6 +199,7 @@ async function handleMaximizeDelete(id: string) {
         context="inbox"
         :hasSelection="hasSelection"
         :selected="isSelected(item.id)"
+        :tag-configs="tagConfigs?.value"
         @approve="handleApprove"
         @reject="handleReject"
         @retry="handleRetry"

@@ -10,7 +10,9 @@ function makeTask(overrides: Partial<Task> = {}): Task {
     status: 'queued',
     prompt: 'test',
     priority: 'P2',
+    tags: [],
     depends_on: null,
+    parent_task_id: null,
     agent_type: 'claude-code',
     agent_session_data: null,
     worktree_path: null,
@@ -46,6 +48,7 @@ const config: HarnessConfig = {
     do: { prompt_template: '...', needs_worktree: true, default_priority: 'P2' },
     discuss: { prompt_template: '...', needs_worktree: false, default_priority: 'P2' },
   },
+  tags: {},
   projects: [],
 };
 

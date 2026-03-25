@@ -46,6 +46,7 @@ function makeTask(overrides: Partial<Task> = {}): Task {
     prompt: 'Fix the bug',
     status: 'in_progress',
     priority: 'P2',
+    tags: [],
     created_at: Date.now(),
     updated_at: Date.now(),
     agent_type: 'claude-code',
@@ -54,6 +55,11 @@ function makeTask(overrides: Partial<Task> = {}): Task {
     agent_summary: null,
     agent_session_data: null,
     depends_on: null,
+    parent_task_id: null,
+    diff_summary: null,
+    error_message: null,
+    retry_count: 0,
+    queue_position: null,
     ...overrides,
   } as Task;
 }

@@ -49,6 +49,11 @@ export interface TaskTypeConfig {
   agent?: string; // key into HarnessConfig.agents
 }
 
+export interface TagConfig {
+  color: string; // Tailwind color name (e.g. "red", "blue", "green")
+  description?: string;
+}
+
 export interface ProjectConfig {
   name: string;
   repo_path: string;
@@ -63,6 +68,7 @@ export interface HarnessConfig {
   conversation_limit: number;
   agents?: Record<string, AgentConfig>;
   task_types: Record<string, TaskTypeConfig>;
+  tags: Record<string, TagConfig>;
   projects: ProjectConfig[];
 }
 
@@ -85,6 +91,7 @@ export interface Task {
   status: TaskStatus;
   prompt: string;
   priority: Priority;
+  tags: string[];
   depends_on: string | null;
   parent_task_id: string | null;
   agent_type: string;
@@ -126,6 +133,7 @@ export interface CreateTaskInput {
   type: TaskType;
   prompt: string;
   priority?: Priority;
+  tags?: string[];
   depends_on?: string | null;
   agent_type?: string;
   as_draft?: boolean;
@@ -135,6 +143,7 @@ export interface UpdateTaskInput {
   status?: TaskStatus;
   prompt?: string;
   priority?: Priority;
+  tags?: string[];
   depends_on?: string | null;
   parent_task_id?: string | null;
   agent_session_data?: string | null;

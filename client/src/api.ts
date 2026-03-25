@@ -5,6 +5,7 @@ import type {
   LogEntry,
   CreateTaskInput,
   UpdateTaskInput,
+  TagConfig,
 } from '@shared/types';
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
@@ -30,7 +31,7 @@ export const api = {
   },
   config: {
     get: () =>
-      request<{ task_types: Record<string, unknown> }>('/api/config'),
+      request<{ task_types: Record<string, unknown>; tags: Record<string, TagConfig> }>('/api/config'),
     getRaw: () =>
       request<{ content: string; path: string }>('/api/config/raw'),
     saveRaw: (content: string) =>

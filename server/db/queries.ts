@@ -10,6 +10,15 @@ import type {
   Project,
 } from '../../shared/types.ts';
 
+/** Parse the JSON tags column into a string array. */
+function deserializeTags(row: Record<string, unknown>): Task {
+  const tags = row.tags;
+  return {
+    ...row,
+    tags: typeof tags === 'string' ? JSON.parse(tags) : (tags as string[] ?? []),
+  } as Task;
+}
+
 // --- Projects ---
 
 export function seedProjects(config: HarnessConfig): void {
@@ -70,6 +79,7 @@ export function createTask(input: CreateTaskInput): Task {
     status: input.as_draft ? 'draft' : 'queued',
     prompt: input.prompt,
     priority: input.priority ?? 'P2',
+    tags: JSON.stringify(input.tags ?? []),
     depends_on: input.depends_on ?? null,
     agent_type: input.agent_type ?? 'claude-code',
     retry_count: 0,
@@ -86,11 +96,12 @@ export function createTask(input: CreateTaskInput): Task {
 }
 
 export function getTaskById(id: string): Task | undefined {
-  return getDb()
+  const row = getDb()
     .select()
     .from(tasks)
     .where(eq(tasks.id, id))
-    .get() as Task | undefined;
+    .get();
+  return row ? deserializeTags(row as Record<string, unknown>) : undefined;
 }
 
 export function getTasksByStatus(statusList: string[]): Task[] {
@@ -98,7 +109,8 @@ export function getTasksByStatus(statusList: string[]): Task[] {
     .select()
     .from(tasks)
     .where(inArray(tasks.status, statusList))
-    .all() as Task[];
+    .all()
+    .map((row) => deserializeTags(row as Record<string, unknown>));
 }
 
 export function getTasksByProject(projectId: string): Task[] {
@@ -106,7 +118,8 @@ export function getTasksByProject(projectId: string): Task[] {
     .select()
     .from(tasks)
     .where(eq(tasks.project_id, projectId))
-    .all() as Task[];
+    .all()
+    .map((row) => deserializeTags(row as Record<string, unknown>));
 }
 
 export function getQueuedTasks(projectId?: string): Task[] {
@@ -119,7 +132,8 @@ export function getQueuedTasks(projectId?: string): Task[] {
     .select()
     .from(tasks)
     .where(and(...conditions))
-    .all() as Task[];
+    .all()
+    .map((row) => deserializeTags(row as Record<string, unknown>));
 }
 
 export function updateTask(
@@ -127,8 +141,13 @@ export function updateTask(
   updates: UpdateTaskInput & { status?: string; queue_position?: number | null; retry_count?: number },
 ): Task | undefined {
   const db = getDb();
+  const dbUpdates: Record<string, unknown> = { ...updates, updated_at: Date.now() };
+  // Serialize tags array to JSON string for storage
+  if (Array.isArray(dbUpdates.tags)) {
+    dbUpdates.tags = JSON.stringify(dbUpdates.tags);
+  }
   db.update(tasks)
-    .set({ ...updates, updated_at: Date.now() })
+    .set(dbUpdates)
     .where(eq(tasks.id, id))
     .run();
   return getTaskById(id);
@@ -174,12 +193,13 @@ export function clearParentReferences(parentId: string): void {
 
 export function deleteTaskById(id: string): Task | undefined {
   const db = getDb();
-  const task = db
+  const row = db
     .select()
     .from(tasks)
     .where(eq(tasks.id, id))
-    .get() as Task | undefined;
-  if (!task) return undefined;
+    .get();
+  if (!row) return undefined;
+  const task = deserializeTags(row as Record<string, unknown>);
   clearParentReferences(id);
   db.delete(subtaskProposals)
     .where(eq(subtaskProposals.task_id, id))
@@ -195,7 +215,8 @@ export function deleteTasksByIds(ids: string[]): Task[] {
     .select()
     .from(tasks)
     .where(inArray(tasks.id, ids))
-    .all() as Task[];
+    .all()
+    .map((row) => deserializeTags(row as Record<string, unknown>));
   if (!toDelete.length) return [];
   for (const id of ids) clearParentReferences(id);
   db.delete(subtaskProposals)
@@ -212,7 +233,8 @@ export function deleteTasksByStatus(statusList: string[]): Task[] {
     .select()
     .from(tasks)
     .where(inArray(tasks.status, statusList))
-    .all() as Task[];
+    .all()
+    .map((row) => deserializeTags(row as Record<string, unknown>));
   if (!toDelete.length) return [];
   const ids = toDelete.map((t) => t.id);
   for (const id of ids) clearParentReferences(id);

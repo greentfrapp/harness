@@ -32,6 +32,7 @@ const CREATE_TABLES_SQL = `
     priority TEXT NOT NULL DEFAULT 'P2',
     depends_on TEXT REFERENCES tasks(id),
     parent_task_id TEXT,
+    tags TEXT NOT NULL DEFAULT '[]',
     agent_type TEXT NOT NULL DEFAULT 'claude-code',
     agent_session_data TEXT,
     worktree_path TEXT,
@@ -83,6 +84,11 @@ export function initDatabase(): void {
   }
   try {
     sqlite.exec('ALTER TABLE tasks ADD COLUMN parent_task_id TEXT');
+  } catch {
+    // Column already exists
+  }
+  try {
+    sqlite.exec("ALTER TABLE tasks ADD COLUMN tags TEXT NOT NULL DEFAULT '[]'");
   } catch {
     // Column already exists
   }

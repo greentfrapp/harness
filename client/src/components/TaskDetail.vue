@@ -195,10 +195,11 @@ function formatTime(ts: number): string {
       <p class="text-sm text-gray-300 whitespace-pre-wrap">{{ task.prompt }}</p>
     </div>
 
-    <!-- Status & Priority & Branch -->
+    <!-- Status & Priority & Tags & Branch -->
     <div class="flex gap-4 text-xs text-gray-500 flex-wrap">
       <span>Status: <span class="text-gray-300">{{ task.status }}</span></span>
       <span>Priority: <span class="text-gray-300">{{ task.priority }}</span></span>
+      <span v-if="task.tags?.length">Tags: <span class="text-gray-300">{{ task.tags.join(', ') }}</span></span>
       <span v-if="task.depends_on">
         Depends on: <span class="text-gray-300 font-mono">{{ task.depends_on.slice(0, 8) }}</span>
       </span>

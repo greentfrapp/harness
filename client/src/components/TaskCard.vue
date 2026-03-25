@@ -1,14 +1,29 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
-import type { Task } from '@shared/types';
+import type { Task, TagConfig } from '@shared/types';
 import { api } from '../api';
 import TaskDetail from './TaskDetail.vue';
+
+const TAG_COLORS: Record<string, { bg: string; text: string }> = {
+  red: { bg: 'bg-red-900', text: 'text-red-300' },
+  green: { bg: 'bg-green-900', text: 'text-green-300' },
+  blue: { bg: 'bg-blue-900', text: 'text-blue-300' },
+  yellow: { bg: 'bg-yellow-900', text: 'text-yellow-300' },
+  purple: { bg: 'bg-purple-900', text: 'text-purple-300' },
+  orange: { bg: 'bg-orange-900', text: 'text-orange-300' },
+  pink: { bg: 'bg-pink-900', text: 'text-pink-300' },
+  gray: { bg: 'bg-gray-800', text: 'text-gray-400' },
+  cyan: { bg: 'bg-cyan-900', text: 'text-cyan-300' },
+  indigo: { bg: 'bg-indigo-900', text: 'text-indigo-300' },
+  teal: { bg: 'bg-teal-900', text: 'text-teal-300' },
+};
 
 const props = defineProps<{
   task: Task;
   context: 'outbox' | 'inbox';
   hasSelection?: boolean;
   selected?: boolean;
+  tagConfigs?: Record<string, TagConfig>;
 }>();
 
 const emit = defineEmits<{
@@ -116,6 +131,13 @@ const originalPrompt = computed(() => {
   const idx = text.indexOf(marker);
   return idx !== -1 ? text.slice(idx + marker.length) : text;
 });
+
+function getTagClasses(tag: string): string {
+  const config = props.tagConfigs?.[tag];
+  const colorName = config?.color ?? 'gray';
+  const colors = TAG_COLORS[colorName] ?? TAG_COLORS.gray;
+  return `${colors.bg} ${colors.text}`;
+}
 
 const truncatedPrompt = computed(() => {
   const text = originalPrompt.value;
@@ -258,6 +280,14 @@ function handleRetry(id: string) {
             class="text-xs font-medium px-1.5 py-0.5 rounded bg-yellow-900 text-yellow-300"
           >
             Fix
+          </span>
+          <span
+            v-for="tag in task.tags"
+            :key="tag"
+            class="text-xs font-medium px-1.5 py-0.5 rounded"
+            :class="getTagClasses(tag)"
+          >
+            {{ tag }}
           </span>
           <span
             class="text-xs font-medium px-1.5 py-0.5 rounded"

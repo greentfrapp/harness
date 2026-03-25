@@ -1,11 +1,26 @@
 <script setup lang="ts">
-import { ref, onMounted, nextTick } from 'vue';
-import type { Project, Task, Priority, CreateTaskInput } from '@shared/types';
+import { ref, computed, onMounted, nextTick } from 'vue';
+import type { Project, Task, Priority, CreateTaskInput, TagConfig } from '@shared/types';
+
+const TAG_COLORS: Record<string, { bg: string; text: string; activeBg: string }> = {
+  red: { bg: 'bg-red-900/40', text: 'text-red-400', activeBg: 'bg-red-900' },
+  green: { bg: 'bg-green-900/40', text: 'text-green-400', activeBg: 'bg-green-900' },
+  blue: { bg: 'bg-blue-900/40', text: 'text-blue-400', activeBg: 'bg-blue-900' },
+  yellow: { bg: 'bg-yellow-900/40', text: 'text-yellow-400', activeBg: 'bg-yellow-900' },
+  purple: { bg: 'bg-purple-900/40', text: 'text-purple-400', activeBg: 'bg-purple-900' },
+  orange: { bg: 'bg-orange-900/40', text: 'text-orange-400', activeBg: 'bg-orange-900' },
+  pink: { bg: 'bg-pink-900/40', text: 'text-pink-400', activeBg: 'bg-pink-900' },
+  gray: { bg: 'bg-gray-800/40', text: 'text-gray-500', activeBg: 'bg-gray-800' },
+  cyan: { bg: 'bg-cyan-900/40', text: 'text-cyan-400', activeBg: 'bg-cyan-900' },
+  indigo: { bg: 'bg-indigo-900/40', text: 'text-indigo-400', activeBg: 'bg-indigo-900' },
+  teal: { bg: 'bg-teal-900/40', text: 'text-teal-400', activeBg: 'bg-teal-900' },
+};
 
 const props = defineProps<{
   projects: Project[];
   taskTypes: string[];
   existingTasks: Task[];
+  tagConfigs?: Record<string, TagConfig>;
 }>();
 
 const emit = defineEmits<{
@@ -19,10 +34,36 @@ const projectId = ref(props.projects[0]?.id ?? '');
 const taskType = ref('do');
 const prompt = ref('');
 const priority = ref<Priority>('P2');
+const selectedTags = ref<string[]>([]);
 const dependsOn = ref<string | null>(null);
 const submitting = ref(false);
 const error = ref('');
 const promptInput = ref<HTMLTextAreaElement | null>(null);
+
+const availableTags = computed(() =>
+  Object.entries(props.tagConfigs ?? {}).map(([name, config]) => ({
+    name,
+    ...config,
+  })),
+);
+
+function toggleTag(tag: string) {
+  const idx = selectedTags.value.indexOf(tag);
+  if (idx === -1) {
+    selectedTags.value.push(tag);
+  } else {
+    selectedTags.value.splice(idx, 1);
+  }
+}
+
+function getTagClasses(tag: string, active: boolean): string {
+  const config = props.tagConfigs?.[tag];
+  const colorName = config?.color ?? 'gray';
+  const colors = TAG_COLORS[colorName] ?? TAG_COLORS.gray;
+  return active
+    ? `${colors.activeBg} ${colors.text} ring-1 ring-current`
+    : `${colors.bg} ${colors.text} hover:opacity-80`;
+}
 
 onMounted(async () => {
   await nextTick();
@@ -57,6 +98,7 @@ async function handleSubmit() {
       type: taskType.value,
       prompt: prompt.value.trim(),
       priority: priority.value,
+      tags: selectedTags.value.length > 0 ? [...selectedTags.value] : undefined,
       depends_on: dependsOn.value || null,
     };
     emit('create', input);
@@ -79,6 +121,7 @@ function handleSaveDraft() {
     type: taskType.value,
     prompt: prompt.value.trim(),
     priority: priority.value,
+    tags: selectedTags.value.length > 0 ? [...selectedTags.value] : undefined,
     depends_on: dependsOn.value || null,
     as_draft: true,
   };
@@ -191,6 +234,24 @@ const priorities: { value: Priority; label: string }[] = [
                 @click="priority = p.value"
               >
                 {{ p.label }}
+              </button>
+            </div>
+          </div>
+
+          <!-- Tags -->
+          <div v-if="availableTags.length">
+            <label class="block text-xs font-medium text-gray-400 mb-1">Tags</label>
+            <div class="flex flex-wrap gap-1">
+              <button
+                v-for="tag in availableTags"
+                :key="tag.name"
+                type="button"
+                class="px-2.5 py-1 text-xs font-medium rounded-md transition-all"
+                :class="getTagClasses(tag.name, selectedTags.includes(tag.name))"
+                :title="tag.description"
+                @click="toggleTag(tag.name)"
+              >
+                {{ tag.name }}
               </button>
             </div>
           </div>
