@@ -281,6 +281,19 @@ export function returnCheckout(
   }
 }
 
+/** Get the current branch name for a repo (or null if detached HEAD). */
+export function getCurrentBranch(repoPath: string): string | null {
+  try {
+    const branch = execSync('git rev-parse --abbrev-ref HEAD', {
+      cwd: repoPath,
+      encoding: 'utf-8',
+    }).trim();
+    return branch === 'HEAD' ? null : branch;
+  } catch {
+    return null;
+  }
+}
+
 /** Delete all harness/checkout-* branches in a repo (startup cleanup). */
 export function cleanupCheckoutBranches(repoPath: string): void {
   try {
