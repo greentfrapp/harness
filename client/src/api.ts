@@ -7,6 +7,7 @@ import type {
   UpdateTaskInput,
   TagConfig,
   CheckoutInfo,
+  RepoStatus,
 } from '@shared/types';
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
@@ -29,6 +30,7 @@ function json(body: unknown): RequestInit {
 export const api = {
   projects: {
     list: () => request<Project[]>('/api/projects'),
+    status: () => request<RepoStatus[]>('/api/projects/status'),
   },
   config: {
     get: () =>

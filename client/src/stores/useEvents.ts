@@ -4,6 +4,7 @@ import type { Task, LogEntry } from '@shared/types';
 import { useOutbox } from './useOutbox';
 import { useInbox } from './useInbox';
 import { useCheckouts } from './useCheckouts';
+import { useRepoStatus } from './useRepoStatus';
 import { useLog } from './useLog';
 
 export const useEvents = defineStore('events', () => {
@@ -79,12 +80,14 @@ export const useEvents = defineStore('events', () => {
       const data = JSON.parse(e.data);
       const checkoutsStore = useCheckouts();
       checkoutsStore.onCheckedOut(data);
+      useRepoStatus().fetchStatus();
     });
 
     eventSource.addEventListener('task:returned', (e) => {
       const data = JSON.parse(e.data);
       const checkoutsStore = useCheckouts();
       checkoutsStore.onReturned(data);
+      useRepoStatus().fetchStatus();
     });
 
     // Forward task:progress events as custom DOM events for SessionStream

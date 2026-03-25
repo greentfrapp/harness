@@ -108,6 +108,20 @@ export function getDiffStats(
   }
 }
 
+/** Check if a repo has uncommitted changes. Returns dirty flag and changed file count. */
+export function getRepoStatus(repoPath: string): { dirty: boolean; fileCount: number } {
+  try {
+    const output = execSync('git status --porcelain', {
+      cwd: repoPath,
+      encoding: 'utf-8',
+    });
+    const lines = output.split('\n').filter((l) => l.trim().length > 0);
+    return { dirty: lines.length > 0, fileCount: lines.length };
+  } catch {
+    return { dirty: false, fileCount: 0 };
+  }
+}
+
 /** Get the full diff of uncommitted changes in a worktree (staged + unstaged vs HEAD). */
 export function getUncommittedDiff(worktreePath: string): string {
   if (!fs.existsSync(worktreePath)) return '';

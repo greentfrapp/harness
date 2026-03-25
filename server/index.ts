@@ -14,7 +14,7 @@ import { recoverStaleTasks } from './recovery.ts';
 import { createTaskRoutes } from './routes/tasks.ts';
 import type { AppContext, CheckoutEntry } from './context.ts';
 import { serverLog } from './log.ts';
-import { cleanupCheckoutBranches, getCurrentBranch, returnCheckout } from './git.ts';
+import { cleanupCheckoutBranches } from './git.ts';
 
 // --- Startup ---
 
@@ -95,36 +95,13 @@ dispatcher = new Dispatcher({
   isDependencySatisfied: (task) => taskQueue.isDependencySatisfied(task),
 });
 
-// --- Checkout state (in-memory, recover from git on restart) ---
+// --- Checkout state (in-memory, transient) ---
 
 const checkoutState = new Map<string, CheckoutEntry>();
 
-// Recover active checkouts or clean up stale checkout branches from a previous crash
+// Clean up any stale checkout branches from a previous crash
 for (const project of queries.getAllProjects()) {
-  const currentBranch = getCurrentBranch(project.repo_path);
-  if (currentBranch && currentBranch.startsWith('harness/checkout-')) {
-    // Repo is currently on a checkout branch — recover the checkout state
-    const idPrefix = currentBranch.replace('harness/checkout-', '');
-    // Find the task whose ID starts with this prefix
-    const projectTasks = queries.getTasksByProject(project.id);
-    const matchedTask = projectTasks.find((t) => t.id.startsWith(idPrefix));
-    if (matchedTask) {
-      checkoutState.set(project.repo_path, {
-        taskId: matchedTask.id,
-        checkoutBranch: currentBranch,
-      });
-      console.log(`Recovered checkout: ${currentBranch} → task ${matchedTask.id}`);
-    } else {
-      // No matching task found — return to target branch, then clean up
-      try {
-        returnCheckout(project.repo_path, project.target_branch, currentBranch);
-      } catch { /* best effort */ }
-      cleanupCheckoutBranches(project.repo_path);
-    }
-  } else {
-    // Not on a checkout branch — clean up any stale checkout branches
-    cleanupCheckoutBranches(project.repo_path);
-  }
+  cleanupCheckoutBranches(project.repo_path);
 }
 
 const appContext: AppContext = {
