@@ -7,6 +7,8 @@ import TaskDetail from './TaskDetail.vue';
 const props = defineProps<{
   task: Task;
   context: 'outbox' | 'inbox';
+  selectionMode?: boolean;
+  selected?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -16,6 +18,7 @@ const emit = defineEmits<{
   retry: [id: string];
   defer: [id: string];
   delete: [id: string];
+  toggleSelect: [id: string];
 }>();
 
 const expanded = ref(false);
@@ -177,14 +180,32 @@ function handleRetry(id: string) {
 </script>
 
 <template>
-  <div class="rounded-lg border overflow-hidden" :class="task.status === 'approved' ? 'border-green-900/50 bg-gray-900/60 opacity-75' : 'border-gray-800 bg-gray-900'">
+  <div class="rounded-lg border overflow-hidden" :class="[
+    task.status === 'approved' ? 'border-green-900/50 bg-gray-900/60 opacity-75' : 'border-gray-800 bg-gray-900',
+    selected ? 'ring-1 ring-blue-500/60 border-blue-500/40' : ''
+  ]">
     <!-- Summary row -->
     <button
       class="w-full px-4 py-3 flex items-start gap-3 text-left hover:bg-gray-800/50 transition-colors"
-      @click="expanded = !expanded"
+      @click="selectionMode ? emit('toggleSelect', task.id) : (expanded = !expanded)"
     >
+      <!-- Selection checkbox -->
+      <span
+        v-if="selectionMode"
+        class="mt-1 w-4 h-4 rounded border shrink-0 flex items-center justify-center transition-colors cursor-pointer"
+        :class="selected
+          ? 'bg-blue-600 border-blue-500 text-white'
+          : 'border-gray-600 bg-gray-800 hover:border-gray-400'"
+        @click.stop="emit('toggleSelect', task.id)"
+      >
+        <svg v-if="selected" class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+        </svg>
+      </span>
+
       <!-- Status dot -->
       <span
+        v-if="!selectionMode"
         class="mt-1 w-2.5 h-2.5 rounded-full shrink-0"
         :class="[status.color, status.pulse ? 'animate-pulse' : '']"
       />

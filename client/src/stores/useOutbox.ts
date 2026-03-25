@@ -51,6 +51,12 @@ export const useOutbox = defineStore('outbox', () => {
     tasks.value = tasks.value.filter((t) => t.id !== id);
   }
 
+  async function bulkDelete(ids: string[]): Promise<void> {
+    await api.tasks.bulkDelete(ids);
+    const idSet = new Set(ids);
+    tasks.value = tasks.value.filter((t) => !idSet.has(t.id));
+  }
+
   // SSE handlers
   function onTaskCreated(task: Task) {
     upsertOrRemove(tasks, task, OUTBOX_STATUSES);
@@ -77,6 +83,7 @@ export const useOutbox = defineStore('outbox', () => {
     createTask,
     cancelTask,
     deleteTask,
+    bulkDelete,
     onTaskCreated,
     onTaskUpdated,
     onTaskRemoved,
