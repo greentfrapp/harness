@@ -385,4 +385,47 @@ describe('AgentPool progress broadcasting', () => {
     // Should NOT have broadcast as task:progress
     expect(broadcast).not.toHaveBeenCalledWith('task:progress', expect.anything());
   });
+
+  it('preserves granted_tools in session data across spawn cycles', async () => {
+    const taskWithGrants = makeTask({
+      agent_session_data: JSON.stringify({
+        session_id: 'sess-1',
+        pid: 111,
+        granted_tools: ['Bash(curl:*)', 'WebSearch'],
+      }),
+      worktree_path: '/existing/wt',
+      branch_name: 'harness/test-branch',
+    });
+
+    const updateTask = vi.fn(() => taskWithGrants);
+    const config: HarnessConfig = {
+      projects: [],
+      task_types: {
+        do: { prompt_template: '{user_prompt}', uses_worktree: true },
+      },
+      concurrency: { max_worktrees: 2, max_conversations: 2 },
+    } as any;
+
+    const preservePool = new AgentPool({
+      config,
+      agentRegistry: fakeRegistry,
+      getProjectById: () => makeProject(),
+      updateTask,
+      createTaskEvent: vi.fn(),
+      broadcast,
+      getTaskById: () => taskWithGrants,
+      onTaskCompleted: vi.fn(),
+    });
+
+    await preservePool.dispatchDoTask(taskWithGrants, makeProject());
+
+    // The PID update should preserve granted_tools
+    const pidUpdateCall = updateTask.mock.calls.find(
+      (call: any) => call[1].agent_session_data && call[1].agent_session_data.includes('granted_tools'),
+    );
+    expect(pidUpdateCall).toBeTruthy();
+    const sessionData = JSON.parse(pidUpdateCall![1].agent_session_data);
+    expect(sessionData.granted_tools).toEqual(['Bash(curl:*)', 'WebSearch']);
+    expect(sessionData.session_id).toBe('sess-1');
+  });
 });

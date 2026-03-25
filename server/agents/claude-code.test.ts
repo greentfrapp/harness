@@ -185,6 +185,19 @@ describe('ClaudeCodeAdapter', () => {
       expect(idx).toBeGreaterThan(-1);
       expect(args[idx + 1]).toBe('plan');
     });
+
+    it('appends --allowedTools for granted tools on resume', () => {
+      const args = adapter.buildResumeArgs({
+        prompt: 'continue',
+        sessionId: 'sess-123',
+        usesWorktree: true,
+        permissionMode: 'default',
+        allowedTools: ['Bash(curl:*)', 'WebSearch'],
+      });
+      const idx = args.lastIndexOf('--allowedTools');
+      expect(idx).toBeGreaterThan(-1);
+      expect(args[idx + 1]).toBe('Bash(curl:*),WebSearch');
+    });
   });
 
   describe('parseMessage', () => {
