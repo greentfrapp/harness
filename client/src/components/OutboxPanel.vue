@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
+import type { Task } from '@shared/types';
 import { useOutbox } from '../stores/useOutbox';
 import { useTaskSelection } from '../composables/useTaskSelection';
 import TaskCard from './TaskCard.vue';
+import TaskModal from './TaskModal.vue';
 
 const outbox = useOutbox();
 const confirming = ref(false);
@@ -61,6 +63,19 @@ async function handleCancel(id: string) {
 
 async function handleDelete(id: string) {
   await outbox.deleteTask(id);
+  if (maximizedTask.value?.id === id) maximizedTask.value = null;
+}
+
+const maximizedTask = ref<Task | null>(null);
+
+function handleMaximize(id: string) {
+  const task = outbox.sortedTasks.find((t) => t.id === id);
+  if (task) maximizedTask.value = task;
+}
+
+function handleMaximizeCancel(id: string) {
+  handleCancel(id);
+  maximizedTask.value = null;
 }
 </script>
 
@@ -150,6 +165,7 @@ async function handleDelete(id: string) {
         @cancel="handleCancel"
         @delete="handleDelete"
         @toggleSelect="toggle"
+        @maximize="handleMaximize"
       />
       <div
         v-if="!outbox.sortedTasks.length && !outbox.loading"
@@ -158,5 +174,15 @@ async function handleDelete(id: string) {
         No tasks in queue
       </div>
     </div>
+
+    <!-- Task Modal -->
+    <TaskModal
+      v-if="maximizedTask"
+      :task="maximizedTask"
+      context="outbox"
+      @close="maximizedTask = null"
+      @cancel="handleMaximizeCancel"
+      @delete="handleDelete"
+    />
   </div>
 </template>
