@@ -72,10 +72,6 @@ async function refreshInbox() {
   await inbox.fetchItems()
 }
 
-async function handleDefer(id: string) {
-  await inbox.updateTaskStatus(id, 'deferred')
-}
-
 async function handleDelete(id: string) {
   await inbox.deleteTask(id)
 }
@@ -202,7 +198,6 @@ async function handleMaximizeAction(
         @approve="refreshInbox"
         @reject="refreshInbox"
         @retry="refreshInbox"
-        @defer="handleDefer"
         @delete="handleDelete"
         @follow-up="refreshInbox"
         @toggleSelect="toggle"
@@ -223,7 +218,6 @@ async function handleMaximizeAction(
       @approve="(id) => handleMaximizeAction(id)"
       @reject="(id) => handleMaximizeAction(id)"
       @retry="(id) => handleMaximizeAction(id)"
-      @defer="handleDefer"
       @delete="(id) => handleMaximizeAction(id, handleDelete)"
       @follow-up="(id) => handleMaximizeAction(id)" />
   </div>

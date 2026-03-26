@@ -76,7 +76,7 @@ The queue view. Shows all submitted tasks with their current state (queued, in p
 
 ### Inbox
 
-Completed or blocked tasks surfaced for review. Items are grouped by directory overlap and ordered to minimize context-switching. The user reviews, approves, rejects, revises, or defers items. Permission requests are **prioritized above all other items** and tagged with a distinct visual indicator.
+Completed or blocked tasks surfaced for review. Items are grouped by directory overlap and ordered to minimize context-switching. The user reviews, approves, rejects, or revises items. Permission requests are **prioritized above all other items** and tagged with a distinct visual indicator.
 
 ### Task Lifecycle
 
@@ -86,7 +86,6 @@ User writes task → New Task modal → [Draft] ──Send──→ Outbox/Queue
                                                             │          Retry (up to max)  Approve (merge & done)
                                                             │               ↓ (max retries) Reject (discard & done)
                                                             │          Inbox (with error)  Revise (--resume, back to outbox)
-                                                            │                              Defer (deprioritize)
                                                             └──────────────────────────────────┘
 ```
 
@@ -200,7 +199,6 @@ When a task completes (or needs user input), it enters the inbox. The batcher gr
 
 - `ready` — ready for user review
 - `held` — waiting for a dependency or plan approval
-- `deferred` — user explicitly deferred it
 - `error` — agent failed after max retries, needs user attention
 - `permission` — agent needs a tool permission approval (prioritized above all other items)
 - `approved` — task approved, shown with muted styling (terminal)
@@ -231,7 +229,6 @@ User actions per item:
 - **Approve** — merge the branch into the target branch, task leaves the system
 - **Reject** — discard the branch and worktree, task leaves the system. If the rejected task has dependent tasks still queued, the user is notified: they can cancel the dependents, revise them (e.g., remove the dependency), or leave them queued (the dependency becomes unsatisfiable and they'll remain blocked until addressed)
 - **Revise** — user adds feedback, task returns to outbox; the prior session is resumed via `--resume`, preserving the worktree branch and all prior work
-- **Defer** — push to bottom of inbox, review later
 - **Chat** — open conversational mode to ask questions without formally revising (see "Conversational Mode" above)
 
 **Batch review mode**: User can approve/reject multiple grouped items at once, with dry-merge conflict checking as described above.
@@ -393,7 +390,7 @@ tasks (
   project_id    TEXT NOT NULL REFERENCES projects(id),
   type          TEXT NOT NULL,          -- 'do' | 'discuss' | custom type name
   status        TEXT NOT NULL,          -- 'draft' | 'queued' | 'in_progress' | 'retrying' | 'ready' |
-                                        --   'held' | 'deferred' | 'error' | 'permission' |
+                                        --   'held' | 'error' | 'permission' |
                                         --   'approved' | 'rejected' | 'cancelled'
   prompt        TEXT NOT NULL,          -- user's original prompt (+ revise feedback appended)
   priority      TEXT DEFAULT 'P2',      -- 'P0' | 'P1' | 'P2' | 'P3'
@@ -421,7 +418,7 @@ task_events (
   event_type    TEXT NOT NULL,          -- 'created' | 'dispatched' | 'completed' | 'retried' |
                                         --   'revised' | 'approved' | 'rejected' | 'cancelled' |
                                         --   'permission_requested' | 'permission_resolved' |
-                                        --   'deferred' | 'error'
+                                        --   'error'
   data          TEXT,                   -- JSON payload (event-specific: revise feedback, error details,
                                         --   permission tool/reason, previous status, etc.)
   created_at    INTEGER NOT NULL        -- epoch ms (Date.now())
@@ -768,12 +765,6 @@ harness/
 - [x] Dispatcher reuses existing worktree for revised tasks — _`dispatchDoTask()` skips `createWorktree` when `task.worktree_path` and `task.branch_name` already exist, preserving original commits_
 - [x] Auto-return checkout on revise — _`autoReturnIfCheckedOut(id)` called at start of revise endpoint, matching approve/reject pattern_
 - [x] Log `task_event` with `event_type = 'revised'` and feedback in `data`
-
-**Defer**
-
-- [x] Defer action on inbox items: set status to `deferred`, move to bottom of inbox
-- [x] Deferred items remain visible but deprioritized — _sorted to bottom in `useInbox.ts` `sortedItems` computed_
-- [x] User can un-defer (restore to `ready`) — _via `PATCH /api/tasks/:id`_
 
 **Verification**: Open chat on a completed Do task — verify plan mode (read-only, no file changes). Create a Discuss task — verify research runs, chat opens in inbox, subtask proposals render. Approve a subtask — verify Do task appears in outbox. Checkout a Do task — verify branch is loaded in main repo, banner shows, other checkouts blocked. Return — verify main repo reverts to target branch. Revise a Do task — verify it returns to outbox with feedback.
 

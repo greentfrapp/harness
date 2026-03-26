@@ -7,7 +7,6 @@ export type TaskStatus =
   | 'retrying'
   | 'ready'
   | 'held'
-  | 'deferred'
   | 'error'
   | 'permission'
   | 'approved'
@@ -30,7 +29,6 @@ export const OUTBOX_STATUSES: TaskStatus[] = [
 export const INBOX_STATUSES: TaskStatus[] = [
   'ready',
   'held',
-  'deferred',
   'error',
   'permission',
   'approved',

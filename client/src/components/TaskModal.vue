@@ -17,7 +17,6 @@ const emit = defineEmits<{
   approve: [id: string]
   reject: [id: string]
   retry: [id: string]
-  defer: [id: string]
   delete: [id: string]
   followUp: [id: string]
 }>()
@@ -42,7 +41,6 @@ const statusConfig: Record<string, { color: string; label: string }> = {
   retrying: { color: 'text-yellow-400', label: 'Retrying' },
   ready: { color: 'text-green-400', label: 'Ready' },
   held: { color: 'text-zinc-400', label: 'Held' },
-  deferred: { color: 'text-zinc-500', label: 'Deferred' },
   error: { color: 'text-red-400', label: 'Error' },
   permission: { color: 'text-red-400', label: 'Permission' },
   approved: { color: 'text-zinc-400', label: 'Approved' },
@@ -129,7 +127,6 @@ function statusColor(status: string) {
             @approve="emit('approve', $event)"
             @reject="emit('reject', $event)"
             @retry="emit('retry', $event)"
-            @defer="emit('defer', $event)"
             @delete="emit('delete', $event)"
             @follow-up="emit('followUp', $event)" />
         </div>

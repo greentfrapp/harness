@@ -19,7 +19,6 @@ const emit = defineEmits<{
   approve: [id: string]
   reject: [id: string]
   retry: [id: string]
-  defer: [id: string]
   delete: [id: string]
   followUp: [id: string]
 }>()
@@ -588,17 +587,12 @@ function formatTime(ts: number): string {
           title="Return the checked-out task first">
           Actions locked — another task in this repo is checked out
         </span>
-        <!-- No changes: show Revise, Defer, and Delete instead of Approve/Reject/Checkout -->
+        <!-- No changes: show Revise and Delete instead of Approve/Reject/Checkout -->
         <template v-else-if="hasNoChanges">
           <button
             class="px-3 py-1.5 text-xs font-medium rounded bg-purple-900 hover:bg-purple-800 text-purple-300 transition-colors"
             @click="showRevise = true">
             Revise
-          </button>
-          <button
-            class="px-3 py-1.5 text-xs font-medium rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-400 transition-colors"
-            @click="emit('defer', task.id)">
-            Defer
           </button>
           <span class="flex-1" />
           <button
@@ -637,11 +631,6 @@ function formatTime(ts: number): string {
             :disabled="rejecting"
             @click="handleReject">
             {{ rejecting ? 'Rejecting...' : 'Reject' }}
-          </button>
-          <button
-            class="px-3 py-1.5 text-xs font-medium rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-400 transition-colors"
-            @click="emit('defer', task.id)">
-            Defer
           </button>
         </template>
         <template v-if="task.branch_name && !hasNoChanges">

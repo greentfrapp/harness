@@ -34,7 +34,6 @@ const emit = defineEmits<{
   approve: [id: string]
   reject: [id: string]
   retry: [id: string]
-  defer: [id: string]
   delete: [id: string]
   toggleSelect: [id: string]
   followUp: [id: string]
@@ -112,7 +111,6 @@ const statusConfig: Record<
   retrying: { color: 'bg-yellow-500', label: 'Retrying', pulse: true },
   ready: { color: 'bg-green-500', label: 'Ready' },
   held: { color: 'bg-amber-500', label: 'Plan Review' },
-  deferred: { color: 'bg-zinc-600', label: 'Deferred' },
   error: { color: 'bg-red-500', label: 'Error' },
   permission: { color: 'bg-red-500', label: 'Permission', pulse: true },
   approved: { color: 'bg-zinc-500', label: 'Approved' },
@@ -207,11 +205,6 @@ async function handleCollapsedReject(e: Event) {
   } finally {
     collapsedRejecting.value = false
   }
-}
-
-function handleCollapsedDefer(e: Event) {
-  e.stopPropagation()
-  emit('defer', props.task.id)
 }
 
 async function handleCollapsedRetry(e: Event) {
@@ -445,13 +438,8 @@ async function handleCollapsedReturn(e: Event) {
             {{ collapsedFixing ? 'Re-queuing...' : 'Fix' }}
           </button>
         </template>
-        <!-- No changes: show Defer and Delete instead of Approve/Reject/Checkout -->
+        <!-- No changes: show Delete instead of Approve/Reject/Checkout -->
         <template v-else-if="hasNoChanges">
-          <button
-            class="px-2 py-1 text-xs font-medium rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-400 transition-colors"
-            @click="handleCollapsedDefer">
-            Defer
-          </button>
           <button
             class="px-2 py-1 text-xs font-medium rounded transition-colors disabled:opacity-50"
             :class="
@@ -484,11 +472,6 @@ async function handleCollapsedReturn(e: Event) {
             :disabled="collapsedRejecting"
             @click="handleCollapsedReject">
             {{ collapsedRejecting ? 'Rejecting...' : 'Reject' }}
-          </button>
-          <button
-            class="px-2 py-1 text-xs font-medium rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-400 transition-colors"
-            @click="handleCollapsedDefer">
-            Defer
           </button>
           <template v-if="task.branch_name">
             <button
@@ -662,7 +645,6 @@ async function handleCollapsedReturn(e: Event) {
       @approve="handleApprove($event)"
       @reject="handleReject($event)"
       @retry="handleRetry($event)"
-      @defer="emit('defer', $event)"
       @delete="emit('delete', $event)"
       @follow-up="emit('followUp', $event)" />
   </div>

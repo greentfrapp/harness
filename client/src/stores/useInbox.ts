@@ -26,8 +26,6 @@ export const useInbox = defineStore('inbox', () => {
       if (b.status === 'permission' && a.status !== 'permission') return 1
       if (a.status === 'approved' && b.status !== 'approved') return 1
       if (b.status === 'approved' && a.status !== 'approved') return -1
-      if (a.status === 'deferred' && b.status !== 'deferred') return 1
-      if (b.status === 'deferred' && a.status !== 'deferred') return -1
       return b.updated_at - a.updated_at
     }),
   )
@@ -39,10 +37,6 @@ export const useInbox = defineStore('inbox', () => {
     } finally {
       loading.value = false
     }
-  }
-
-  async function updateTaskStatus(id: string, status: string): Promise<void> {
-    await api.tasks.update(id, { status } as any)
   }
 
   // SSE handlers
@@ -81,7 +75,6 @@ export const useInbox = defineStore('inbox', () => {
     pendingCount,
     hasPermissionRequests,
     fetchItems,
-    updateTaskStatus,
     deleteTask,
     bulkDelete,
     onInboxNew,
