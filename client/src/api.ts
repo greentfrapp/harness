@@ -8,6 +8,7 @@ import type {
   Task,
   TaskEvent,
   UpdateTaskInput,
+  ViewConfig,
 } from '@shared/types'
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
@@ -45,6 +46,17 @@ export const api = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content }),
       }),
+  },
+  views: {
+    list: () => request<ViewConfig[]>('/api/views'),
+    save: (views: ViewConfig[]) =>
+      request<ViewConfig[]>('/api/views', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ views }),
+      }),
+    reset: () =>
+      request<ViewConfig[]>('/api/views/reset', { method: 'POST' }),
   },
   tasks: {
     list: (statuses: string[]) =>

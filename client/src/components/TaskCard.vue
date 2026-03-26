@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { TagConfig, Task } from '@shared/types'
-import { TERMINAL_STATUSES } from '@shared/types'
+import { getTaskContext, OUTBOX_STATUSES, TERMINAL_STATUSES } from '@shared/types'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { api } from '../api'
 import { useCheckouts } from '../stores/useCheckouts'
@@ -22,13 +22,17 @@ const TAG_COLORS: Record<string, { bg: string; text: string }> = {
 
 const props = defineProps<{
   task: Task
-  context: 'outbox' | 'inbox'
+  context?: 'outbox' | 'inbox' | 'draft'
   hasSelection?: boolean
   selected?: boolean
   tagConfigs?: Record<string, TagConfig>
   isCheckedOut?: boolean
   actionsDisabled?: boolean
 }>()
+
+const derivedContext = computed(
+  () => props.context ?? getTaskContext(props.task.status),
+)
 
 const emit = defineEmits<{
   cancel: [id: string]
@@ -54,21 +58,13 @@ const FIX_TAGS = ['merge-conflict', 'checkout-failed', 'needs-commit']
 
 const isTerminal = computed(() => TERMINAL_STATUSES.includes(props.task.status))
 
-const needsInput = computed(
-  () => props.context === 'inbox' && props.task.status === 'ready',
-)
+const needsInput = computed(() => props.task.status === 'ready')
 
-const isError = computed(
-  () => props.context === 'inbox' && props.task.status === 'error',
-)
+const isError = computed(() => props.task.status === 'error')
 
-const isPermission = computed(
-  () => props.context === 'inbox' && props.task.status === 'permission',
-)
+const isPermission = computed(() => props.task.status === 'permission')
 
-const isHeld = computed(
-  () => props.context === 'inbox' && props.task.status === 'held',
-)
+const isHeld = computed(() => props.task.status === 'held')
 
 const hasNoChanges = computed(
   () =>
@@ -403,7 +399,7 @@ async function handleCollapsedReturn(e: Event) {
 
       <!-- Queue position -->
       <span
-        v-if="context === 'outbox' && task.queue_position"
+        v-if="OUTBOX_STATUSES.includes(task.status) && task.queue_position"
         class="text-xs text-zinc-600 font-mono mt-1">
         #{{ task.queue_position }}
       </span>
@@ -639,7 +635,7 @@ async function handleCollapsedReturn(e: Event) {
     <TaskDetail
       v-if="expanded"
       :task="task"
-      :context="context"
+      :context="derivedContext"
       :auto-follow-up="autoFollowUp"
       :actions-disabled="actionsDisabled"
       @cancel="emit('cancel', $event)"

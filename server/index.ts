@@ -18,13 +18,16 @@ import { AgentPool } from './pool'
 import { TaskQueue } from './queue'
 import { recoverStaleTasks } from './recovery'
 import { createTaskRoutes } from './routes/tasks'
+import { createViewRoutes } from './routes/views'
 import { SSEManager } from './sse'
+import { ensureViewsFile } from './views'
 
 // --- Startup ---
 
 console.log('Harness starting...')
 
 ensureHarnessDir()
+ensureViewsFile()
 const config = loadConfig()
 validateConfig(config)
 initDatabase()
@@ -189,6 +192,7 @@ app.get('/api/log', (c) => {
 
 // API routes
 app.route('/api', createTaskRoutes(appContext))
+app.route('/api', createViewRoutes())
 
 // Serve static files in production
 app.use('/*', serveStatic({ root: './client/dist' }))

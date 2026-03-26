@@ -2,10 +2,9 @@ import type { LogEntry, Task } from '@shared/types'
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { useCheckouts } from './useCheckouts'
-import { useInbox } from './useInbox'
 import { useLog } from './useLog'
-import { useOutbox } from './useOutbox'
 import { useRepoStatus } from './useRepoStatus'
+import { useTasks } from './useTasks'
 
 export const useEvents = defineStore('events', () => {
   const connected = ref(false)
@@ -35,39 +34,27 @@ export const useEvents = defineStore('events', () => {
 
     eventSource.addEventListener('task:created', (e) => {
       const task: Task = JSON.parse(e.data)
-      const outbox = useOutbox()
-      outbox.onTaskCreated(task)
+      useTasks().onTaskCreated(task)
     })
 
     eventSource.addEventListener('task:updated', (e) => {
       const task: Task = JSON.parse(e.data)
-      const outbox = useOutbox()
-      const inbox = useInbox()
-      outbox.onTaskUpdated(task)
-      inbox.onTaskUpdated(task)
+      useTasks().onTaskUpdated(task)
     })
 
     eventSource.addEventListener('inbox:new', (e) => {
       const task: Task = JSON.parse(e.data)
-      const inbox = useInbox()
-      inbox.onInboxNew(task)
-      // Remove from outbox
-      const outbox = useOutbox()
-      outbox.onTaskRemoved(task.id)
+      useTasks().onInboxNew(task)
     })
 
     eventSource.addEventListener('inbox:updated', (e) => {
       const task: Task = JSON.parse(e.data)
-      const inbox = useInbox()
-      inbox.onTaskUpdated(task)
+      useTasks().onTaskUpdated(task)
     })
 
     eventSource.addEventListener('task:removed', (e) => {
       const { id } = JSON.parse(e.data)
-      const outbox = useOutbox()
-      const inbox = useInbox()
-      outbox.onTaskRemoved(id)
-      inbox.onTaskRemoved(id)
+      useTasks().onTaskRemoved(id)
     })
 
     eventSource.addEventListener('log:entry', (e) => {
@@ -127,10 +114,7 @@ export const useEvents = defineStore('events', () => {
 
   // On reconnect, refetch everything to catch missed events
   function refetchAll() {
-    const outbox = useOutbox()
-    const inbox = useInbox()
-    outbox.fetchTasks()
-    inbox.fetchItems()
+    useTasks().fetchAll()
   }
 
   return { connected, connect, disconnect, refetchAll }
