@@ -1,22 +1,22 @@
 <script setup lang="ts">
-import type { CreateTaskInput, Project, TagConfig } from '@shared/types'
+import type { CreateTaskInput, Project, TagConfig, ViewConfig } from '@shared/types'
 import { onMounted, onUnmounted, provide, ref } from 'vue'
 import { api } from './api'
 import ActivityLog from './components/ActivityLog.vue'
-import InboxPanel from './components/InboxPanel.vue'
 import NewTaskModal from './components/NewTaskModal.vue'
-import OutboxPanel from './components/OutboxPanel.vue'
 import SettingsModal from './components/SettingsModal.vue'
+import ViewEditor from './components/ViewEditor.vue'
+import ViewPanel from './components/ViewPanel.vue'
 import { useCheckouts } from './stores/useCheckouts'
 import { useEvents } from './stores/useEvents'
-import { useInbox } from './stores/useInbox'
 import { useLog } from './stores/useLog'
-import { useOutbox } from './stores/useOutbox'
 import { useRepoStatus } from './stores/useRepoStatus'
+import { useTasks } from './stores/useTasks'
+import { useViews } from './stores/useViews'
 
 const events = useEvents()
-const outbox = useOutbox()
-const inbox = useInbox()
+const tasks = useTasks()
+const viewsStore = useViews()
 const checkoutsStore = useCheckouts()
 const log = useLog()
 const repoStatus = useRepoStatus()
@@ -27,6 +27,9 @@ const showSettings = ref(false)
 const projects = ref<Project[]>([])
 const taskTypes = ref<string[]>([])
 const tagConfigs = ref<Record<string, TagConfig>>({})
+
+const editingView = ref<ViewConfig | null | undefined>(undefined)
+// undefined = closed, null = new view, ViewConfig = editing existing
 
 provide('tagConfigs', tagConfigs)
 
@@ -58,11 +61,11 @@ async function refreshConfig() {
 }
 
 async function handleCreateTask(input: CreateTaskInput) {
-  await outbox.createTask(input)
+  await tasks.createTask(input)
 }
 
 async function handleDraftTask(input: CreateTaskInput) {
-  await outbox.createTask({ ...input, as_draft: true })
+  await tasks.createTask({ ...input, as_draft: true })
 }
 
 function handleEditDraft(draft: import('@shared/types').Task) {
@@ -71,14 +74,14 @@ function handleEditDraft(draft: import('@shared/types').Task) {
 }
 
 async function handleUpdateDraft(id: string, input: CreateTaskInput) {
-  await outbox.updateDraft(id, {
+  await tasks.updateDraft(id, {
     prompt: input.prompt,
     priority: input.priority,
     type: input.type,
   })
   // If the update came from "Send Task" (no as_draft flag), also send it
   if (!input.as_draft) {
-    await outbox.sendDraft(id)
+    await tasks.sendDraft(id)
   }
 }
 
@@ -145,6 +148,36 @@ function handleOpenSettingsFromTask() {
   showSettings.value = true
 }
 
+// View editor handlers
+function handleEditView(view: ViewConfig) {
+  editingView.value = view
+}
+
+function handleNewView() {
+  editingView.value = null
+}
+
+async function handleSaveView(view: ViewConfig) {
+  if (editingView.value === null) {
+    // New view
+    await viewsStore.addView(view)
+  } else {
+    // Update existing
+    await viewsStore.updateView(view.id, view)
+  }
+  editingView.value = undefined
+}
+
+async function handleDeleteView(id: string) {
+  await viewsStore.removeView(id)
+  editingView.value = undefined
+}
+
+async function handleResetViews() {
+  await viewsStore.resetToDefaults()
+  editingView.value = undefined
+}
+
 onMounted(async () => {
   window.addEventListener('keydown', onKeydown)
   events.connect()
@@ -152,8 +185,8 @@ onMounted(async () => {
   repoStatus.startPolling()
 
   await Promise.all([
-    outbox.fetchTasks(),
-    inbox.fetchItems(),
+    tasks.fetchAll(),
+    viewsStore.fetchViews(),
     checkoutsStore.fetchCheckouts(),
     log.fetchRecent(),
     refreshConfig(),
@@ -191,6 +224,22 @@ onUnmounted(() => {
           " />
       </div>
       <div class="flex items-center gap-2">
+        <button
+          class="p-1.5 text-zinc-400 hover:text-zinc-200 transition-colors rounded-md hover:bg-zinc-800"
+          title="Add View"
+          @click="handleNewView">
+          <svg
+            class="w-5 h-5"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24">
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="1.5"
+              d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
+          </svg>
+        </button>
         <button
           class="p-1.5 text-zinc-400 hover:text-zinc-200 transition-colors rounded-md hover:bg-zinc-800"
           title="Settings (⌘,)"
@@ -286,11 +335,18 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <!-- Main two-column layout -->
+    <!-- Main dynamic-column layout -->
     <main
-      class="flex-1 min-h-0 grid grid-cols-2 divide-x divide-zinc-800 overflow-hidden">
-      <OutboxPanel @editDraft="handleEditDraft" />
-      <InboxPanel />
+      class="flex-1 min-h-0 grid divide-x divide-zinc-800 overflow-x-auto"
+      :style="{
+        gridTemplateColumns: `repeat(${viewsStore.views.length}, minmax(300px, 1fr))`,
+      }">
+      <ViewPanel
+        v-for="view in viewsStore.views"
+        :key="view.id"
+        :view="view"
+        @editDraft="handleEditDraft"
+        @editView="handleEditView" />
     </main>
 
     <!-- Activity Log -->
@@ -301,7 +357,7 @@ onUnmounted(() => {
       v-if="showNewTask"
       :projects="projects"
       :task-types="taskTypes"
-      :existing-tasks="outbox.tasks"
+      :existing-tasks="tasks.allTasks"
       :tag-configs="tagConfigs"
       :editing-draft="editingDraft"
       @close="closeNewTask()"
@@ -312,5 +368,14 @@ onUnmounted(() => {
 
     <!-- Settings Modal -->
     <SettingsModal v-if="showSettings" @close="handleSettingsClose" />
+
+    <!-- View Editor Modal -->
+    <ViewEditor
+      v-if="editingView !== undefined"
+      :view="editingView ?? null"
+      @save="handleSaveView"
+      @delete="handleDeleteView"
+      @reset="handleResetViews"
+      @close="editingView = undefined" />
   </div>
 </template>

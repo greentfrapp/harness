@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { Task, TaskEvent } from '@shared/types'
 import {
+  OUTBOX_STATUSES,
   REJECTABLE_STATUSES,
   REVIEWABLE_STATUSES,
   RUNNING_STATUSES,
@@ -15,10 +16,11 @@ import SessionStream from './SessionStream.vue'
 
 const props = defineProps<{
   task: Task
-  context: 'outbox' | 'inbox'
+  context?: 'outbox' | 'inbox' | 'draft'
   autoFollowUp?: boolean
   actionsDisabled?: boolean
 }>()
+
 
 const emit = defineEmits<{
   cancel: [id: string]
@@ -108,14 +110,12 @@ onMounted(async () => {
   }
 })
 
-const showSessionStream = computed(
-  () =>
-    props.context === 'outbox' && RUNNING_STATUSES.includes(props.task.status),
+const showSessionStream = computed(() =>
+  RUNNING_STATUSES.includes(props.task.status),
 )
 
 const showDiffViewer = computed(
   () =>
-    props.context === 'inbox' &&
     props.task.branch_name &&
     REVIEWABLE_STATUSES.includes(props.task.status),
 )
@@ -451,7 +451,6 @@ function formatTime(ts: number): string {
     <!-- Revise for ready/error tasks in inbox -->
     <div
       v-if="
-        context === 'inbox' &&
         REJECTABLE_STATUSES.includes(task.status) &&
         (!actionsDisabled || isTaskCheckedOut)
       "
@@ -537,14 +536,14 @@ function formatTime(ts: number): string {
 
     <!-- Actions -->
     <div class="flex gap-2 pt-2 border-t border-zinc-800">
-      <template v-if="context === 'outbox'">
+      <template v-if="OUTBOX_STATUSES.includes(task.status)">
         <button
           class="px-3 py-1.5 text-xs font-medium rounded bg-red-900 hover:bg-red-800 text-red-300 transition-colors"
           @click="emit('cancel', task.id)">
           Cancel
         </button>
       </template>
-      <template v-if="context === 'inbox' && task.status === 'held'">
+      <template v-if="task.status === 'held'">
         <button
           class="px-3 py-1.5 text-xs font-medium rounded bg-green-900 hover:bg-green-800 text-green-300 transition-colors disabled:opacity-50"
           :disabled="approvingPlan"
@@ -558,7 +557,7 @@ function formatTime(ts: number): string {
           {{ rejecting ? 'Rejecting...' : 'Reject' }}
         </button>
       </template>
-      <template v-if="context === 'inbox' && task.status === 'error'">
+      <template v-if="task.status === 'error'">
         <!-- Errored tasks only show Retry and Revise -->
         <span
           v-if="actionsDisabled"
@@ -580,7 +579,7 @@ function formatTime(ts: number): string {
           </button>
         </template>
       </template>
-      <template v-if="context === 'inbox' && task.status === 'ready'">
+      <template v-if="task.status === 'ready'">
         <!-- Warning when actions are disabled due to another task being checked out -->
         <span
           v-if="actionsDisabled"

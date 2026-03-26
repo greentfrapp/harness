@@ -8,7 +8,7 @@ const checkoutsStore = useCheckouts()
 
 defineProps<{
   task: Task
-  context: 'outbox' | 'inbox'
+  context?: 'outbox' | 'inbox' | 'draft'
 }>()
 
 const emit = defineEmits<{

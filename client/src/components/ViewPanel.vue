@@ -1,17 +1,30 @@
 <script setup lang="ts">
-import type { TagConfig, Task } from '@shared/types'
+import type { TagConfig, Task, ViewConfig } from '@shared/types'
+import { DRAFT_STATUSES } from '@shared/types'
 import { computed, inject, ref } from 'vue'
 import { useTaskSelection } from '../composables/useTaskSelection'
-import { useOutbox } from '../stores/useOutbox'
+import { useCheckouts } from '../stores/useCheckouts'
+import { useTasks } from '../stores/useTasks'
 import TaskCard from './TaskCard.vue'
 import TaskModal from './TaskModal.vue'
 
 const tagConfigs =
   inject<import('vue').Ref<Record<string, TagConfig>>>('tagConfigs')
 
-const outbox = useOutbox()
+const props = defineProps<{
+  view: ViewConfig
+}>()
+
+const emit = defineEmits<{
+  editDraft: [draft: Task]
+  editView: [view: ViewConfig]
+}>()
+
+const tasks = useTasks()
+const checkoutsStore = useCheckouts()
 const confirming = ref(false)
 const draftsCollapsed = ref(false)
+
 const {
   selectedCount,
   hasSelection,
@@ -24,17 +37,43 @@ const {
 const confirmingBulkDelete = ref(false)
 const bulkDeleting = ref(false)
 
+const viewTasks = tasks.tasksForView(props.view)
+
+const drafts = computed(() =>
+  viewTasks.value.filter((t) => DRAFT_STATUSES.includes(t.status)),
+)
+
+const nonDraftTasks = computed(() =>
+  viewTasks.value.filter((t) => !DRAFT_STATUSES.includes(t.status)),
+)
+
+const hasDrafts = computed(
+  () =>
+    props.view.filter.statuses?.includes('draft') && drafts.value.length > 0,
+)
+
+const pendingCount = computed(
+  () =>
+    viewTasks.value.filter(
+      (t) => t.status === 'ready' || t.status === 'permission',
+    ).length,
+)
+
+const hasPermissionRequests = computed(() =>
+  viewTasks.value.some((t) => t.status === 'permission'),
+)
+
 const allSelected = computed(
   () =>
-    outbox.sortedTasks.length > 0 &&
-    selectedCount.value === outbox.sortedTasks.length,
+    nonDraftTasks.value.length > 0 &&
+    selectedCount.value === nonDraftTasks.value.length,
 )
 
 function toggleSelectAll() {
   if (allSelected.value) {
     clearSelection()
   } else {
-    selectAll(outbox.sortedTasks.map((t) => t.id))
+    selectAll(nonDraftTasks.value.map((t) => t.id))
   }
 }
 
@@ -47,10 +86,10 @@ async function handleBulkDelete() {
   try {
     const ids = [
       ...new Set(
-        outbox.sortedTasks.filter((t) => isSelected(t.id)).map((t) => t.id),
+        nonDraftTasks.value.filter((t) => isSelected(t.id)).map((t) => t.id),
       ),
     ]
-    await outbox.bulkDelete(ids)
+    await tasks.bulkDelete(ids)
     clearSelection()
   } finally {
     bulkDeleting.value = false
@@ -63,42 +102,44 @@ function cancelBulkDelete() {
 }
 
 async function handleClear() {
-  await outbox.clearAll()
+  const statuses = props.view.filter.statuses ?? []
+  // Only clear non-draft statuses
+  const clearable = statuses.filter((s) => !DRAFT_STATUSES.includes(s))
+  if (clearable.length) {
+    await tasks.clearAll(clearable)
+  }
   confirming.value = false
 }
 
 async function handleCancel(id: string) {
-  await outbox.cancelTask(id)
+  await tasks.cancelTask(id)
 }
 
 async function handleDelete(id: string) {
-  await outbox.deleteTask(id)
+  await tasks.deleteTask(id)
   if (maximizedTask.value?.id === id) maximizedTask.value = null
 }
 
 async function handleSendDraft(id: string) {
-  await outbox.sendDraft(id)
+  await tasks.sendDraft(id)
 }
 
 async function handleDeleteDraft(id: string) {
-  await outbox.deleteDraft(id)
+  await tasks.deleteDraft(id)
 }
-
-const emit = defineEmits<{
-  editDraft: [draft: Task]
-}>()
 
 const maximizedTask = ref<Task | null>(null)
 
 function handleMaximize(id: string) {
-  const task =
-    outbox.sortedTasks.find((t) => t.id === id) ||
-    outbox.sortedDrafts.find((t) => t.id === id)
+  const task = viewTasks.value.find((t) => t.id === id)
   if (task) maximizedTask.value = task
 }
 
-function handleMaximizeCancel(id: string) {
-  handleCancel(id)
+async function handleMaximizeAction(
+  id: string,
+  action?: (id: string) => Promise<void>,
+) {
+  if (action) await action(id)
   maximizedTask.value = null
 }
 </script>
@@ -138,17 +179,43 @@ function handleMaximizeCancel(id: string) {
         <template v-else>
           <h2
             class="text-sm font-semibold text-zinc-300 uppercase tracking-wider">
-            Outbox
+            {{ view.name }}
           </h2>
           <span
-            v-if="outbox.sortedTasks.length"
-            class="text-xs bg-zinc-800 text-zinc-400 px-2 py-0.5 rounded-full">
-            {{ outbox.sortedTasks.length }}
+            v-if="pendingCount"
+            class="text-xs px-2 py-0.5 rounded-full font-medium"
+            :class="
+              hasPermissionRequests
+                ? 'bg-red-600 text-white animate-pulse'
+                : 'bg-zinc-600 text-white'
+            ">
+            {{ pendingCount }}
           </span>
+          <span
+            v-else-if="nonDraftTasks.length"
+            class="text-xs bg-zinc-800 text-zinc-400 px-2 py-0.5 rounded-full">
+            {{ nonDraftTasks.length }}
+          </span>
+          <button
+            class="p-1 text-zinc-600 hover:text-zinc-300 transition-colors rounded"
+            title="Edit view"
+            @click="emit('editView', view)">
+            <svg
+              class="w-3.5 h-3.5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+          </button>
         </template>
       </div>
       <div
-        v-if="outbox.sortedTasks.length"
+        v-if="nonDraftTasks.length"
         class="flex items-center gap-2 text-xs">
         <template v-if="hasSelection">
           <button
@@ -189,7 +256,7 @@ function handleMaximizeCancel(id: string) {
 
     <div class="flex-1 overflow-y-auto p-3 space-y-2">
       <!-- Drafts Section -->
-      <div v-if="outbox.sortedDrafts.length" class="mb-3">
+      <div v-if="hasDrafts" class="mb-3">
         <button
           class="w-full flex items-center gap-2 px-1 py-1.5 text-left group"
           @click="draftsCollapsed = !draftsCollapsed">
@@ -211,13 +278,13 @@ function handleMaximizeCancel(id: string) {
           </span>
           <span
             class="text-xs bg-zinc-800 text-zinc-500 px-1.5 py-0.5 rounded-full">
-            {{ outbox.sortedDrafts.length }}
+            {{ drafts.length }}
           </span>
         </button>
 
         <div v-if="!draftsCollapsed" class="space-y-2 mt-1">
           <div
-            v-for="draft in outbox.sortedDrafts"
+            v-for="draft in drafts"
             :key="draft.id"
             class="group rounded-lg border border-dashed border-zinc-700 bg-zinc-900/50 hover:border-zinc-600 transition-colors cursor-pointer"
             @click="emit('editDraft', draft)">
@@ -287,27 +354,30 @@ function handleMaximizeCancel(id: string) {
         </div>
       </div>
 
-      <!-- Outbox Tasks -->
+      <!-- Tasks -->
       <TaskCard
-        v-for="task in outbox.sortedTasks"
+        v-for="task in nonDraftTasks"
         :key="task.id"
         :task="task"
-        context="outbox"
         :hasSelection="hasSelection"
         :selected="isSelected(task.id)"
         :tag-configs="tagConfigs"
+        :is-checked-out="checkoutsStore.isCheckedOut(task.id)"
+        :actions-disabled="
+          checkoutsStore.isProjectLockedByOtherTask(task.project_id, task.id)
+        "
         @cancel="handleCancel"
+        @approve="() => {}"
+        @reject="() => {}"
+        @retry="() => {}"
         @delete="handleDelete"
+        @follow-up="() => {}"
         @toggleSelect="toggle"
         @maximize="handleMaximize" />
       <div
-        v-if="
-          !outbox.sortedTasks.length &&
-          !outbox.sortedDrafts.length &&
-          !outbox.loading
-        "
+        v-if="!viewTasks.length && !tasks.loading"
         class="text-center text-zinc-600 py-12 text-sm">
-        No tasks in queue
+        No tasks
       </div>
     </div>
 
@@ -315,9 +385,12 @@ function handleMaximizeCancel(id: string) {
     <TaskModal
       v-if="maximizedTask"
       :task="maximizedTask"
-      context="outbox"
       @close="maximizedTask = null"
-      @cancel="handleMaximizeCancel"
-      @delete="handleDelete" />
+      @cancel="(id) => handleMaximizeAction(id, handleCancel)"
+      @approve="(id) => handleMaximizeAction(id)"
+      @reject="(id) => handleMaximizeAction(id)"
+      @retry="(id) => handleMaximizeAction(id)"
+      @delete="(id) => handleMaximizeAction(id, handleDelete)"
+      @follow-up="(id) => handleMaximizeAction(id)" />
   </div>
 </template>

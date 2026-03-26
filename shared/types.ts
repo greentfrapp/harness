@@ -60,6 +60,52 @@ export const ACTIVE_STATUSES: TaskStatus[] = [
   'held',
 ]
 
+// View types
+export interface ViewFilter {
+  statuses?: TaskStatus[]
+  priorities?: Priority[]
+  tags?: string[]
+  project_id?: string
+}
+
+export interface ViewConfig {
+  id: string
+  name: string
+  filter: ViewFilter
+}
+
+export const DEFAULT_VIEWS: ViewConfig[] = [
+  {
+    id: 'outbox',
+    name: 'Outbox',
+    filter: {
+      statuses: ['draft', 'queued', 'in_progress', 'retrying'],
+    },
+  },
+  {
+    id: 'inbox',
+    name: 'Inbox',
+    filter: {
+      statuses: [
+        'ready',
+        'held',
+        'error',
+        'permission',
+        'approved',
+        'rejected',
+      ],
+    },
+  },
+]
+
+export function getTaskContext(
+  status: TaskStatus,
+): 'outbox' | 'inbox' | 'draft' {
+  if ((DRAFT_STATUSES as string[]).includes(status)) return 'draft'
+  if ((OUTBOX_STATUSES as string[]).includes(status)) return 'outbox'
+  return 'inbox'
+}
+
 // Config types
 export interface AgentConfig {
   adapter: string // references AgentAdapter.id
