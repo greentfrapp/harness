@@ -49,9 +49,11 @@ const emit = defineEmits<{
 const checkoutsStore = useCheckouts()
 
 const taskTypes = inject<import('vue').Ref<string[]>>('taskTypes')
-const transitionTypes = computed(() =>
-  (taskTypes?.value ?? []).filter((t) => t !== props.task.type),
-)
+const transitionTypes = computed(() => {
+  if (props.task.type === 'discuss')
+    return (taskTypes?.value ?? []).filter((t) => t !== props.task.type)
+  else return false
+})
 
 const expanded = ref(false)
 const autoFollowUp = ref(false)
