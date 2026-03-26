@@ -4,6 +4,7 @@ import type {
   SSEEventType,
   Task,
 } from '../shared/types'
+import { transition } from '../shared/transitions'
 import { comparePriority, getErrorMessage } from '../shared/types'
 
 interface AgentPoolLike {
@@ -89,13 +90,15 @@ export class Dispatcher {
       const project = this.deps.getProjectById(task.project_id)
       if (!project) {
         this.deps.updateTask(task.id, {
-          status: 'error',
+          status: transition(task.status, 'dispatch_error'),
           error_message: 'Project not found',
         })
         continue
       }
 
-      this.deps.updateTask(task.id, { status: 'in_progress' })
+      this.deps.updateTask(task.id, {
+        status: transition(task.status, 'dispatch'),
+      })
       this.deps.createTaskEvent(task.id, 'dispatched', null)
       const updated = this.deps.getTaskById(task.id)
       this.deps.broadcast('task:updated', updated)
@@ -104,8 +107,12 @@ export class Dispatcher {
         await opts.dispatch(this.deps.getTaskById(task.id)!, project)
       } catch (err) {
         const msg = getErrorMessage(err)
+        const current = this.deps.getTaskById(task.id)
         this.deps.updateTask(task.id, {
-          status: 'error',
+          status: transition(
+            current?.status ?? 'in_progress',
+            'dispatch_error',
+          ),
           error_message: `Failed to dispatch: ${msg}`,
         })
         this.deps.createTaskEvent(

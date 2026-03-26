@@ -9,7 +9,7 @@ export default defineConfig({
   },
   test: {
     pool: 'threads',
-    include: ['server/**/*.test.ts'],
+    include: ['server/**/*.test.ts', 'shared/**/*.test.ts', 'client/**/*.test.ts'],
     fileParallelism: false,
     teardownTimeout: 3000,
   },
