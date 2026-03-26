@@ -37,7 +37,7 @@ const {
 const confirmingBulkDelete = ref(false)
 const bulkDeleting = ref(false)
 
-const viewTasks = tasks.tasksForView(props.view)
+const viewTasks = tasks.tasksForView(() => props.view)
 
 const drafts = computed(() =>
   viewTasks.value.filter((t) => DRAFT_STATUSES.includes(t.status)),

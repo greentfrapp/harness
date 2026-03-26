@@ -82,8 +82,9 @@ export const useTasks = defineStore('tasks', () => {
 
   // --- View filtering ---
 
-  function tasksForView(view: ViewConfig) {
+  function tasksForView(viewGetter: () => ViewConfig) {
     return computed(() => {
+      const view = viewGetter()
       const filtered = allTasks.value.filter((task) => {
         const f = view.filter
         if (f.statuses?.length && !f.statuses.includes(task.status))
