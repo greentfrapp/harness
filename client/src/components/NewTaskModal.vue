@@ -143,8 +143,8 @@ function onKeydown(e: KeyboardEvent) {
 }
 
 async function handleSubmit() {
-  if (!projectId.value || !prompt.value.trim()) {
-    error.value = 'Project and prompt are required'
+  if (!projectId.value || (!prompt.value.trim() && !title.value.trim())) {
+    error.value = 'Project and either title or prompt are required'
     return
   }
 
@@ -156,7 +156,7 @@ async function handleSubmit() {
       project_id: projectId.value,
       type: taskType.value,
       title: title.value.trim() || undefined,
-      prompt: prompt.value.trim(),
+      prompt: prompt.value.trim() || undefined,
       priority: priority.value,
       tags: selectedTags.value.length > 0 ? [...selectedTags.value] : undefined,
       depends_on: dependsOn.value || null,
@@ -176,8 +176,8 @@ async function handleSubmit() {
 }
 
 function handleSaveDraft() {
-  if (!projectId.value || !prompt.value.trim()) {
-    error.value = 'Project and prompt are required'
+  if (!projectId.value || (!prompt.value.trim() && !title.value.trim())) {
+    error.value = 'Project and either title or prompt are required'
     return
   }
 
@@ -185,7 +185,7 @@ function handleSaveDraft() {
     project_id: projectId.value,
     type: taskType.value,
     title: title.value.trim() || undefined,
-    prompt: prompt.value.trim(),
+    prompt: prompt.value.trim() || undefined,
     priority: priority.value,
     tags: selectedTags.value.length > 0 ? [...selectedTags.value] : undefined,
     depends_on: dependsOn.value || null,
@@ -292,7 +292,8 @@ const priorities: { value: Priority; label: string }[] = [
           <!-- Prompt -->
           <div>
             <label class="block text-xs font-medium text-zinc-400 mb-1"
-              >Prompt</label
+              >Prompt
+              <span class="text-zinc-500 font-normal">(optional)</span></label
             >
             <textarea
               ref="promptInput"
