@@ -24,7 +24,8 @@ Developers in the agentic coding era spend more time reviewing AI-generated outp
 │  │  (filtered)  │  │  (filtered)  │  │  (filtered)  │           │
 │  └──────────────┘  └──────────────┘  └──────────────┘           │
 │  Dynamic N-column grid based on ViewConfig[]                     │
-│  Default: Outbox (draft/queued/in_progress) + Inbox (ready/etc) │
+│  Default: Outbox (draft/queued/in_progress/waiting_on_subtasks) │
+│  │         + Inbox (ready/etc)                                   │
 │                                                                   │
 │  ┌──────────────────────────────────────────────────────────────┐ │
 │  │  New Task (modal)     [+ New Task] / keyboard                │ │
@@ -80,20 +81,26 @@ Task context (outbox vs. inbox behavior) is **derived from task status** via the
 
 The default configuration provides two views matching the original layout:
 
-- **Outbox**: Filters for `draft`, `queued`, `in_progress`, `retrying` statuses — the queue view showing active work
-- **Inbox**: Filters for `ready`, `held`, `error`, `permission`, `approved`, `rejected`, `cancelled` statuses — completed or blocked tasks for review
+- **Outbox**: Filters for `draft`, `queued`, `in_progress`, `retrying`, `waiting_on_subtasks` statuses — the queue view showing active work
+- **Inbox**: Filters for `ready`, `held`, `error`, `permission`, `approved`, `rejected`, `cancelled` statuses — completed or actionable tasks for review
 
 Users can customize these or add additional views. Permission requests are **prioritized above all other items** within any view and tagged with a distinct visual indicator.
 
 ### Task Lifecycle
 
 ```
-User writes task → New Task modal → [Draft] ──Send──→ Outbox/Queue → Agent executes → Inbox → User reviews
-                                  (or direct to queue)      ↑               ↓ (on failure)        ↓
-                                                            │          Retry (up to max)  Approve (merge & done)
-                                                            │               ↓ (max retries) Reject (discard & done)
-                                                            │          Inbox (with error)  Revise (--resume, back to outbox)
-                                                            └──────────────────────────────────┘
+User writes task → New Task modal → [Draft] ──Send──→ Outbox/Queue → Agent executes ──→ Inbox → User reviews
+                                  (or direct to queue)      ↑               │                       ↓
+                                                            │               ├─ (on failure)  Approve (merge & done)
+                                                            │               │  Retry (up to max)  Reject (discard & done)
+                                                            │               │    ↓ (max retries)  Revise (--resume, back to outbox)
+                                                            │               │  Inbox (with error)
+                                                            │               │
+                                                            │               └─ (subtask proposal)
+                                                            │                  waiting_on_subtasks → User reviews proposals
+                                                            │                    ↓ (resolved)
+                                                            │                  Re-queued
+                                                            └──────────────────────────────────────────┘
 ```
 
 **Draft tasks**: Tasks can be created as drafts (`as_draft: true` in CreateTaskInput). Drafts have status `draft` and do not enter the queue. They can be edited (prompt, priority, tags, dependencies) before being sent. `POST /tasks/:id/send` transitions a draft to `queued` and enters it into the dispatch queue. Tasks can also be submitted directly to the queue without the draft step.
@@ -155,7 +162,7 @@ Discuss tasks do **not** consume worktree slots — they run in plan mode (read-
 
 Each Do task worker spawns a Claude Code session via CLI:
 
-- Use `claude --json` for structured output
+- Use `claude --output-format stream-json --verbose` for structured streaming output
 - Use `--allowedTools` to scope permissions per task type
 - Each session runs in its own git worktree
 - Workers stream progress back to the backend via stdout parsing
@@ -201,6 +208,14 @@ When a task completes (or needs user input), it enters the inbox. The batcher gr
 - If task B depends on task A, and A is in the inbox awaiting review, B's result is held
 - Once the user reviews A (approve/reject/modify), B is either released to inbox or re-queued
 - Prevents the user from reviewing work that may be invalidated by an upstream decision
+
+**Outbox states**:
+
+- `draft` — task created but not yet sent to queue
+- `queued` — waiting for a slot
+- `in_progress` — agent actively working
+- `retrying` — agent retrying after failure
+- `waiting_on_subtasks` — agent proposed subtasks, paused while user reviews proposals
 
 **Inbox item states**:
 
@@ -287,36 +302,33 @@ The flow is:
 3. The agent produces a structured analysis: problem statement, relevant code references, proposed approaches with tradeoffs
 4. This analysis appears in the inbox as a discussion item with a **chat UI**
 5. The user responds conversationally — asking follow-ups, narrowing scope, making decisions
-6. The agent may suggest **subtasks** — concrete Do tasks derived from the discussion. Subtasks are proposed via a JSON format in the agent's output (see below). If the format is invalid, Harness responds to the agent with an error message prompting retry (max 3 format retries; after that, the raw text is shown and the user creates tasks manually). Proposals appear within the chat for the user to approve (spawning them into the outbox) or dismiss
+6. The agent may suggest **subtasks** — concrete Do tasks derived from the discussion. Subtasks are proposed via the Harness CLI (`$HARNESS_CLI propose-subtasks`), which transitions the task to `waiting_on_subtasks`. The user reviews proposals in the task detail UI and approves (spawning them into the outbox) or dismisses (with optional feedback)
 7. The user closes the discussion when done (no approve/reject — discussions don't produce diffs)
 
-### Subtask Proposal Format
+### Subtask Proposal via Harness CLI
 
-The agent proposes subtasks by including a JSON block in its output:
+Agents propose subtasks using the **Harness CLI**, not by embedding JSON in their output. The `AgentPool` injects instructions into the agent's system prompt explaining how to use the CLI:
 
-```json
-{
-  "subtasks": [
-    {
-      "title": "Short task title",
-      "prompt": "Full task description for the agent",
-      "priority": "P2",
-      "depends_on": null
-    }
-  ]
-}
+```
+$HARNESS_CLI propose-subtasks --subtasks '[{"title":"Short title","prompt":"Detailed instructions"}]'
 ```
 
-Harness parses JSON blocks from the agent's output stream. Fields:
+When the agent calls this CLI command, it hits the `POST /tasks/:id/propose-subtasks` endpoint. The task transitions from `in_progress` to `waiting_on_subtasks`, pausing the agent. The user reviews proposals in the UI (within the task detail) and can approve or dismiss each one:
+
+- **Approved** proposals become new Do tasks in the outbox with `parent_task_id` linking back to the proposing task
+- **Dismissed** proposals can include feedback explaining why they were rejected
+
+Once all proposals are resolved via `POST /tasks/:id/resolve-proposals`, the parent task is re-queued. If all proposals were dismissed, the dismissal feedback is injected into the resume prompt so the agent understands what was rejected and why.
+
+**Auto-approval**: The `auto_approve_subtasks` config option skips user review and immediately creates tasks for all proposed subtasks.
+
+**Subtask proposal fields**:
 
 - `title` (required): Short label shown in the outbox
-- `prompt` (required): The full prompt passed to the Do task agent
+- `prompt` (required): The full prompt passed to the subtask agent
 - `priority` (optional, default "P2"): "P0", "P1", "P2", or "P3"
-- `depends_on` (optional): Title of another subtask in the same proposal, for ordering
 
-If parsing fails after 3 retries, Harness shows the raw agent output and lets the user create tasks manually from the New Task modal.
-
-This ensures the user never faces a blank-slate discussion — the agent has already done the legwork.
+This CLI-based approach is more reliable than parsing JSON from agent output — the agent calls a well-defined endpoint rather than hoping Harness can find and parse a JSON block in free-form text.
 
 ---
 
@@ -346,15 +358,14 @@ You are in research/plan mode. Your job is to analyze the topic below and presen
 Rules:
 - Do NOT modify any files. Read and search only.
 - Structure your response as: (1) Problem statement, (2) Relevant code references, (3) Proposed approaches with tradeoffs.
-- If you identify concrete implementation tasks, propose them as subtasks using this JSON format:
-
-  {"subtasks": [{"title": "...", "prompt": "...", "priority": "P2", "depends_on": null}]}
-
+- If you identify concrete implementation tasks, propose them as subtasks using the Harness CLI.
 - Only propose subtasks when you have a clear, actionable recommendation. Not every discussion needs subtasks.
 
 Topic:
 {user_prompt}
 ```
+
+Note: The `AgentPool` additionally injects Harness CLI instructions into the system prompt at dispatch time, teaching the agent the `$HARNESS_CLI propose-subtasks` command. These instructions are not part of the config template — they are appended automatically.
 
 ### Conversational mode
 
@@ -397,10 +408,11 @@ projects (
 tasks (
   id            TEXT PRIMARY KEY,       -- uuid
   project_id    TEXT NOT NULL REFERENCES projects(id),
+  title         TEXT,                   -- optional short title (nullable)
   type          TEXT NOT NULL,          -- 'do' | 'discuss' | custom type name
   status        TEXT NOT NULL,          -- 'draft' | 'queued' | 'in_progress' | 'retrying' |
-                                        --   'ready' | 'held' | 'error' | 'permission' |
-                                        --   'approved' | 'rejected' | 'cancelled'
+                                        --   'waiting_on_subtasks' | 'ready' | 'held' | 'error' |
+                                        --   'permission' | 'approved' | 'rejected' | 'cancelled'
   prompt        TEXT NOT NULL,          -- user's original prompt (+ revise feedback appended)
   priority      TEXT DEFAULT 'P2',      -- 'P0' | 'P1' | 'P2' | 'P3'
   depends_on    TEXT REFERENCES tasks(id),  -- nullable, user-declared dependency
@@ -442,6 +454,7 @@ subtask_proposals (
   priority      TEXT DEFAULT 'P2',
   depends_on_title TEXT,                -- title of another proposal in same batch (nullable)
   status        TEXT DEFAULT 'pending', -- 'pending' | 'approved' | 'dismissed'
+  feedback      TEXT,                   -- user feedback on dismissal (nullable)
   spawned_task_id TEXT REFERENCES tasks(id),  -- the Do task created on approval (nullable)
   created_at    INTEGER NOT NULL        -- epoch ms (Date.now())
 )
@@ -453,7 +466,8 @@ subtask_proposals (
 - **Append-only `task_events`**: Every state transition is logged. Revise history is reconstructable from events with `event_type = 'revised'` and the feedback stored in `data`. No data is lost even though the task row is mutable.
 - **No conversation storage**: The agent manages its own session files. Harness only stores `agent_session_data` to resume. This avoids duplicating potentially large conversation histories. If a future agent doesn't handle its own persistence, conversation data can be stored in `task_events` as `data` payloads.
 - **Agent-agnostic fields**: `agent_type` identifies which adapter to use. `agent_session_data` is a JSON blob each adapter interprets (CC stores a session ID, Codex might store a thread ID, etc.).
-- **`subtask_proposals` as a separate table**: Clean separation from the task lifecycle. Links back to both the source Discuss task and the spawned Do task (if approved).
+- **`title` field**: Optional short title for tasks (nullable). Subtask proposals always have a required title, which is carried over when a proposal is approved and spawned as a task.
+- **`subtask_proposals` as a separate table**: Clean separation from the task lifecycle. Links back to both the source task and the spawned Do task (if approved). Includes a `feedback` field for dismissal reasons, which is injected into the parent's resume prompt.
 - **Diff storage**: Both `diff_summary` (files changed, line counts) and `diff_full` (complete diff content) are stored in SQLite on task completion. This allows diff display even after the worktree has been destroyed. If the committed diff is empty but the worktree has uncommitted changes (`git diff HEAD` in the worktree), those are returned with an `uncommitted` flag so the UI can prompt the user to request a commit.
 - **`parent_task_id` for lineage**: Follow-up tasks link to their parent via `parent_task_id` (separate from `depends_on`). This is purely for provenance/UI display — not a dispatch dependency. When a parent is deleted/rejected/cancelled, `clearParentReferences()` nulls out both `depends_on` and `parent_task_id` on children.
 - **Custom types**: The `type` column accepts any string, not just 'do'/'discuss'. Task type definitions (including whether a worktree is needed) live in `config.jsonc`.
@@ -471,6 +485,7 @@ Harness runs as a localhost web app and needs to know which repositories to oper
   // Global defaults
   "worktree_limit": 3,
   "conversation_limit": 5,
+  "auto_approve_subtasks": false, // skip user review of subtask proposals
 
   // Agent definitions — task types reference these by key
   "agents": {
@@ -614,7 +629,8 @@ harness/
 │   │       └── useTaskSelection.ts # Multi-select helper for batch operations
 │   └── index.html
 └── shared/
-    └── types.ts              # Shared TypeScript types (single source of truth)
+    ├── types.ts              # Shared TypeScript types (single source of truth)
+    └── transitions.ts        # Formal state machine for task status transitions
 ```
 
 ---
@@ -635,7 +651,8 @@ harness/
 
 **Shared types**
 
-- [x] Define core types in `shared/types.ts`: `Task`, `TaskType`, `TaskStatus`, `Priority`, `TaskEvent`, `SubtaskProposal`, `ProjectConfig`, `HarnessConfig`, `CreateTaskInput`, `UpdateTaskInput`, `AgentConfig`, `TaskTypeConfig`, `TagConfig`, `CheckoutInfo`, `RepoStatus`, `LogEntry`, `SSEEvent`, `ViewFilter`, `ViewConfig`, `DEFAULT_VIEWS`, `getTaskContext()`
+- [x] Define core types in `shared/types.ts`: `Task`, `TaskType`, `TaskStatus`, `Priority`, `TaskEvent`, `SubtaskProposal`, `SubtaskProposalInput`, `ProjectConfig`, `HarnessConfig`, `CreateTaskInput`, `UpdateTaskInput`, `AgentConfig`, `TaskTypeConfig`, `TagConfig`, `CheckoutInfo`, `RepoStatus`, `LogEntry`, `SSEEvent`, `ViewFilter`, `ViewConfig`, `DEFAULT_VIEWS`, `getTaskContext()`
+- [x] Define formal state machine in `shared/transitions.ts`: action → source statuses → target status mapping, with `isValidTransition()` helper
 - [x] Define SSE event types: `task:created`, `task:updated`, `task:removed`, `task:progress`, `inbox:new`, `inbox:updated`, `task:checked_out`, `task:returned`, `log:entry` — _changed from WebSocket to SSE_
 
 **Database**
@@ -696,13 +713,13 @@ harness/
 **Agent pool**
 
 - [x] Agent pool manager (`server/pool.ts`): track worktree slots (default 3) and conversation slots (default 5)
-- [x] Spawn Claude Code via `child_process.spawn` with `--json` and `--system-prompt` (from config template)
+- [x] Spawn Claude Code via `child_process.spawn` with `--output-format stream-json --verbose` and `--system-prompt` (from config template)
 - [x] Branch naming convention: `harness/{task-id-short}-{sanitized-title}` (max 50 chars)
 - [x] Git worktree creation: `git worktree add` from target branch, one per Do task
 - [x] Git worktree destruction: `git worktree remove` + branch delete on approval/rejection/cancel
 - [x] Store PID and session ID in `agent_session_data` JSON blob
 - [x] Discuss tasks: spawn CC with read-only `--allowedTools`, run in main repo directory, no worktree
-- [x] Stream CC `--json` output via stdout parsing, emit progress events over SSE — _changed from WebSocket to SSE_
+- [x] Stream CC `--output-format stream-json` output via stdout parsing, emit progress events over SSE — _changed from WebSocket to SSE_
 
 **Task dispatch**
 
@@ -723,7 +740,7 @@ harness/
 
 **Frontend — live session + basic review**
 
-- [x] `SessionStream.vue`: render live CC `--json` output in accordion/modal (tool calls, file edits, assistant messages)
+- [x] `SessionStream.vue`: render live CC `--output-format stream-json` output in accordion/modal (tool calls, file edits, assistant messages)
 - [x] `DiffViewer.vue`: diff2html component, render `git diff` output — _used diff2html instead of Monaco_
 - [x] Outbox task cards: click to expand accordion with SessionStream (in-progress) or summary (completed)
 - [x] Inbox task cards: click to expand accordion with DiffViewer + agent summary
@@ -732,7 +749,7 @@ harness/
 - [x] Reject with dependents: show notification listing blocked tasks, options to cancel/revise/leave them
 - [x] Cancel action: kill CC process, destroy worktree + branch, update status to `cancelled`
 
-**Tests**: git.ts unit tests (branch naming), dispatcher unit tests (dispatch logic, slot limits, error handling), recovery unit tests (stale task transitions, orphaned process cleanup), updated route tests (approve/reject/cancel/diff endpoints), pool progress broadcasting tests, stream filter tests, claude-code adapter tests. 196 tests across 11 test files.
+**Tests**: git.ts unit tests (branch naming), dispatcher unit tests (dispatch logic, slot limits, error handling), recovery unit tests (stale task transitions, orphaned process cleanup), updated route tests (approve/reject/cancel/diff endpoints), pool progress broadcasting tests, stream filter tests, claude-code adapter tests, state machine transition tests, client store tests (useTasks, useCheckouts, useLog, taskArrayUtils, useTaskSelection). 19 test files across server, shared, and client.
 
 **Verification**: Submit a Do task, watch it dispatch to CC, see live session stream in accordion. Task completes, diff appears in inbox. Approve merges to target branch. Reject discards. Cancel kills process. Server restart recovers stale tasks.
 
@@ -756,14 +773,15 @@ harness/
 - [ ] Close discussion: user closes chat, task status → `closed`, conversation slot freed
 - [ ] Add `closed` to TaskStatus enum for non-diff-producing tasks
 
-**Subtask proposals**
+**Subtask proposals** — _mechanism changed from JSON parsing to Harness CLI approach_
 
-- [ ] `SubtaskProposal.vue`: render proposed subtasks inline in chat with approve/dismiss buttons
-- [ ] Parse subtask JSON blocks from agent output stream (format: `{"subtasks": [...]}`)
-- [ ] On parse failure: send error message back to agent, retry up to 3 times
-- [ ] After 3 format failures: show raw text, user creates tasks manually
-- [ ] On user approve: create Do task in outbox with proposed title, prompt, priority, depends_on
-- [ ] Store proposals in `subtask_proposals` table, link to source Discuss task and spawned Do task
+- [x] Agent receives injected instructions for `$HARNESS_CLI propose-subtasks` command — _`pool.ts` injects CLI instructions into agent system prompt_
+- [x] `POST /tasks/:id/propose-subtasks` endpoint receives proposals, transitions task to `waiting_on_subtasks` — _in `routes/tasks.ts`_
+- [x] Store proposals in `subtask_proposals` table, link to source task and spawned Do task
+- [x] `POST /tasks/:id/resolve-proposals` endpoint: approve (create Do tasks) or dismiss (with feedback) — _dismissal feedback injected into resume prompt_
+- [x] `auto_approve_subtasks` config option: skip user review, immediately create tasks
+- [x] Subtask proposal review UI in `TaskDetail.vue` — _no dedicated `SubtaskProposal.vue` component; proposals rendered inline in task detail_
+- [ ] `SubtaskProposal.vue`: dedicated component for rendering proposals (currently inline in TaskDetail)
 
 **Task checkout (manual testing before accept)**
 
@@ -823,7 +841,7 @@ harness/
 
 **Permission requests**
 
-- [x] Detect CC permission prompts from `--json` output stream — _`ClaudeCodeAdapter.parseMessage()` detects `subtype: 'permission_request'` and returns `type: 'permission_request'` event_
+- [x] Detect CC permission prompts from `--output-format stream-json` output stream — _`ClaudeCodeAdapter.parseMessage()` detects `subtype: 'permission_request'` and returns `type: 'permission_request'` event_
 - [x] Kill agent and create inbox item with status `permission`, store tool name in `error_message` — _`handleAgentEvent()` in `pool.ts` detects permission_request, calls `killAgent()`, updates status, broadcasts `inbox:new`_
 - [x] Prioritize permission items above all others in inbox — _`useInbox.ts` `sortedItems` sorts `permission` status first_
 - [x] Red notification badge when permissions are pending — _`hasPermissionRequests` computed in `useInbox.ts`, pulsing red badge in `statusConfig`_
@@ -850,6 +868,10 @@ These features were implemented during development but weren't tracked in the or
 - **Settings modal**: `SettingsModal.vue` with JSONC editor, real-time parse error detection, and hot-reload via `PUT /api/config/raw`.
 - **Permission handling**: When an agent emits a `permission_request` event, `handleAgentEvent()` kills the process, sets status to `permission` (with tool name in `error_message`), and pushes to inbox. `POST /tasks/:id/grant-permission` re-queues preserving session/worktree so the agent resumes with `--permission-mode bypassPermissions`. `buildResumeArgs` now mirrors the permission logic from `buildArgs`, ensuring resumed tasks (retries, revises, fixes, follow-ups) retain their permission mode — this was the root cause of permission requests appearing in the first place.
 - **Uncommitted changes detection**: When a task's committed diff is empty (agent modified files but didn't commit), the `/tasks/:id/diff` endpoint falls back to `git diff HEAD` in the worktree to detect uncommitted changes. `DiffViewer.vue` shows these with an amber warning banner and a "Request commit" button that uses the revise flow to re-queue the task, asking the agent to commit its changes. `server/git.ts` exposes `getUncommittedDiff()` and `getUncommittedDiffStats()` for this fallback.
+- **Subtask CLI system**: Agents propose subtasks via the Harness CLI (`$HARNESS_CLI propose-subtasks`) rather than embedding JSON in output. The `AgentPool` injects CLI instructions into the agent's system prompt. When called, the task transitions to `waiting_on_subtasks` (a new outbox status). Users review proposals in `TaskDetail.vue` and approve (creating Do tasks with `parent_task_id`) or dismiss (with feedback). `auto_approve_subtasks` config option skips review. On resume, dismissal feedback is injected so the agent knows what was rejected.
+- **Task title field**: Optional `title` field on tasks (nullable `TEXT` column). Provides a short descriptive name alongside the full prompt. Subtask proposals always have a required title.
+- **Formal state machine**: `shared/transitions.ts` defines a formal state machine for task status transitions. Each action (send, dispatch, complete, approve, reject, cancel, revise, fix, propose_subtasks, etc.) has explicitly allowed source → target status transitions. This replaces ad-hoc status checks scattered across route handlers, providing a single source of truth for valid transitions. Includes `waiting_on_subtasks` status and recovery transitions.
+- **Client tests**: Test coverage extended to client code — `useTasks.test.ts`, `useCheckouts.test.ts`, `useLog.test.ts`, `taskArrayUtils.test.ts`, `useTaskSelection.test.ts`. Also `shared/transitions.test.ts` for the state machine.
 
 ---
 
@@ -882,7 +904,7 @@ These features were implemented during development but weren't tracked in the or
 - **Claude Code permissions**: Tool permission requests surface as priority inbox items with red badge. User approves or denies. Agent continues or adapts accordingly.
 - **Project config**: JSONC settings file (`~/.harness/config.jsonc`) with project list, per-project settings (target branch, limits), and task type definitions. DB and config live in `~/.harness/`, separate from repos. Single-project focus in v1.
 - **Custom task types**: Users can define custom task types with their own system prompt templates. Each type specifies whether it needs a worktree and its default priority. Do and Discuss are built-in defaults, not hard constraints.
-- **Agent prompting**: System prompts are stored as configurable templates in `config.jsonc`, passed via `--systemPrompt`. Do tasks get worktree-aware instructions; Discuss tasks get read-only research instructions with subtask JSON format.
+- **Agent prompting**: System prompts are stored as configurable templates in `config.jsonc`, passed via `--systemPrompt`. Do tasks get worktree-aware instructions; Discuss tasks get read-only research instructions. The `AgentPool` also injects Harness CLI instructions for subtask proposal into the system prompt.
 - **Data model**: Mutable `tasks` table for current state + append-only `task_events` for audit trail. Agent-specific session data stored as a JSON blob (`agent_session_data`) with an `agent_type` field, keeping the schema adaptable for future agents. Conversation history managed by the agent (not duplicated in Harness).
 - **Server crash recovery**: On startup, detect stale tasks via SQLite, kill orphaned processes via stored PIDs, reconcile worktrees with filesystem, and transition tasks to `error` (partial work reviewable) or `queued` (re-dispatch). Runs synchronously before accepting connections.
 - **Chat vs. Revise boundary**: Conversational mode on Do tasks uses plan mode (read-only). Chat never changes code; revise always does. If the user requests changes during chat, the agent explains what it would do and the UI prompts a formal Revise.
@@ -893,6 +915,9 @@ These features were implemented during development but weren't tracked in the or
 - **Agent configuration**: Named agent definitions (`agents` map in config) allow configuring `adapter` and `extra_args` per agent. Task types reference agents by key, decoupling type behavior from adapter implementation.
 - **Plan mode approval**: Two-phase workflow for plan-mode tasks. Agent plans in read-only mode, requests approval via ExitPlanMode tool, task moves to `held`. User reviews and approves plan, agent resumes with full permissions. Prevents agents from executing without user sign-off on the approach.
 - **Priority scheme**: P0–P3 numeric priorities (P2 default) replaced the original urgent/normal/low scheme. Provides finer granularity without being overwhelming.
+- **Subtask mechanism**: CLI-based approach (`$HARNESS_CLI propose-subtasks`) instead of parsing JSON blocks from agent output. More reliable — uses a well-defined endpoint rather than fragile output parsing. The agent calls the CLI, which hits `POST /tasks/:id/propose-subtasks`, transitioning the task to `waiting_on_subtasks`. Resolving proposals is explicit via `POST /tasks/:id/resolve-proposals`.
+- **`waiting_on_subtasks` status**: New outbox status for tasks paused while the user reviews subtask proposals. Part of `OUTBOX_STATUSES` so it appears in the outbox view alongside `queued`, `in_progress`, and `retrying`.
+- **Task status transitions**: Formalized in `shared/transitions.ts` as a state machine. Each action maps from allowed source statuses to a target status. This replaced scattered status checks in route handlers with a single source of truth. Recovery transitions (`recover_requeue`, `recover_error`) are also defined.
 
 ## Open Issues
 
