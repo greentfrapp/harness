@@ -68,18 +68,7 @@ async function handleClear() {
   confirming.value = false
 }
 
-async function handleApprove(_id: string) {
-  // Approve is now handled by TaskDetail directly via api.tasks.approve()
-  // The SSE event will update the store. We just need to refetch to be safe.
-  await inbox.fetchItems()
-}
-
-async function handleReject(_id: string) {
-  // Reject is now handled by TaskDetail directly via api.tasks.reject()
-  await inbox.fetchItems()
-}
-
-async function handleRetry(_id: string) {
+async function refreshInbox() {
   await inbox.fetchItems()
 }
 
@@ -91,12 +80,6 @@ async function handleDelete(id: string) {
   await inbox.deleteTask(id)
 }
 
-async function handleFollowUp(_id: string) {
-  // Follow-up task is created by TaskDetail via api.tasks.followUp()
-  // The SSE event will add the new task to the outbox automatically.
-  await inbox.fetchItems()
-}
-
 const maximizedTask = ref<Task | null>(null)
 
 function handleMaximize(id: string) {
@@ -104,18 +87,12 @@ function handleMaximize(id: string) {
   if (task) maximizedTask.value = task
 }
 
-async function handleMaximizeApprove(id: string) {
-  await handleApprove(id)
-  maximizedTask.value = null
-}
-
-async function handleMaximizeReject(id: string) {
-  await handleReject(id)
-  maximizedTask.value = null
-}
-
-async function handleMaximizeDelete(id: string) {
-  await handleDelete(id)
+async function handleMaximizeAction(
+  id: string,
+  action?: (id: string) => Promise<void>,
+) {
+  if (action) await action(id)
+  else await refreshInbox()
   maximizedTask.value = null
 }
 </script>
@@ -222,12 +199,12 @@ async function handleMaximizeDelete(id: string) {
         :actions-disabled="
           checkoutsStore.isProjectLockedByOtherTask(item.project_id, item.id)
         "
-        @approve="handleApprove"
-        @reject="handleReject"
-        @retry="handleRetry"
+        @approve="refreshInbox"
+        @reject="refreshInbox"
+        @retry="refreshInbox"
         @defer="handleDefer"
         @delete="handleDelete"
-        @follow-up="handleFollowUp"
+        @follow-up="refreshInbox"
         @toggleSelect="toggle"
         @maximize="handleMaximize" />
       <div
@@ -243,11 +220,11 @@ async function handleMaximizeDelete(id: string) {
       :task="maximizedTask"
       context="inbox"
       @close="maximizedTask = null"
-      @approve="handleMaximizeApprove"
-      @reject="handleMaximizeReject"
-      @retry="handleRetry"
+      @approve="(id) => handleMaximizeAction(id)"
+      @reject="(id) => handleMaximizeAction(id)"
+      @retry="(id) => handleMaximizeAction(id)"
       @defer="handleDefer"
-      @delete="handleMaximizeDelete"
-      @follow-up="handleFollowUp" />
+      @delete="(id) => handleMaximizeAction(id, handleDelete)"
+      @follow-up="(id) => handleMaximizeAction(id)" />
   </div>
 </template>
