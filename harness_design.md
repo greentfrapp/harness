@@ -336,6 +336,12 @@ This CLI-based approach is more reliable than parsing JSON from agent output —
 
 Harness wraps the user's prompt with a task-type-specific system prompt via Claude Code's `--systemPrompt` flag. System prompts are stored as configurable templates in `config.jsonc` (see Project Configuration), not hardcoded. Users can edit prompts per task type and define custom task types with their own prompts.
 
+Templates support two placeholders:
+- `{user_prompt}` — replaced with the combined title + prompt (title on its own line followed by a blank line, then the prompt body; or whichever is present if only one is set)
+- `{title}` — replaced with just the title (empty string if no title)
+
+When no template is configured, the combined title + prompt is used directly as the system prompt.
+
 ### Do task system prompt (default)
 
 ```
@@ -375,7 +381,7 @@ Uses `--resume` with no additional system prompt — the prior session context i
 
 Users can define custom task types in `config.jsonc` with their own system prompt templates. Each custom type specifies:
 
-- A name and system prompt template (with `{user_prompt}` placeholder)
+- A name and system prompt template (with `{user_prompt}` and optional `{title}` placeholders)
 - Whether the type needs a worktree (like Do) or runs read-only (like Discuss)
 - Default priority
 
@@ -413,7 +419,7 @@ tasks (
   status        TEXT NOT NULL,          -- 'draft' | 'queued' | 'in_progress' | 'retrying' |
                                         --   'waiting_on_subtasks' | 'ready' | 'held' | 'error' |
                                         --   'permission' | 'approved' | 'rejected' | 'cancelled'
-  prompt        TEXT NOT NULL,          -- user's original prompt (+ revise feedback appended)
+  prompt        TEXT,                   -- user's prompt body (nullable — at least one of title/prompt required)
   priority      TEXT DEFAULT 'P2',      -- 'P0' | 'P1' | 'P2' | 'P3'
   depends_on    TEXT REFERENCES tasks(id),  -- nullable, user-declared dependency
   parent_task_id TEXT,                      -- nullable, links follow-up tasks to their parent (lineage only, not a dependency)
@@ -869,7 +875,7 @@ These features were implemented during development but weren't tracked in the or
 - **Permission handling**: When an agent emits a `permission_request` event, `handleAgentEvent()` kills the process, sets status to `permission` (with tool name in `error_message`), and pushes to inbox. `POST /tasks/:id/grant-permission` re-queues preserving session/worktree so the agent resumes with `--permission-mode bypassPermissions`. `buildResumeArgs` now mirrors the permission logic from `buildArgs`, ensuring resumed tasks (retries, revises, fixes, follow-ups) retain their permission mode — this was the root cause of permission requests appearing in the first place.
 - **Uncommitted changes detection**: When a task's committed diff is empty (agent modified files but didn't commit), the `/tasks/:id/diff` endpoint falls back to `git diff HEAD` in the worktree to detect uncommitted changes. `DiffViewer.vue` shows these with an amber warning banner and a "Request commit" button that uses the revise flow to re-queue the task, asking the agent to commit its changes. `server/git.ts` exposes `getUncommittedDiff()` and `getUncommittedDiffStats()` for this fallback.
 - **Subtask CLI system**: Agents propose subtasks via the Harness CLI (`$HARNESS_CLI propose-subtasks`) rather than embedding JSON in output. The `AgentPool` injects CLI instructions into the agent's system prompt. When called, the task transitions to `waiting_on_subtasks` (a new outbox status). Users review proposals in `TaskDetail.vue` and approve (creating Do tasks with `parent_task_id`) or dismiss (with feedback). `auto_approve_subtasks` config option skips review. On resume, dismissal feedback is injected so the agent knows what was rejected.
-- **Task title field**: Optional `title` field on tasks (nullable `TEXT` column). Provides a short descriptive name alongside the full prompt. Subtask proposals always have a required title.
+- **Task title field**: Optional `title` field on tasks (nullable `TEXT` column). Provides a short descriptive name alongside the prompt body. Tasks require at least one of `title` or `prompt`. When dispatched, `buildTaskPrompt()` in `pool.ts` combines title and prompt (title first, separated by a blank line) for the `{user_prompt}` template placeholder. A separate `{title}` placeholder is also available in templates. Branch names prefer `title` over `prompt` for the sanitized slug. Subtask proposals always have a required title.
 - **Formal state machine**: `shared/transitions.ts` defines a formal state machine for task status transitions. Each action (send, dispatch, complete, approve, reject, cancel, revise, fix, propose_subtasks, etc.) has explicitly allowed source → target status transitions. This replaces ad-hoc status checks scattered across route handlers, providing a single source of truth for valid transitions. Includes `waiting_on_subtasks` status and recovery transitions.
 - **Client tests**: Test coverage extended to client code — `useTasks.test.ts`, `useCheckouts.test.ts`, `useLog.test.ts`, `taskArrayUtils.test.ts`, `useTaskSelection.test.ts`. Also `shared/transitions.test.ts` for the state machine.
 
@@ -904,7 +910,7 @@ These features were implemented during development but weren't tracked in the or
 - **Claude Code permissions**: Tool permission requests surface as priority inbox items with red badge. User approves or denies. Agent continues or adapts accordingly.
 - **Project config**: JSONC settings file (`~/.harness/config.jsonc`) with project list, per-project settings (target branch, limits), and task type definitions. DB and config live in `~/.harness/`, separate from repos. Single-project focus in v1.
 - **Custom task types**: Users can define custom task types with their own system prompt templates. Each type specifies whether it needs a worktree and its default priority. Do and Discuss are built-in defaults, not hard constraints.
-- **Agent prompting**: System prompts are stored as configurable templates in `config.jsonc`, passed via `--systemPrompt`. Do tasks get worktree-aware instructions; Discuss tasks get read-only research instructions. The `AgentPool` also injects Harness CLI instructions for subtask proposal into the system prompt.
+- **Agent prompting**: System prompts are stored as configurable templates in `config.jsonc`, passed via `--systemPrompt`. Templates support `{user_prompt}` (combined title + prompt) and `{title}` (title only) placeholders. Do tasks get worktree-aware instructions; Discuss tasks get read-only research instructions. The `AgentPool` also injects Harness CLI instructions for subtask proposal into the system prompt.
 - **Data model**: Mutable `tasks` table for current state + append-only `task_events` for audit trail. Agent-specific session data stored as a JSON blob (`agent_session_data`) with an `agent_type` field, keeping the schema adaptable for future agents. Conversation history managed by the agent (not duplicated in Harness).
 - **Server crash recovery**: On startup, detect stale tasks via SQLite, kill orphaned processes via stored PIDs, reconcile worktrees with filesystem, and transition tasks to `error` (partial work reviewable) or `queued` (re-dispatch). Runs synchronously before accepting connections.
 - **Chat vs. Revise boundary**: Conversational mode on Do tasks uses plan mode (read-only). Chat never changes code; revise always does. If the user requests changes during chat, the agent explains what it would do and the UI prompts a formal Revise.
@@ -936,7 +942,7 @@ A Discuss task is created, appears in the outbox, the agent researches, then the
 The doc says "the user closes the discussion when done" but doesn't specify the resulting state. Current implementation: Discuss tasks use the same terminal states as Do tasks (`approved`/`rejected`/`cancelled`). No `closed` status exists. This works but is semantically awkward — "approving" a discussion that produced no diff.
 
 **~~No branch naming strategy~~** — RESOLVED
-Convention: `harness/{8-char-task-id}-{sanitized-prompt}` (max 40 chars for prompt portion). Implemented in `server/git.ts:makeBranchName()`. Example: task `abc123de` with prompt "Fix login bug" → `harness/abc123de-fix-login-bug`.
+Convention: `harness/{8-char-task-id}-{sanitized-slug}` (max 40 chars for slug portion). The slug is derived from `title` if set, otherwise from `prompt`. Implemented in `server/git.ts:makeBranchName()`. Example: task `abc123de` with title "Fix login bug" → `harness/abc123de-fix-login-bug`.
 
 **~~Custom task types and the New Task modal~~** — RESOLVED
 The `NewTaskModal.vue` uses a `<select>` dropdown populated from config task types, not a Do/Discuss toggle. Scales to any number of custom types defined in `config.jsonc`.
