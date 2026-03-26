@@ -218,11 +218,36 @@ const priorities: { value: Priority; label: string }[] = [
 
       <!-- Modal -->
       <div
-        class="relative bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl w-full max-w-lg mx-4">
-        <div class="px-6 py-4 border-b border-zinc-800">
-          <h2 class="text-lg font-semibold">
-            {{ isEditing ? 'Edit Draft' : 'New Task' }}
-          </h2>
+        class="relative bg-zinc-900 border border-zinc-700 rounded-3xl shadow-2xl w-full max-w-4xl mx-4">
+        <div
+          v-if="projects.length"
+          class="px-6 py-4 border-b border-zinc-800 flex justify-between">
+          <!-- Project -->
+          <div class="flex items-center gap-4">
+            <label class="block text-xs font-medium text-zinc-400 mb-1">
+              Project
+            </label>
+            <select
+              v-model="projectId"
+              class="w-max bg-zinc-800 border border-zinc-700 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-600">
+              <option v-for="p in projects" :key="p.id" :value="p.id">
+                {{ p.name }}
+              </option>
+            </select>
+          </div>
+          <!-- Task Type -->
+          <div class="flex items-center gap-4">
+            <label class="block text-xs font-medium text-zinc-400 mb-1">
+              Type
+            </label>
+            <select
+              v-model="taskType"
+              class="w-full bg-zinc-800 border border-zinc-700 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-600">
+              <option v-for="t in taskTypes" :key="t" :value="t">
+                {{ t }}
+              </option>
+            </select>
+          </div>
         </div>
 
         <!-- Empty state: no projects configured -->
@@ -248,59 +273,24 @@ const priorities: { value: Priority; label: string }[] = [
         </div>
 
         <form v-else class="px-6 py-4 space-y-4" @submit.prevent="handleSubmit">
-          <!-- Project -->
-          <div>
-            <label class="block text-xs font-medium text-zinc-400 mb-1"
-              >Project</label
-            >
-            <select
-              v-model="projectId"
-              class="w-full bg-zinc-800 border border-zinc-700 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-600">
-              <option v-for="p in projects" :key="p.id" :value="p.id">
-                {{ p.name }}
-              </option>
-            </select>
-          </div>
-
-          <!-- Task Type -->
-          <div>
-            <label class="block text-xs font-medium text-zinc-400 mb-1"
-              >Type</label
-            >
-            <select
-              v-model="taskType"
-              class="w-full bg-zinc-800 border border-zinc-700 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-600">
-              <option v-for="t in taskTypes" :key="t" :value="t">
-                {{ t }}
-              </option>
-            </select>
-          </div>
-
           <!-- Title (optional) -->
           <div>
-            <label class="block text-xs font-medium text-zinc-400 mb-1"
-              >Title <span class="text-zinc-600">(optional)</span></label
-            >
             <input
               ref="titleInput"
               v-model="title"
               type="text"
-              class="w-full bg-zinc-800 border border-zinc-700 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-600"
-              placeholder="Short label for the task" />
+              class="w-full font-semibold rounded-md text-2xl focus:outline-none placeholder:opacity-50 text-neutral-300"
+              placeholder="Task title" />
           </div>
 
           <!-- Prompt -->
           <div>
-            <label class="block text-xs font-medium text-zinc-400 mb-1"
-              >Prompt
-              <span class="text-zinc-500 font-normal">(optional)</span></label
-            >
             <textarea
               ref="promptInput"
               v-model="prompt"
               rows="5"
-              class="w-full bg-zinc-800 border border-zinc-700 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-600 resize-y"
-              placeholder="Describe the task..." />
+              class="w-full rounded-md focus:outline-none placeholder:opacity-50 resize-y text-neutral-300"
+              placeholder="Add description..." />
           </div>
 
           <!-- Priority -->
