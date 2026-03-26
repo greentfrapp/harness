@@ -207,191 +207,202 @@ const priorities: { value: Priority; label: string }[] = [
   { value: 'P2', label: 'P2' },
   { value: 'P3', label: 'P3' },
 ]
+
+const mounted = ref(false)
+onMounted(() => {
+  mounted.value = true
+})
 </script>
 
 <template>
   <Teleport to="body">
-    <div
-      class="fixed inset-0 z-50 flex items-center justify-center"
-      @keydown="onKeydown">
-      <!-- Backdrop -->
-      <div class="absolute inset-0 bg-black/60" @click="emit('close')" />
-
-      <!-- Modal -->
+    <Transition name="fade">
       <div
-        class="relative bg-zinc-900 border border-zinc-700 rounded-3xl shadow-2xl w-full max-w-4xl mx-4">
+        v-if="mounted"
+        class="fixed inset-0 z-50 flex items-center justify-center"
+        @keydown="onKeydown">
+        <!-- Backdrop -->
+        <div class="absolute inset-0 bg-black/60" @click="emit('close')" />
+
+        <!-- Modal -->
         <div
-          v-if="projects.length"
-          class="px-6 py-4 border-b border-zinc-800 flex justify-between">
-          <!-- Project -->
-          <div class="flex items-center gap-4">
-            <label class="block text-xs font-medium text-zinc-400 mb-1">
-              Project
-            </label>
-            <select
-              v-model="projectId"
-              class="w-max bg-zinc-800 border border-zinc-700 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-600">
-              <option v-for="p in projects" :key="p.id" :value="p.id">
-                {{ p.name }}
-              </option>
-            </select>
-          </div>
-          <!-- Task Type -->
-          <div class="flex items-center gap-4">
-            <label class="block text-xs font-medium text-zinc-400 mb-1">
-              Type
-            </label>
-            <select
-              v-model="taskType"
-              class="w-full bg-zinc-800 border border-zinc-700 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-600">
-              <option v-for="t in taskTypes" :key="t" :value="t">
-                {{ t }}
-              </option>
-            </select>
-          </div>
-        </div>
-
-        <!-- Empty state: no projects configured -->
-        <div v-if="!projects.length" class="px-6 py-8 text-center space-y-3">
-          <p class="text-sm text-zinc-400">
-            No projects configured. Add at least one project in Settings to
-            create tasks.
-          </p>
-          <div class="flex justify-center gap-2">
-            <button
-              type="button"
-              class="px-4 py-2 text-sm text-zinc-400 hover:text-zinc-200 transition-colors"
-              @click="emit('close')">
-              Cancel
-            </button>
-            <button
-              type="button"
-              class="px-4 py-2 text-sm font-medium bg-zinc-600 hover:bg-zinc-500 rounded-md transition-colors"
-              @click="emit('settings')">
-              Open Settings
-            </button>
-          </div>
-        </div>
-
-        <form v-else class="px-6 py-4 space-y-4" @submit.prevent="handleSubmit">
-          <!-- Title (optional) -->
-          <div>
-            <input
-              ref="titleInput"
-              v-model="title"
-              type="text"
-              class="w-full font-semibold rounded-md text-2xl focus:outline-none placeholder:opacity-50 text-neutral-300"
-              placeholder="Task title" />
+          class="modal relative bg-zinc-900 border border-zinc-700 rounded-3xl shadow-2xl w-full max-w-4xl mx-4">
+          <div
+            v-if="projects.length"
+            class="px-6 py-4 border-b border-zinc-800 flex justify-between">
+            <!-- Project -->
+            <div class="flex items-center gap-4">
+              <label class="block text-xs font-medium text-zinc-400 mb-1">
+                Project
+              </label>
+              <select
+                v-model="projectId"
+                class="w-max bg-zinc-800 border border-zinc-700 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-600">
+                <option v-for="p in projects" :key="p.id" :value="p.id">
+                  {{ p.name }}
+                </option>
+              </select>
+            </div>
+            <!-- Task Type -->
+            <div class="flex items-center gap-4">
+              <label class="block text-xs font-medium text-zinc-400 mb-1">
+                Type
+              </label>
+              <select
+                v-model="taskType"
+                class="w-full bg-zinc-800 border border-zinc-700 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-600">
+                <option v-for="t in taskTypes" :key="t" :value="t">
+                  {{ t }}
+                </option>
+              </select>
+            </div>
           </div>
 
-          <!-- Prompt -->
-          <div>
-            <textarea
-              ref="promptInput"
-              v-model="prompt"
-              rows="5"
-              class="w-full rounded-md focus:outline-none placeholder:opacity-50 resize-y text-neutral-300"
-              placeholder="Add description..." />
-          </div>
-
-          <!-- Priority -->
-          <div>
-            <label class="block text-xs font-medium text-zinc-400 mb-1"
-              >Priority</label
-            >
-            <div class="flex gap-1">
+          <!-- Empty state: no projects configured -->
+          <div v-if="!projects.length" class="px-6 py-8 text-center space-y-3">
+            <p class="text-sm text-zinc-400">
+              No projects configured. Add at least one project in Settings to
+              create tasks.
+            </p>
+            <div class="flex justify-center gap-2">
               <button
-                v-for="p in priorities"
-                :key="p.value"
                 type="button"
-                class="px-3 py-1.5 text-xs font-medium rounded-md transition-colors"
-                :class="
-                  priority === p.value
-                    ? 'bg-zinc-600 text-white'
-                    : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
-                "
-                @click="priority = p.value">
-                {{ p.label }}
+                class="px-4 py-2 text-sm text-zinc-400 hover:text-zinc-200 transition-colors"
+                @click="emit('close')">
+                Cancel
+              </button>
+              <button
+                type="button"
+                class="px-4 py-2 text-sm font-medium bg-zinc-600 hover:bg-zinc-500 rounded-md transition-colors"
+                @click="emit('settings')">
+                Open Settings
               </button>
             </div>
           </div>
 
-          <!-- Tags -->
-          <div v-if="availableTags.length">
-            <label class="block text-xs font-medium text-zinc-400 mb-1"
-              >Tags</label
-            >
-            <div class="flex flex-wrap gap-1">
-              <Tooltip
-                v-for="tag in availableTags"
-                :key="tag.name"
-                :text="tag.description">
-                <button
-                  type="button"
-                  class="px-2.5 py-1 text-xs font-medium rounded-md transition-all"
-                  :class="
-                    getTagClasses(tag.name, selectedTags.includes(tag.name))
-                  "
-                  @click="toggleTag(tag.name)">
-                  {{ tag.name }}
-                </button>
-              </Tooltip>
+          <form
+            v-else
+            class="px-6 py-4 space-y-4"
+            @submit.prevent="handleSubmit">
+            <!-- Title (optional) -->
+            <div>
+              <input
+                ref="titleInput"
+                v-model="title"
+                type="text"
+                class="w-full font-semibold rounded-md text-2xl focus:outline-none placeholder:opacity-50 text-neutral-300"
+                placeholder="Task title" />
             </div>
-          </div>
 
-          <!-- Dependency -->
-          <div v-if="existingTasks.length">
-            <label class="block text-xs font-medium text-zinc-400 mb-1">
-              Depends on (optional)
-            </label>
-            <select
-              v-model="dependsOn"
-              class="w-full bg-zinc-800 border border-zinc-700 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-600">
-              <option :value="null">None</option>
-              <option v-for="t in existingTasks" :key="t.id" :value="t.id">
-                {{ t.prompt.slice(0, 60)
-                }}{{ t.prompt.length > 60 ? '...' : '' }}
-              </option>
-            </select>
-          </div>
+            <!-- Prompt -->
+            <div>
+              <textarea
+                ref="promptInput"
+                v-model="prompt"
+                rows="5"
+                class="w-full rounded-md focus:outline-none placeholder:opacity-50 resize-y text-neutral-300"
+                placeholder="Add description..." />
+            </div>
 
-          <!-- Error -->
-          <p v-if="error" class="text-sm text-red-400">{{ error }}</p>
+            <!-- Priority -->
+            <div>
+              <label class="block text-xs font-medium text-zinc-400 mb-1"
+                >Priority</label
+              >
+              <div class="flex gap-1">
+                <button
+                  v-for="p in priorities"
+                  :key="p.value"
+                  type="button"
+                  class="px-3 py-1.5 text-xs font-medium rounded-md transition-colors"
+                  :class="
+                    priority === p.value
+                      ? 'bg-zinc-600 text-white'
+                      : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'
+                  "
+                  @click="priority = p.value">
+                  {{ p.label }}
+                </button>
+              </div>
+            </div>
 
-          <!-- Actions -->
-          <div class="flex justify-end gap-2 pt-2">
-            <button
-              type="button"
-              class="px-4 py-2 text-sm text-zinc-400 hover:text-zinc-200 transition-colors"
-              @click="emit('close')">
-              Cancel
-            </button>
-            <button
-              type="button"
-              :disabled="submitting"
-              class="px-4 py-2 text-sm font-medium bg-zinc-700 hover:bg-zinc-600 text-zinc-300 rounded-md transition-colors disabled:opacity-50"
-              @click="handleSaveDraft">
-              {{ isEditing ? 'Update Draft' : 'Save Draft' }}
-              <kbd class="ml-1 text-xs opacity-60">⌘⇧↵</kbd>
-            </button>
-            <button
-              type="submit"
-              :disabled="submitting"
-              class="px-4 py-2 text-sm font-medium bg-zinc-600 hover:bg-zinc-500 rounded-md transition-colors disabled:opacity-50">
-              {{
-                submitting
-                  ? isEditing
-                    ? 'Sending...'
-                    : 'Creating...'
-                  : isEditing
-                    ? 'Send Task'
-                    : 'Create Task'
-              }}
-              <kbd class="ml-1 text-xs opacity-60">⌘↵</kbd>
-            </button>
-          </div>
-        </form>
+            <!-- Tags -->
+            <div v-if="availableTags.length">
+              <label class="block text-xs font-medium text-zinc-400 mb-1"
+                >Tags</label
+              >
+              <div class="flex flex-wrap gap-1">
+                <Tooltip
+                  v-for="tag in availableTags"
+                  :key="tag.name"
+                  :text="tag.description">
+                  <button
+                    type="button"
+                    class="px-2.5 py-1 text-xs font-medium rounded-md transition-all"
+                    :class="
+                      getTagClasses(tag.name, selectedTags.includes(tag.name))
+                    "
+                    @click="toggleTag(tag.name)">
+                    {{ tag.name }}
+                  </button>
+                </Tooltip>
+              </div>
+            </div>
+
+            <!-- Dependency -->
+            <div v-if="existingTasks.length">
+              <label class="block text-xs font-medium text-zinc-400 mb-1">
+                Depends on (optional)
+              </label>
+              <select
+                v-model="dependsOn"
+                class="w-full bg-zinc-800 border border-zinc-700 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-600">
+                <option :value="null">None</option>
+                <option v-for="t in existingTasks" :key="t.id" :value="t.id">
+                  {{ t.prompt.slice(0, 60)
+                  }}{{ t.prompt.length > 60 ? '...' : '' }}
+                </option>
+              </select>
+            </div>
+
+            <!-- Error -->
+            <p v-if="error" class="text-sm text-red-400">{{ error }}</p>
+
+            <!-- Actions -->
+            <div class="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                class="px-4 py-2 text-sm text-zinc-400 hover:text-zinc-200 transition-colors"
+                @click="emit('close')">
+                Cancel
+              </button>
+              <button
+                type="button"
+                :disabled="submitting"
+                class="px-4 py-2 text-sm font-medium bg-zinc-700 hover:bg-zinc-600 text-zinc-300 rounded-md transition-colors disabled:opacity-50"
+                @click="handleSaveDraft">
+                {{ isEditing ? 'Update Draft' : 'Save Draft' }}
+                <kbd class="ml-1 text-xs opacity-60">⌘⇧↵</kbd>
+              </button>
+              <button
+                type="submit"
+                :disabled="submitting"
+                class="px-4 py-2 text-sm font-medium bg-zinc-600 hover:bg-zinc-500 rounded-md transition-colors disabled:opacity-50">
+                {{
+                  submitting
+                    ? isEditing
+                      ? 'Sending...'
+                      : 'Creating...'
+                    : isEditing
+                      ? 'Send Task'
+                      : 'Create Task'
+                }}
+                <kbd class="ml-1 text-xs opacity-60">⌘↵</kbd>
+              </button>
+            </div>
+          </form>
+        </div>
       </div>
-    </div>
+    </Transition>
   </Teleport>
 </template>

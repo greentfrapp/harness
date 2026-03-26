@@ -232,94 +232,101 @@ async function handleSave() {
 }
 
 const settingsModal = useTemplateRef('settings-model')
+const mounted = ref(false)
 onMounted(() => {
-  settingsModal.value?.focus()
+  mounted.value = true
+  nextTick().then(() => settingsModal.value?.focus())
 })
 </script>
 
 <template>
   <Teleport to="body">
-    <div
-      ref="settings-model"
-      tabindex="-1"
-      class="fixed inset-0 z-50 flex items-center justify-center"
-      @keydown="onKeydown">
-      <!-- Backdrop -->
-      <div class="absolute inset-0 bg-black/60" @click="emit('close')" />
-
-      <!-- Modal -->
+    <Transition name="fade">
       <div
-        class="relative bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl w-full max-w-2xl mx-4">
-        <div class="px-6 py-4 border-b border-zinc-800">
-          <h2 class="text-lg font-semibold">Settings</h2>
-          <p v-if="configPath" class="text-xs text-zinc-500 mt-0.5 font-mono">
-            {{ configPath }}
-          </p>
-        </div>
+        v-if="mounted"
+        class="fixed inset-0 z-50 flex items-center justify-center"
+        @keydown="onKeydown">
+        <!-- Backdrop -->
+        <div class="absolute inset-0 bg-black/60" @click="emit('close')" />
 
-        <div class="px-6 py-4 space-y-3">
-          <!-- Loading -->
-          <div v-if="loading" class="text-sm text-zinc-500 py-8 text-center">
-            Loading config...
+        <!-- Modal -->
+        <div
+          ref="settings-model"
+          tabindex="-1"
+          class="modal relative bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl w-full max-w-2xl mx-4 focus:outline-none">
+          <div class="px-6 py-4 border-b border-zinc-800">
+            <h2 class="text-lg font-semibold">Settings</h2>
+            <p v-if="configPath" class="text-xs text-zinc-500 mt-0.5 font-mono">
+              {{ configPath }}
+            </p>
           </div>
 
-          <template v-else>
-            <!-- Editor -->
-            <textarea
-              v-model="content"
-              rows="20"
-              spellcheck="false"
-              class="w-full bg-zinc-800 border rounded-md px-3 py-2 text-sm font-mono leading-relaxed focus:outline-none focus:ring-2 focus:ring-zinc-600 resize-y"
-              :class="hasParseErrors ? 'border-red-600' : 'border-zinc-700'"
-              autofocus
-              @keydown="onTextareaKeydown" />
-
-            <!-- Parse errors -->
-            <div v-if="hasParseErrors" class="text-xs text-red-400 space-y-0.5">
-              <p v-for="(err, i) in parseErrors" :key="i">
-                {{ formatParseError(err) }}
-              </p>
+          <div class="px-6 py-4 space-y-3">
+            <!-- Loading -->
+            <div v-if="loading" class="text-sm text-zinc-500 py-8 text-center">
+              Loading config...
             </div>
 
-            <!-- Server error -->
-            <div
-              v-if="serverError"
-              class="rounded bg-red-950 border border-red-900 p-3">
-              <p class="text-sm text-red-300">{{ serverError }}</p>
-            </div>
+            <template v-else>
+              <!-- Editor -->
+              <textarea
+                v-model="content"
+                rows="20"
+                spellcheck="false"
+                class="w-full bg-zinc-800 border rounded-md px-3 py-2 text-sm font-mono leading-relaxed focus:outline-none focus:ring-2 focus:ring-zinc-600 resize-y"
+                :class="hasParseErrors ? 'border-red-600' : 'border-zinc-700'"
+                autofocus
+                @keydown="onTextareaKeydown" />
 
-            <!-- Saved indicator -->
-            <div v-if="saved" class="text-sm text-green-400 text-center">
-              Saved
-            </div>
-          </template>
+              <!-- Parse errors -->
+              <div
+                v-if="hasParseErrors"
+                class="text-xs text-red-400 space-y-0.5">
+                <p v-for="(err, i) in parseErrors" :key="i">
+                  {{ formatParseError(err) }}
+                </p>
+              </div>
 
-          <!-- Actions -->
-          <div class="flex justify-between pt-2">
-            <button
-              type="button"
-              class="px-3 py-2 text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
-              @click="restoreDefaultTaskTypes">
-              Restore default task types
-            </button>
-            <div class="flex gap-2">
+              <!-- Server error -->
+              <div
+                v-if="serverError"
+                class="rounded bg-red-950 border border-red-900 p-3">
+                <p class="text-sm text-red-300">{{ serverError }}</p>
+              </div>
+
+              <!-- Saved indicator -->
+              <div v-if="saved" class="text-sm text-green-400 text-center">
+                Saved
+              </div>
+            </template>
+
+            <!-- Actions -->
+            <div class="flex justify-between pt-2">
               <button
                 type="button"
-                class="px-4 py-2 text-sm text-zinc-400 hover:text-zinc-200 transition-colors"
-                @click="emit('close')">
-                Cancel
+                class="px-3 py-2 text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+                @click="restoreDefaultTaskTypes">
+                Restore default task types
               </button>
-              <button
-                :disabled="!canSave"
-                class="px-4 py-2 text-sm font-medium bg-zinc-600 hover:bg-zinc-500 rounded-md transition-colors disabled:opacity-50"
-                @click="handleSave">
-                {{ saving ? 'Saving...' : 'Save' }}
-                <kbd class="ml-1 text-xs opacity-60">⌘↵</kbd>
-              </button>
+              <div class="flex gap-2">
+                <button
+                  type="button"
+                  class="px-4 py-2 text-sm text-zinc-400 hover:text-zinc-200 transition-colors"
+                  @click="emit('close')">
+                  Cancel
+                </button>
+                <button
+                  :disabled="!canSave"
+                  class="px-4 py-2 text-sm font-medium bg-zinc-600 hover:bg-zinc-500 rounded-md transition-colors disabled:opacity-50"
+                  @click="handleSave">
+                  {{ saving ? 'Saving...' : 'Save' }}
+                  <kbd class="ml-1 text-xs opacity-60">⌘↵</kbd>
+                </button>
+              </div>
             </div>
           </div>
         </div>
       </div>
-    </div>
+    </Transition>
   </Teleport>
 </template>
