@@ -16,67 +16,74 @@ Developers in the agentic coding era spend more time reviewing AI-generated outp
 ## Architecture Overview
 
 ```
-┌──────────────────────────────────────────────────────┐
-│                    Vue 3 Frontend                     │
-│                                                       │
-│  ┌─────────────────────┐  ┌────────────────────────┐  │
-│  │      Outbox         │  │        Inbox      [3]  │  │
-│  │     (Queue)         │  │      (Review)          │  │
-│  └─────────────────────┘  └────────────────────────┘  │
-│                                                       │
-│  ┌──────────────────────────────────────────────────┐ │
-│  │  New Task (modal)     [+ New Task] / keyboard    │ │
-│  └──────────────────────────────────────────────────┘ │
-│                                                       │
-│  ┌──────────────────────────────────────────────────┐ │
-│  │  Task Detail (accordion in-place / expand modal) │ │
-│  │  - Live CC session stream (outbox tasks)          │ │
-│  │  - Diff viewer (inbox Do tasks)                   │ │
-│  │  - Chat UI (any task in conversation mode)        │ │
-│  └──────────────────────────────────────────────────┘ │
-└──────────────────────┬───────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│                        Vue 3 Frontend                             │
+│                                                                   │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐   ...N    │
+│  │  View 1      │  │  View 2      │  │  View N      │           │
+│  │  (filtered)  │  │  (filtered)  │  │  (filtered)  │           │
+│  └──────────────┘  └──────────────┘  └──────────────┘           │
+│  Dynamic N-column grid based on ViewConfig[]                     │
+│  Default: Outbox (draft/queued/in_progress) + Inbox (ready/etc) │
+│                                                                   │
+│  ┌──────────────────────────────────────────────────────────────┐ │
+│  │  New Task (modal)     [+ New Task] / keyboard                │ │
+│  └──────────────────────────────────────────────────────────────┘ │
+│                                                                   │
+│  ┌──────────────────────────────────────────────────────────────┐ │
+│  │  Task Detail (accordion in-place / expand modal)             │ │
+│  │  - Live CC session stream (outbox tasks)                      │ │
+│  │  - Diff viewer (inbox Do tasks)                               │ │
+│  │  - Chat UI (any task in conversation mode)                    │ │
+│  └──────────────────────────────────────────────────────────────┘ │
+└──────────────────────┬───────────────────────────────────────────┘
                        │ SSE
-┌──────────────────────┴───────────────────────────────┐
-│                  Node.js Backend                      │
-│                                                       │
-│  ┌──────────┐  ┌─────────────┐  ┌─────────────────┐  │
-│  │  Queue   │  │   Batcher   │  │     Merger      │  │
-│  │ Manager  │  │  (Grouping) │  │  (Dry-merge)    │  │
-│  └──────────┘  └─────────────┘  └─────────────────┘  │
-│                                                       │
-│  ┌──────────────────────────────────────────────────┐ │
-│  │              Agent Pool                          │ │
-│  │  Worktree limit: 3 (concurrent Do tasks)         │ │
-│  │  Conversation limit: 5 (concurrent --resume)     │ │
-│  └──────────────────────────────────────────────────┘ │
-└───────────────────────────────────────────────────────┘
+┌──────────────────────┴───────────────────────────────────────────┐
+│                      Node.js Backend                              │
+│                                                                   │
+│  ┌──────────┐  ┌─────────────┐  ┌─────────────────┐              │
+│  │  Queue   │  │   Batcher   │  │     Merger      │              │
+│  │ Manager  │  │  (Grouping) │  │  (Dry-merge)    │              │
+│  └──────────┘  └─────────────┘  └─────────────────┘              │
+│                                                                   │
+│  ┌──────────────────────────────────────────────────────────────┐ │
+│  │              Agent Pool                                      │ │
+│  │  Worktree limit: 3 (concurrent Do tasks)                     │ │
+│  │  Conversation limit: 5 (concurrent --resume)                 │ │
+│  └──────────────────────────────────────────────────────────────┘ │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
 ## Core Concepts
 
-### UI Layout
+### UI Layout — Configurable Multi-Column Views
 
-The main view is a **two-column layout**: Outbox (left) and Inbox (right), both always visible. This gives the user simultaneous awareness of active work and pending reviews.
+The main view uses a **dynamic N-column grid layout** driven by user-configurable **views**. Each view defines a filter (by status, priority, tags, and/or project) and renders as a column. The default configuration provides the classic two-column Outbox + Inbox layout, but users can add custom views (e.g., "Errors Only", "High Priority", "Project X") via the **View Editor** modal.
 
-**New Task** is accessed via a button or keyboard shortcut and opens as a **modal overlay**. The user picks Do or Discuss, optionally sets priority and dependencies, and submits. The modal closes and the task appears in the Outbox.
+Views are persisted in `~/.harness/views.jsonc` and managed via `GET/PUT /api/views` (with `POST /api/views/reset` to restore defaults). The `ViewConfig` type defines each view's `id`, `name`, and `filter` (see `shared/types.ts`). The grid adapts: `grid-template-columns: repeat(N, minmax(300px, 1fr))`.
+
+**New Task** is accessed via a button or keyboard shortcut and opens as a **modal overlay**. The user picks a task type (from config), optionally sets priority and dependencies, and submits. The modal closes and the task appears in the appropriate view.
 
 **Task Detail** uses an **accordion pattern** — clicking a task expands it inline within its column, showing the relevant detail content. An **Expand button** opens the detail in a full modal for more space (useful for diffs and extended conversations). What the detail shows depends on context:
 
-- For an in-progress outbox task: streams the live Claude Code session output
-- For a completed Do task in the inbox: shows the diff viewer
+- For an in-progress task: streams the live Claude Code session output
+- For a completed Do task: shows the diff viewer
 - For any task in conversation mode: shows a chat UI (see "Conversational Mode" below)
 
-**Notification badge**: The inbox header shows a count of pending items. The badge turns **red** when permission requests are waiting, since these block agents and need urgent attention.
+Task context (outbox vs. inbox behavior) is **derived from task status** via the `getTaskContext()` helper, not passed explicitly. This enables mixed-status views where a single column can contain tasks from different lifecycle phases.
 
-### Outbox
+**Notification badge**: Each view header shows a count of items. The badge turns **red** when permission requests are waiting, since these block agents and need urgent attention.
 
-The queue view. Shows all submitted tasks with their current state (queued, in progress, retrying). At the summary level, each task shows a status indicator, elapsed time, and queue position. The user can click into any task to see the live Claude Code session, or cancel running tasks.
+### Default Views
 
-### Inbox
+The default configuration provides two views matching the original layout:
 
-Completed or blocked tasks surfaced for review. Items are grouped by directory overlap and ordered to minimize context-switching. The user reviews, approves, rejects, or revises items. Permission requests are **prioritized above all other items** and tagged with a distinct visual indicator.
+- **Outbox**: Filters for `draft`, `queued`, `in_progress`, `retrying` statuses — the queue view showing active work
+- **Inbox**: Filters for `ready`, `held`, `error`, `permission`, `approved`, `rejected` statuses — completed or blocked tasks for review
+
+Users can customize these or add additional views. Permission requests are **prioritized above all other items** within any view and tagged with a distinct visual indicator.
 
 ### Task Lifecycle
 
@@ -203,6 +210,8 @@ When a task completes (or needs user input), it enters the inbox. The batcher gr
 - `permission` — agent needs a tool permission approval (prioritized above all other items)
 - `approved` — task approved, shown with muted styling (terminal)
 - `rejected` — task rejected, shown with muted styling (terminal)
+
+Note: The `deferred` status was removed during implementation to simplify the state machine.
 
 ### 5. Merger
 
@@ -389,8 +398,8 @@ tasks (
   id            TEXT PRIMARY KEY,       -- uuid
   project_id    TEXT NOT NULL REFERENCES projects(id),
   type          TEXT NOT NULL,          -- 'do' | 'discuss' | custom type name
-  status        TEXT NOT NULL,          -- 'draft' | 'queued' | 'in_progress' | 'retrying' | 'ready' |
-                                        --   'held' | 'error' | 'permission' |
+  status        TEXT NOT NULL,          -- 'draft' | 'queued' | 'in_progress' | 'retrying' |
+                                        --   'ready' | 'held' | 'error' | 'permission' |
                                         --   'approved' | 'rejected' | 'cancelled'
   prompt        TEXT NOT NULL,          -- user's original prompt (+ revise feedback appended)
   priority      TEXT DEFAULT 'P2',      -- 'P0' | 'P1' | 'P2' | 'P3'
@@ -524,7 +533,9 @@ Harness runs as a localhost web app and needs to know which repositories to oper
 }
 ```
 
-The config and SQLite database live in Harness's own directory (`~/.harness/`), **not** inside the repos. This keeps Harness's state separate from the projects it manages and supports projects that span multiple repos.
+The config, views, and SQLite database live in Harness's own directory (`~/.harness/`), **not** inside the repos. This keeps Harness's state separate from the projects it manages and supports projects that span multiple repos.
+
+**Views file**: `~/.harness/views.jsonc` — separate from the main config, stores the UI column layout as an array of `ViewConfig` objects. Each view has an `id`, `name`, and `filter` (by statuses, priorities, tags, project). Default views (Outbox + Inbox) are created on first run. Managed via `GET/PUT /api/views` and `POST /api/views/reset`.
 
 In v1, the user selects which project/repo to work with at startup or via the UI. Multi-repo tasks (spanning multiple projects) are future work.
 
@@ -556,6 +567,7 @@ harness/
 │   ├── index.ts              # Hono entry, SSE endpoint, startup wiring
 │   ├── context.ts            # AppContext type — dependency injection container
 │   ├── config.ts             # JSONC config loader/validator
+│   ├── views.ts              # Views configuration loader/saver (~/.harness/views.jsonc)
 │   ├── queue.ts              # Priority queue with dependency tracking
 │   ├── dispatcher.ts         # Queue watcher, slot checking, dispatch logic
 │   ├── pool.ts               # Agent pool, worktree mgmt, CC process mgmt
@@ -569,20 +581,21 @@ harness/
 │   │   ├── claude-code.ts    # Claude Code CLI adapter
 │   │   └── index.ts          # Agent registry
 │   ├── routes/
-│   │   └── tasks.ts          # REST API endpoints
+│   │   ├── tasks.ts          # REST API endpoints for tasks
+│   │   └── views.ts          # REST API endpoints for views (GET/PUT/POST reset)
 │   └── db/
 │       ├── schema.ts         # Drizzle ORM schema
 │       ├── queries.ts        # CRUD queries
 │       └── index.ts          # DB initialization
 ├── client/
 │   ├── src/
-│   │   ├── App.vue
+│   │   ├── App.vue           # Dynamic N-column grid layout driven by views
 │   │   ├── api.ts            # REST client layer
 │   │   ├── components/
 │   │   │   ├── NewTaskModal.vue    # Task composition modal (dropdown for custom types)
-│   │   │   ├── OutboxPanel.vue     # Left column — queue view
-│   │   │   ├── InboxPanel.vue      # Right column — review view with multi-select
-│   │   │   ├── TaskCard.vue        # Task summary with inline actions
+│   │   │   ├── ViewPanel.vue       # Generic column component — renders any ViewConfig
+│   │   │   ├── ViewEditor.vue      # Modal to create/edit/delete views with filter options
+│   │   │   ├── TaskCard.vue        # Task summary with inline actions (context derived from status)
 │   │   │   ├── TaskDetail.vue      # Accordion detail + expand-to-modal
 │   │   │   ├── TaskModal.vue       # Full-screen task detail modal
 │   │   │   ├── DiffViewer.vue      # diff2html side-by-side display
@@ -590,8 +603,8 @@ harness/
 │   │   │   ├── SettingsModal.vue   # JSONC config editor with IDE-like keyboard handling
 │   │   │   └── ActivityLog.vue     # Server activity log viewer
 │   │   ├── stores/
-│   │   │   ├── useOutbox.ts        # Outbox + queue state and actions (includes drafts)
-│   │   │   ├── useInbox.ts         # Inbox state, review actions
+│   │   │   ├── useTasks.ts         # Unified task store (all statuses, view filtering)
+│   │   │   ├── useViews.ts         # View CRUD operations (load/save/reset)
 │   │   │   ├── useEvents.ts        # SSE connection, event handlers, reconnection
 │   │   │   ├── useLog.ts           # Activity log state
 │   │   │   ├── useCheckouts.ts     # Track active checkout state per repo
@@ -622,7 +635,7 @@ harness/
 
 **Shared types**
 
-- [x] Define core types in `shared/types.ts`: `Task`, `TaskType`, `TaskStatus`, `Priority`, `TaskEvent`, `SubtaskProposal`, `ProjectConfig`, `HarnessConfig`, `CreateTaskInput`, `UpdateTaskInput`, `AgentConfig`, `TaskTypeConfig`, `TagConfig`, `CheckoutInfo`, `RepoStatus`, `LogEntry`, `SSEEvent`
+- [x] Define core types in `shared/types.ts`: `Task`, `TaskType`, `TaskStatus`, `Priority`, `TaskEvent`, `SubtaskProposal`, `ProjectConfig`, `HarnessConfig`, `CreateTaskInput`, `UpdateTaskInput`, `AgentConfig`, `TaskTypeConfig`, `TagConfig`, `CheckoutInfo`, `RepoStatus`, `LogEntry`, `SSEEvent`, `ViewFilter`, `ViewConfig`, `DEFAULT_VIEWS`, `getTaskContext()`
 - [x] Define SSE event types: `task:created`, `task:updated`, `task:removed`, `task:progress`, `inbox:new`, `inbox:updated`, `task:checked_out`, `task:returned`, `log:entry` — _changed from WebSocket to SSE_
 
 **Database**
@@ -639,19 +652,24 @@ harness/
 
 **Frontend — layout**
 
-- [x] Two-column layout: `OutboxPanel.vue` (left), `InboxPanel.vue` (right)
-- [x] Responsive split — both panels always visible
+- [x] ~~Two-column layout: `OutboxPanel.vue` (left), `InboxPanel.vue` (right)~~ — replaced with configurable multi-column views
+- [x] Dynamic N-column grid layout driven by `ViewConfig[]` — `ViewPanel.vue` renders any view
+- [x] `ViewEditor.vue`: modal to create/edit/delete views with multi-select filters (statuses, priorities, tags, project)
+- [x] `useViews.ts` Pinia store: view CRUD, backed by `~/.harness/views.jsonc` and `GET/PUT /api/views`
+- [x] Default views (Outbox + Inbox) created on first run; reset via `POST /api/views/reset`
+- [x] Responsive split — all view panels always visible
 - [x] `NewTaskModal.vue`: task type selector (dropdown, supports custom types from config), prompt textarea, priority picker (P0/P1/P2/P3), optional dependency picker (list of active tasks)
 - [x] Keyboard shortcut to open New Task modal (`Ctrl+N` / `Cmd+N`)
-- [x] `TaskCard.vue`: summary display with status indicator, elapsed time, queue position
+- [x] `TaskCard.vue`: summary display with status indicator, elapsed time, queue position; task context derived from status via `getTaskContext()`
 - [x] `TaskDetail.vue`: accordion expand inline with action buttons
-- [x] Notification badge on inbox header (count of pending items, red when permissions pending)
+- [x] Notification badge on view headers (count of items, red when permissions pending)
 
 **State management**
 
-- [x] `useOutbox.ts` Pinia store: task list, queue state, create/cancel actions
-- [x] `useInbox.ts` Pinia store: inbox items, review actions
-- [x] `useEvents.ts` Pinia store: SSE connection, event handlers, reconnection logic — _changed from `useSocket.ts`/WebSocket to SSE_
+- [x] ~~`useOutbox.ts` Pinia store + `useInbox.ts` Pinia store~~ — replaced with unified `useTasks.ts`
+- [x] `useTasks.ts` Pinia store: single `allTasks` array, `tasksForView(view)` computed filtering, all CRUD actions
+- [x] `useViews.ts` Pinia store: view CRUD operations backed by views API
+- [x] `useEvents.ts` Pinia store: SSE connection, event handlers, reconnection logic — _routes all events to single `useTasks` store_
 
 **Real-time (SSE)** — _changed from WebSocket/Socket.io to SSE_
 
@@ -668,8 +686,10 @@ harness/
 - [x] SSEManager unit tests — client tracking, broadcast formatting (4 tests)
 - [x] Route handler tests — API endpoints with mocked AppContext (10 tests)
 - [x] DB integration tests — CRUD with in-memory SQLite (9 tests)
+- [x] Views unit tests — loading, saving, validation, JSONC parsing (`server/views.test.ts`)
+- [x] Views route tests — API endpoints for GET/PUT/POST reset (`server/routes/views.test.ts`)
 
-**Verification**: Submit a task via the modal, see it appear in the outbox with correct type/priority. Task persists across page reload (SQLite). SSE events flow from server to client. Dependency picker shows existing tasks.
+**Verification**: Submit a task via the modal, see it appear in the appropriate view with correct type/priority. Task persists across page reload (SQLite). SSE events flow from server to client. Dependency picker shows existing tasks. Custom views can be created/edited/deleted via ViewEditor. Views persist across reload (`views.jsonc`).
 
 ### Phase 2: Agent Integration + Basic Review
 
@@ -816,6 +836,9 @@ harness/
 
 These features were implemented during development but weren't tracked in the original phase plan:
 
+- **Configurable multi-column views**: Replaced the fixed two-column Outbox/Inbox layout with a dynamic N-column grid driven by `ViewConfig[]`. Each view defines a filter by status, priority, tags, and/or project. Views are persisted in `~/.harness/views.jsonc` and managed via REST API (`GET/PUT /api/views`, `POST /api/views/reset`). New components: `ViewPanel.vue` (generic column, replaced `OutboxPanel`/`InboxPanel`), `ViewEditor.vue` (CRUD modal). New stores: `useTasks.ts` (unified task store replacing `useOutbox`/`useInbox`), `useViews.ts` (view management). Task context (outbox/inbox behavior) is now derived from status via `getTaskContext()` rather than explicitly passed, enabling mixed-status views. Default views replicate the original Outbox + Inbox layout.
+- **Dirty repo indicator**: Visual indicator (amber dot) in navbar when repos have uncommitted changes. Shows file count per dirty repo on hover. Checkout state is recovered from git branches on server restart.
+
 - **Revise flow**: `POST /tasks/:id/revise` returns a `ready` or `error` task to the outbox with new feedback, preserving `agent_session_data`, `worktree_path`, and `branch_name`. The agent resumes via `--resume` in the same worktree with full conversation context. The dispatcher reuses the existing worktree (skipping `createWorktree`) so original commits are preserved. Auto-returns any active checkout before re-queuing. This is the primary pre-approval feedback mechanism.
 - **Follow-up flow**: `POST /tasks/:id/follow-up` creates a continuation task from an `approved` parent, carrying forward the session ID for `--resume` in a fresh worktree. Uses `parent_task_id` for lineage (not `depends_on`). Guarded against concurrent follow-ups on the same parent (409).
 - **Orphan cleanup**: `clearParentReferences()` nulls out `depends_on` and `parent_task_id` on children when a parent task is rejected, cancelled, or deleted — preventing orphaned tasks from being blocked forever on unsatisfiable dependencies.
@@ -837,7 +860,7 @@ These features were implemented during development but weren't tracked in the or
 - **Task types**: Collapsed from four (Implement, Fix, Discussion, Schedule) to two functional types (Do, Discuss). Each maps to genuinely different system behavior.
 - **Dependencies**: User-declared only in v1. No LLM inference — too unreliable and no mechanism to correct mistakes.
 - **Dependency completion**: Dependencies are satisfied only when a task is approved, not when the agent finishes. Dependent tasks won't start executing until the prerequisite is approved.
-- **UI layout**: Two-column (Outbox + Inbox) always visible. New Task opens as a modal. Task Detail uses accordion inline with expand-to-modal for full-screen viewing.
+- **UI layout**: ~~Two-column (Outbox + Inbox) always visible~~ → Configurable N-column grid driven by `ViewConfig[]` in `~/.harness/views.jsonc`. Default views provide Outbox + Inbox; users can add custom views filtered by status, priority, tags, and project. New Task opens as a modal. Task Detail uses accordion inline with expand-to-modal for full-screen viewing.
 - **Notification badge**: Inbox count badge turns red for permission requests. Permissions are prioritized above all other inbox items.
 - **Batcher algorithm**: Directory-level grouping based on actual diff data, no transitive closure. Simple and predictable.
 - **Discussion UX**: Chat interface within the task detail, not the diff-review interface. Discussions don't produce diffs — they produce conversation and may suggest subtasks.
