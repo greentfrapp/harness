@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Task, TaskEvent } from '@shared/types'
+import type { SubtaskProposal, Task, TaskEvent } from '@shared/types'
 import {
   OUTBOX_STATUSES,
   REJECTABLE_STATUSES,
@@ -54,6 +54,12 @@ const checkingOut = ref(false)
 const returning = ref(false)
 const granting = ref(false)
 const approvingPlan = ref(false)
+const proposals = ref<SubtaskProposal[]>([])
+const loadingProposals = ref(false)
+const resolvingProposals = ref(false)
+const proposalDecisions = ref<
+  Map<number, { action: 'approve' | 'dismiss'; feedback: string }>
+>(new Map())
 const checkoutsStore = useCheckouts()
 
 const isTaskCheckedOut = computed(() =>
@@ -97,6 +103,53 @@ async function handleApprovePlan() {
   }
 }
 
+async function fetchProposals() {
+  if (props.task.status !== 'waiting_on_subtasks') return
+  loadingProposals.value = true
+  try {
+    proposals.value = await api.tasks.getProposals(props.task.id)
+    // Initialize all as "approve" by default
+    proposalDecisions.value = new Map(
+      proposals.value.map((p) => [p.id, { action: 'approve', feedback: '' }]),
+    )
+  } catch {
+    // Ignore
+  } finally {
+    loadingProposals.value = false
+  }
+}
+
+function setAllDecisions(action: 'approve' | 'dismiss') {
+  for (const [_id, decision] of proposalDecisions.value) {
+    decision.action = action
+  }
+}
+
+async function handleResolveProposals() {
+  resolvingProposals.value = true
+  actionError.value = ''
+  try {
+    const approved: Array<{ id: number }> = []
+    const dismissed: Array<{ id: number; feedback?: string }> = []
+    for (const [id, decision] of proposalDecisions.value) {
+      if (decision.action === 'approve') {
+        approved.push({ id })
+      } else {
+        dismissed.push({
+          id,
+          feedback: decision.feedback || undefined,
+        })
+      }
+    }
+    await api.tasks.resolveProposals(props.task.id, { approved, dismissed })
+  } catch (e) {
+    actionError.value =
+      e instanceof Error ? e.message : 'Failed to resolve proposals'
+  } finally {
+    resolvingProposals.value = false
+  }
+}
+
 onMounted(async () => {
   try {
     events.value = await api.tasks.events(props.task.id)
@@ -108,6 +161,7 @@ onMounted(async () => {
     await nextTick()
     followUpTextarea.value?.focus()
   }
+  fetchProposals()
 })
 
 const showSessionStream = computed(() =>
@@ -390,6 +444,101 @@ function formatTime(ts: number): string {
           Reject
         </button>
       </div>
+    </div>
+
+    <!-- Subtask proposals review -->
+    <div
+      v-if="task.status === 'waiting_on_subtasks'"
+      class="rounded bg-purple-950 border border-purple-900 p-3 space-y-3">
+      <h4 class="text-xs font-medium text-purple-400 uppercase">
+        Subtask Proposals
+      </h4>
+
+      <div v-if="loadingProposals" class="text-sm text-purple-300">
+        Loading proposals...
+      </div>
+
+      <div v-else-if="proposals.length === 0" class="text-sm text-purple-300">
+        No proposals found.
+      </div>
+
+      <template v-else>
+        <div class="flex gap-2 mb-2">
+          <button
+            class="px-2 py-1 text-xs font-medium rounded bg-green-900/50 hover:bg-green-900 text-green-300 transition-colors"
+            @click="setAllDecisions('approve')">
+            Approve All
+          </button>
+          <button
+            class="px-2 py-1 text-xs font-medium rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-400 transition-colors"
+            @click="setAllDecisions('dismiss')">
+            Dismiss All
+          </button>
+        </div>
+
+        <div
+          v-for="proposal in proposals"
+          :key="proposal.id"
+          class="rounded border p-2.5 space-y-2"
+          :class="
+            proposalDecisions.get(proposal.id)?.action === 'approve'
+              ? 'border-green-900 bg-green-950/30'
+              : 'border-zinc-800 bg-zinc-900/30'
+          ">
+          <div class="flex items-start justify-between gap-2">
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-2">
+                <span class="text-sm font-medium text-zinc-200">{{
+                  proposal.title
+                }}</span>
+                <span
+                  class="text-xs px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400">
+                  {{ proposal.priority }}
+                </span>
+              </div>
+              <p class="text-xs text-zinc-400 mt-1 line-clamp-2">
+                {{ proposal.prompt }}
+              </p>
+            </div>
+            <select
+              class="text-xs bg-zinc-800 border border-zinc-700 rounded px-1.5 py-1 text-zinc-300 shrink-0"
+              :value="proposalDecisions.get(proposal.id)?.action ?? 'approve'"
+              @change="
+                (e: Event) => {
+                  const val = (e.target as HTMLSelectElement).value as
+                    | 'approve'
+                    | 'dismiss'
+                  const d = proposalDecisions.get(proposal.id)
+                  if (d) d.action = val
+                }
+              ">
+              <option value="approve">Approve</option>
+              <option value="dismiss">Dismiss</option>
+            </select>
+          </div>
+          <input
+            v-if="proposalDecisions.get(proposal.id)?.action === 'dismiss'"
+            type="text"
+            placeholder="Feedback (optional)"
+            class="w-full text-xs bg-zinc-900 border border-zinc-800 rounded px-2 py-1 text-zinc-300 placeholder-zinc-600"
+            :value="proposalDecisions.get(proposal.id)?.feedback ?? ''"
+            @input="
+              (e: Event) => {
+                const d = proposalDecisions.get(proposal.id)
+                if (d) d.feedback = (e.target as HTMLInputElement).value
+              }
+            " />
+        </div>
+
+        <div class="flex gap-2 pt-1">
+          <button
+            class="px-3 py-1.5 text-xs font-medium rounded bg-green-900 hover:bg-green-800 text-green-300 transition-colors disabled:opacity-50"
+            :disabled="resolvingProposals"
+            @click="handleResolveProposals">
+            {{ resolvingProposals ? 'Submitting...' : 'Submit Decisions' }}
+          </button>
+        </div>
+      </template>
     </div>
 
     <!-- Error (non-permission) -->

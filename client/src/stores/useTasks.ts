@@ -23,6 +23,7 @@ const ALL_STATUSES: TaskStatus[] = [
 // Unified sort priority — lower number = higher in list
 const STATUS_SORT_ORDER: Record<string, number> = {
   permission: 0,
+  waiting_on_subtasks: 1,
   held: 1,
   error: 2,
   ready: 3,

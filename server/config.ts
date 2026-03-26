@@ -28,9 +28,6 @@ Rules:
 - Stay focused on the task. Do not make unrelated changes.
 - When finished, write a brief summary of what you did and key decisions you made.
 - Commit your changes with a clear commit message.
-- If this task is too large or would benefit from being broken into smaller pieces, you can propose subtasks:
-  $HARNESS_CLI propose-subtasks --subtasks '[{"title":"...","prompt":"..."}]'
-  After proposing, you will be paused while subtasks are reviewed and executed, then resumed with results.
 
 Task:
 {user_prompt}`
@@ -40,9 +37,6 @@ const DEFAULT_DISCUSS_PROMPT = `You are in research/plan mode. Your job is to an
 Rules:
 - Do NOT modify any files. Read and search only.
 - Structure your response as: (1) Problem statement, (2) Relevant code references, (3) Proposed approaches with tradeoffs.
-- If you identify concrete implementation tasks, you can propose subtasks:
-  $HARNESS_CLI propose-subtasks --subtasks '[{"title":"...","prompt":"..."}]'
-  After proposing, you will be paused while subtasks are reviewed and executed, then resumed with results.
 - Only propose subtasks when you have a clear, actionable recommendation. Not every discussion needs subtasks.
 
 Topic:

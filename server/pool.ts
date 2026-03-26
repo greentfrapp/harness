@@ -271,6 +271,24 @@ export class AgentPool {
   ): void {
     const adapter = this.deps.agentRegistry.getOrDefault(task.agent_type)
 
+    // Inject harness subtask instructions into the system prompt so the agent
+    // knows how to propose subtasks via the CLI instead of using its own tools.
+    const harnessInstructions = `
+
+## Harness Task System
+You are running as an agent inside Harness, a task queue system. You can use your own tools to track progress, but you also have access to the Harness CLI for proposing subtasks that will be executed by other agents in parallel.
+
+If this task is too large or would benefit from being broken into smaller pieces, you can propose subtasks by running:
+  $HARNESS_CLI propose-subtasks --subtasks '[{"title":"Short title","prompt":"Detailed instructions for the subtask"}]'
+
+After proposing subtasks, you will be paused while the user reviews and approves them. Approved subtasks will be executed by other agents, and you will be resumed with their results.
+
+Only propose subtasks when you have clear, actionable sub-pieces. Not every task needs subtasks.`
+
+    const systemPrompt = opts.systemPrompt
+      ? opts.systemPrompt + harnessInstructions
+      : null
+
     const agentPrompt = opts.resumePromptOverride ?? task.prompt
     const args = opts.resumeSessionId
       ? adapter.buildResumeArgs({
@@ -282,7 +300,7 @@ export class AgentPool {
         })
       : adapter.buildArgs({
           prompt: agentPrompt,
-          systemPrompt: opts.systemPrompt,
+          systemPrompt,
           usesWorktree: opts.usesWorktree,
           permissionMode: opts.permissionMode,
           allowedTools: opts.allowedTools,
