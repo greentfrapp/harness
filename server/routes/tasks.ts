@@ -22,7 +22,7 @@ import { CONFIG_PATH, readConfigRaw, saveConfigRaw } from '../config'
 import type { AppContext } from '../context'
 import * as git from '../git'
 import { serverLog } from '../log'
-import { parseSessionData } from '../pool'
+import { getSessionData, updateSessionData } from '../pool'
 
 export function createTaskRoutes(ctx: AppContext) {
   const app = new Hono()
@@ -461,10 +461,6 @@ export function createTaskRoutes(ctx: AppContext) {
       return c.json({ error: 'Only held tasks can have plans approved' }, 400)
     }
 
-    // Mark plan as approved in session data
-    const sessionData = parseSessionData(task.agent_session_data) ?? {}
-    sessionData.plan_approved = true
-
     const updated = queries.updateTask(id, {
       status: 'queued',
       prompt:
@@ -472,7 +468,9 @@ export function createTaskRoutes(ctx: AppContext) {
       error_message: null,
       agent_summary: null,
       diff_summary: null,
-      agent_session_data: JSON.stringify(sessionData),
+      agent_session_data: updateSessionData(task.agent_session_data, {
+        plan_approved: true,
+      }),
     })
     queries.createTaskEvent(id, 'plan_approved', null)
     serverLog.info(`Plan approved, task re-queued for execution`, id)
@@ -496,7 +494,7 @@ export function createTaskRoutes(ctx: AppContext) {
 
     // Add the blocked tool to the cumulative granted_tools list.
     // For Bash, use command-level patterns like Bash(curl:*) instead of blanket Bash.
-    const sessionData = parseSessionData(task.agent_session_data) ?? {}
+    const sessionData = getSessionData(task) ?? { session_id: null, pid: 0 }
     const grantedTools = new Set<string>(sessionData.granted_tools ?? [])
     if (sessionData.pending_tool) {
       let grantPattern = sessionData.pending_tool
@@ -759,9 +757,7 @@ export function createTaskRoutes(ctx: AppContext) {
     }
 
     // Parse parent session data to carry forward the session ID
-    const parentSession = task.agent_session_data
-      ? parseSessionData(task.agent_session_data)
-      : null
+    const parentSession = getSessionData(task)
 
     // Resolve agent_type from task type config
     const taskTypeConfig = config.task_types[task.type]

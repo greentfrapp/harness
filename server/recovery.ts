@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import type { Project, Task } from '../shared/types'
 import * as git from './git'
+import { getSessionData } from './pool'
 
 interface RecoveryDeps {
   getTasksByStatus: (statusList: string[]) => Task[]
@@ -157,19 +158,13 @@ function recoverTask(deps: RecoveryDeps, task: Task): void {
 }
 
 function killOrphanedProcess(task: Task): void {
-  if (!task.agent_session_data) return
+  const data = getSessionData(task)
+  if (!data?.pid) return
   try {
-    const data = JSON.parse(task.agent_session_data)
-    if (data.pid) {
-      try {
-        process.kill(data.pid, 'SIGTERM')
-        console.log(`Recovery: killed orphaned process PID ${data.pid}`)
-      } catch {
-        // Process doesn't exist — expected
-      }
-    }
+    process.kill(data.pid, 'SIGTERM')
+    console.log(`Recovery: killed orphaned process PID ${data.pid}`)
   } catch {
-    // Invalid JSON — skip
+    // Process doesn't exist — expected
   }
 }
 

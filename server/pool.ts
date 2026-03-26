@@ -138,7 +138,7 @@ export class AgentPool {
     const configPermissionMode = taskTypeConfig?.permission_mode
 
     // Check if this task has a pre-populated session ID (e.g. follow-up task)
-    const existingSession = parseSessionData(task.agent_session_data)
+    const existingSession = getSessionData(task)
     const grantedTools = existingSession?.granted_tools
 
     // Override permission mode for plan-approved tasks (execute phase):
@@ -182,7 +182,7 @@ export class AgentPool {
       this.deps.config.task_types[task.type] ??
       this.deps.config.task_types['discuss']
     const permissionMode = taskTypeConfig?.permission_mode
-    const sessionData = parseSessionData(task.agent_session_data)
+    const sessionData = getSessionData(task)
     const systemPrompt = taskTypeConfig
       ? taskTypeConfig.prompt_template.replace('{user_prompt}', task.prompt)
       : task.prompt
@@ -202,7 +202,7 @@ export class AgentPool {
 
   /** Retry a failed task using --resume. */
   async retryTask(task: Task, project: Project): Promise<void> {
-    const sessionData = parseSessionData(task.agent_session_data)
+    const sessionData = getSessionData(task)
     if (!sessionData?.session_id) {
       throw new Error(`Cannot retry task ${task.id}: no session ID`)
     }
@@ -326,14 +326,11 @@ export class AgentPool {
 
     // Store PID immediately, preserving existing session data (e.g. granted_tools)
     if (proc.pid) {
-      const existing = parseSessionData(task.agent_session_data) ?? {
-        session_id: null,
-        pid: 0,
-      }
-      existing.session_id = opts.resumeSessionId
-      existing.pid = proc.pid
       this.deps.updateTask(task.id, {
-        agent_session_data: JSON.stringify(existing),
+        agent_session_data: updateSessionData(task.agent_session_data, {
+          session_id: opts.resumeSessionId,
+          pid: proc.pid,
+        }),
       })
     }
 
@@ -380,13 +377,11 @@ export class AgentPool {
           agent.sessionId = event.sessionId
           // Preserve existing session data (e.g. granted_tools) when capturing session_id
           const currentData = this.deps.getTaskById(task.id)
-          const existing = parseSessionData(
-            currentData?.agent_session_data ?? null,
-          ) ?? { session_id: null, pid: proc.pid! }
-          existing.session_id = event.sessionId
-          existing.pid = proc.pid!
           this.deps.updateTask(task.id, {
-            agent_session_data: JSON.stringify(existing),
+            agent_session_data: updateSessionData(
+              currentData?.agent_session_data ?? null,
+              { session_id: event.sessionId, pid: proc.pid! },
+            ),
           })
         }
 
@@ -513,16 +508,16 @@ export class AgentPool {
 
       // Store pending_tool and its input in session data
       const currentTask = this.deps.getTaskById(taskId)
-      const sessionData = parseSessionData(
-        currentTask?.agent_session_data ?? null,
-      ) ?? { session_id: null, pid: 0 }
-      sessionData.pending_tool = event.toolName ?? null
-      sessionData.pending_tool_input = pendingToolInput
-
       this.deps.updateTask(taskId, {
         status: 'permission',
         error_message: toolInfo,
-        agent_session_data: JSON.stringify(sessionData),
+        agent_session_data: updateSessionData(
+          currentTask?.agent_session_data ?? null,
+          {
+            pending_tool: event.toolName ?? null,
+            pending_tool_input: pendingToolInput,
+          },
+        ),
       })
       this.deps.createTaskEvent(
         taskId,
@@ -674,4 +669,21 @@ function parseSessionData(raw: string | null): AgentSessionData | null {
   }
 }
 
-export { parseSessionData }
+/** Parse session data directly from a Task object. */
+function getSessionData(task: {
+  agent_session_data: string | null
+}): AgentSessionData | null {
+  return parseSessionData(task.agent_session_data)
+}
+
+/** Parse session data, merge updates, and return serialized JSON string. */
+function updateSessionData(
+  raw: string | null,
+  updates: Partial<AgentSessionData>,
+): string {
+  const data = parseSessionData(raw) ?? { session_id: null, pid: 0 }
+  Object.assign(data, updates)
+  return JSON.stringify(data)
+}
+
+export { getSessionData, parseSessionData, updateSessionData }
