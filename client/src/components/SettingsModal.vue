@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue';
+import { ref, computed, onMounted, watch, nextTick } from 'vue';
 import { parse as parseJsonc, type ParseError } from 'jsonc-parser';
 import { api } from '../api';
 
@@ -58,6 +58,118 @@ function onKeydown(e: KeyboardEvent) {
   }
 }
 
+function onTextareaKeydown(e: KeyboardEvent) {
+  const textarea = e.target as HTMLTextAreaElement;
+  const { selectionStart, selectionEnd, value } = textarea;
+  const indent = '  ';
+
+  if (e.key === 'Tab') {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const lineStart = value.lastIndexOf('\n', selectionStart - 1) + 1;
+
+    if (selectionStart === selectionEnd) {
+      // No selection: insert/remove indent at cursor
+      if (e.shiftKey) {
+        const line = value.slice(lineStart, selectionStart);
+        const stripped = line.replace(new RegExp(`^ {1,${indent.length}}`), '');
+        const removed = line.length - stripped.length;
+        content.value = value.slice(0, lineStart) + stripped + value.slice(selectionStart);
+        nextTick(() => {
+          textarea.selectionStart = textarea.selectionEnd = selectionStart - removed;
+        });
+      } else {
+        content.value = value.slice(0, selectionStart) + indent + value.slice(selectionEnd);
+        nextTick(() => {
+          textarea.selectionStart = textarea.selectionEnd = selectionStart + indent.length;
+        });
+      }
+    } else {
+      // Multi-line selection: indent/unindent all selected lines
+      const lineEnd = value.indexOf('\n', selectionEnd - 1);
+      const blockEnd = lineEnd === -1 ? value.length : lineEnd;
+      const block = value.slice(lineStart, blockEnd);
+      let newBlock: string;
+      let startDelta = 0;
+      let endDelta = 0;
+
+      if (e.shiftKey) {
+        const lines = block.split('\n');
+        newBlock = lines.map((line, i) => {
+          const stripped = line.replace(new RegExp(`^ {1,${indent.length}}`), '');
+          const removed = line.length - stripped.length;
+          if (i === 0) startDelta = -removed;
+          endDelta -= removed;
+          return stripped;
+        }).join('\n');
+      } else {
+        const lines = block.split('\n');
+        newBlock = lines.map((line, i) => {
+          if (i === 0) startDelta = indent.length;
+          endDelta += indent.length;
+          return indent + line;
+        }).join('\n');
+      }
+
+      content.value = value.slice(0, lineStart) + newBlock + value.slice(blockEnd);
+      nextTick(() => {
+        textarea.selectionStart = Math.max(lineStart, selectionStart + startDelta);
+        textarea.selectionEnd = selectionEnd + endDelta;
+      });
+    }
+    return;
+  }
+
+  if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey) {
+    e.preventDefault();
+
+    const lineStart = value.lastIndexOf('\n', selectionStart - 1) + 1;
+    const currentLine = value.slice(lineStart, selectionStart);
+    const leadingWhitespace = currentLine.match(/^(\s*)/)?.[1] ?? '';
+    const charBefore = value[selectionStart - 1];
+    const charAfter = value[selectionStart];
+
+    const isOpener = charBefore === '{' || charBefore === '[';
+    const isCloser = charAfter === '}' || charAfter === ']';
+
+    if (isOpener && isCloser) {
+      // Between brackets: expand to 3 lines
+      const innerIndent = leadingWhitespace + indent;
+      const insertion = '\n' + innerIndent + '\n' + leadingWhitespace;
+      content.value = value.slice(0, selectionStart) + insertion + value.slice(selectionEnd);
+      const cursorPos = selectionStart + 1 + innerIndent.length;
+      nextTick(() => {
+        textarea.selectionStart = textarea.selectionEnd = cursorPos;
+      });
+    } else {
+      const newIndent = isOpener ? leadingWhitespace + indent : leadingWhitespace;
+      const insertion = '\n' + newIndent;
+      content.value = value.slice(0, selectionStart) + insertion + value.slice(selectionEnd);
+      nextTick(() => {
+        textarea.selectionStart = textarea.selectionEnd = selectionStart + insertion.length;
+      });
+    }
+    return;
+  }
+
+  // Auto-dedent closing brackets
+  if (e.key === '}' || e.key === ']') {
+    const lineStart = value.lastIndexOf('\n', selectionStart - 1) + 1;
+    const beforeCursor = value.slice(lineStart, selectionStart);
+    if (/^\s+$/.test(beforeCursor) && beforeCursor.length >= indent.length) {
+      e.preventDefault();
+      const dedented = beforeCursor.slice(0, -indent.length);
+      content.value = value.slice(0, lineStart) + dedented + e.key + value.slice(selectionEnd);
+      const cursorPos = lineStart + dedented.length + 1;
+      nextTick(() => {
+        textarea.selectionStart = textarea.selectionEnd = cursorPos;
+      });
+      return;
+    }
+  }
+}
+
 async function handleSave() {
   if (!canSave.value) return;
 
@@ -113,6 +225,7 @@ async function handleSave() {
               class="w-full bg-zinc-800 border rounded-md px-3 py-2 text-sm font-mono leading-relaxed focus:outline-none focus:ring-2 focus:ring-zinc-600 resize-y"
               :class="hasParseErrors ? 'border-red-600' : 'border-zinc-700'"
               autofocus
+              @keydown="onTextareaKeydown"
             />
 
             <!-- Parse errors -->
