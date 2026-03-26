@@ -21,16 +21,24 @@ Harness stores its config and database in `~/.harness/`. On first run it creates
   "worktree_limit": 3,
   "conversation_limit": 5,
   "task_types": {
-    "do": { "prompt_template": "...", "needs_worktree": true, "default_priority": "normal" },
-    "discuss": { "prompt_template": "...", "needs_worktree": false, "default_priority": "normal" }
+    "do": {
+      "prompt_template": "...",
+      "needs_worktree": true,
+      "default_priority": "normal",
+    },
+    "discuss": {
+      "prompt_template": "...",
+      "needs_worktree": false,
+      "default_priority": "normal",
+    },
   },
   "projects": [
     {
       "name": "my-app",
       "repo_path": "/path/to/repo",
-      "target_branch": "main"
-    }
-  ]
+      "target_branch": "main",
+    },
+  ],
 }
 ```
 
@@ -52,9 +60,9 @@ Use the `agents` config block to append extra CLI flags to every agent invocatio
   "agents": {
     "claude-code": {
       "adapter": "claude-code",
-      "extra_args": ["--allowedTools", "Bash(npm test),Bash(npm run lint)"]
-    }
-  }
+      "extra_args": ["--allowedTools", "Bash(npm test),Bash(npm run lint)"],
+    },
+  },
 }
 ```
 
@@ -78,9 +86,9 @@ You can also set `permission_mode` on individual task types:
       "prompt_template": "...",
       "needs_worktree": true,
       "default_priority": "P2",
-      "permission_mode": "plan"
-    }
-  }
+      "permission_mode": "plan",
+    },
+  },
 }
 ```
 
@@ -88,15 +96,15 @@ This overrides the adapter's default permission mode for that task type.
 
 ## Scripts
 
-| Command | Description |
-|---------|-------------|
-| `pnpm dev` | Start server and client in development mode |
-| `pnpm dev:server` | Start Hono backend with hot-reload |
-| `pnpm dev:client` | Start Vite frontend dev server |
-| `pnpm build` | Production build of the Vue client |
-| `pnpm start` | Start the production server |
-| `pnpm test` | Run tests |
-| `pnpm test:watch` | Run tests in watch mode |
+| Command           | Description                                 |
+| ----------------- | ------------------------------------------- |
+| `pnpm dev`        | Start server and client in development mode |
+| `pnpm dev:server` | Start Hono backend with hot-reload          |
+| `pnpm dev:client` | Start Vite frontend dev server              |
+| `pnpm build`      | Production build of the Vue client          |
+| `pnpm start`      | Start the production server                 |
+| `pnpm test`       | Run tests                                   |
+| `pnpm test:watch` | Run tests in watch mode                     |
 
 ## Architecture
 

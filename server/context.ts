@@ -1,21 +1,21 @@
-import type { HarnessConfig } from '../shared/types.ts';
-import type { SSEManager } from './sse.ts';
-import type { TaskQueue } from './queue.ts';
-import type { AgentPool } from './pool.ts';
-import type { Dispatcher } from './dispatcher.ts';
-import type * as queries from './db/queries.ts';
+import type { HarnessConfig } from '../shared/types'
+import type * as queries from './db/queries'
+import type { Dispatcher } from './dispatcher'
+import type { AgentPool } from './pool'
+import type { TaskQueue } from './queue'
+import type { SSEManager } from './sse'
 
 export interface CheckoutEntry {
-  taskId: string;
-  checkoutBranch: string;
+  taskId: string
+  checkoutBranch: string
 }
 
 export interface AppContext {
-  config: HarnessConfig;
-  sseManager: SSEManager;
-  taskQueue: TaskQueue;
-  pool: AgentPool;
-  dispatcher: Dispatcher;
-  queries: typeof queries;
-  checkoutState: Map<string, CheckoutEntry>;
+  config: HarnessConfig
+  sseManager: SSEManager
+  taskQueue: TaskQueue
+  pool: AgentPool
+  dispatcher: Dispatcher
+  queries: typeof queries
+  checkoutState: Map<string, CheckoutEntry>
 }

@@ -1,15 +1,14 @@
-import { createRequire } from 'node:module';
-import { drizzle } from 'drizzle-orm/better-sqlite3';
+import type BetterSqlite3 from 'better-sqlite3'
+import { drizzle } from 'drizzle-orm/better-sqlite3'
+import { createRequire } from 'node:module'
+import { DB_PATH } from '../config'
+import * as schema from './schema'
 
-const require = createRequire(import.meta.url);
-const Database = require('better-sqlite3');
-import { DB_PATH } from '../config.ts';
-import * as schema from './schema.ts';
+const require = createRequire(import.meta.url)
+const Database = require('better-sqlite3')
 
-import type BetterSqlite3 from 'better-sqlite3';
-
-let sqlite: BetterSqlite3.Database;
-let db: ReturnType<typeof drizzle<typeof schema>>;
+let sqlite: BetterSqlite3.Database
+let db: ReturnType<typeof drizzle<typeof schema>>
 
 const CREATE_TABLES_SQL = `
   CREATE TABLE IF NOT EXISTS projects (
@@ -70,31 +69,33 @@ const CREATE_TABLES_SQL = `
   CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
   CREATE INDEX IF NOT EXISTS idx_tasks_project_id ON tasks(project_id);
   CREATE INDEX IF NOT EXISTS idx_task_events_task_id ON task_events(task_id);
-`;
+`
 
 export function initDatabase(): void {
-  sqlite = new Database(DB_PATH);
-  sqlite.pragma('journal_mode = WAL');
-  sqlite.pragma('foreign_keys = ON');
-  sqlite.exec(CREATE_TABLES_SQL);
+  sqlite = new Database(DB_PATH)
+  sqlite.pragma('journal_mode = WAL')
+  sqlite.pragma('foreign_keys = ON')
+  sqlite.exec(CREATE_TABLES_SQL)
   // Migrations for existing databases
   try {
-    sqlite.exec('ALTER TABLE projects ADD COLUMN auto_push INTEGER NOT NULL DEFAULT 0');
+    sqlite.exec(
+      'ALTER TABLE projects ADD COLUMN auto_push INTEGER NOT NULL DEFAULT 0',
+    )
   } catch {
     // Column already exists
   }
   try {
-    sqlite.exec('ALTER TABLE tasks ADD COLUMN parent_task_id TEXT');
+    sqlite.exec('ALTER TABLE tasks ADD COLUMN parent_task_id TEXT')
   } catch {
     // Column already exists
   }
   try {
-    sqlite.exec("ALTER TABLE tasks ADD COLUMN tags TEXT NOT NULL DEFAULT '[]'");
+    sqlite.exec("ALTER TABLE tasks ADD COLUMN tags TEXT NOT NULL DEFAULT '[]'")
   } catch {
     // Column already exists
   }
   try {
-    sqlite.exec('ALTER TABLE tasks ADD COLUMN diff_full TEXT');
+    sqlite.exec('ALTER TABLE tasks ADD COLUMN diff_full TEXT')
   } catch {
     // Column already exists
   }
@@ -108,7 +109,7 @@ export function initDatabase(): void {
         ELSE priority
       END
       WHERE priority IN ('urgent', 'normal', 'low')
-    `);
+    `)
     sqlite.exec(`
       UPDATE subtask_proposals SET priority = CASE priority
         WHEN 'urgent' THEN 'P0'
@@ -117,27 +118,29 @@ export function initDatabase(): void {
         ELSE priority
       END
       WHERE priority IN ('urgent', 'normal', 'low')
-    `);
+    `)
   } catch {
     // Migration already applied or tables empty
   }
-  db = drizzle(sqlite, { schema });
+  db = drizzle(sqlite, { schema })
 }
 
 /** Initialize an in-memory database for testing. */
 export function initTestDatabase(): void {
-  sqlite = new Database(':memory:');
-  sqlite.pragma('foreign_keys = ON');
-  sqlite.exec(CREATE_TABLES_SQL);
-  db = drizzle(sqlite, { schema });
+  sqlite = new Database(':memory:')
+  sqlite.pragma('foreign_keys = ON')
+  sqlite.exec(CREATE_TABLES_SQL)
+  db = drizzle(sqlite, { schema })
 }
 
 export function getDb() {
-  if (!db) throw new Error('Database not initialized. Call initDatabase() first.');
-  return db;
+  if (!db)
+    throw new Error('Database not initialized. Call initDatabase() first.')
+  return db
 }
 
 export function getSqlite() {
-  if (!sqlite) throw new Error('Database not initialized. Call initDatabase() first.');
-  return sqlite;
+  if (!sqlite)
+    throw new Error('Database not initialized. Call initDatabase() first.')
+  return sqlite
 }

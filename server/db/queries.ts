@@ -1,29 +1,30 @@
-import { eq, inArray, and } from 'drizzle-orm';
-import { getDb } from './index.ts';
-import { projects, tasks, taskEvents, subtaskProposals } from './schema.ts';
+import { and, eq, inArray } from 'drizzle-orm'
 import type {
-  HarnessConfig,
   CreateTaskInput,
-  UpdateTaskInput,
+  HarnessConfig,
+  Project,
   Task,
   TaskEvent,
-  Project,
-} from '../../shared/types.ts';
+  UpdateTaskInput,
+} from '../../shared/types'
+import { getDb } from './index'
+import { projects, subtaskProposals, taskEvents, tasks } from './schema'
 
 /** Parse the JSON tags column into a string array. */
 function deserializeTags(row: Record<string, unknown>): Task {
-  const tags = row.tags;
+  const tags = row.tags
   return {
     ...row,
-    tags: typeof tags === 'string' ? JSON.parse(tags) : (tags as string[] ?? []),
-  } as Task;
+    tags:
+      typeof tags === 'string' ? JSON.parse(tags) : ((tags as string[]) ?? []),
+  } as Task
 }
 
 // --- Projects ---
 
 export function seedProjects(config: HarnessConfig): void {
-  const db = getDb();
-  const now = Date.now();
+  const db = getDb()
+  const now = Date.now()
 
   for (const project of config.projects) {
     db.insert(projects)
@@ -49,28 +50,26 @@ export function seedProjects(config: HarnessConfig): void {
           auto_push: project.auto_push ?? false,
         },
       })
-      .run();
+      .run()
   }
 }
 
 export function getAllProjects(): Project[] {
-  return getDb().select().from(projects).all() as Project[];
+  return getDb().select().from(projects).all() as Project[]
 }
 
 export function getProjectById(id: string): Project | undefined {
-  return getDb()
-    .select()
-    .from(projects)
-    .where(eq(projects.id, id))
-    .get() as Project | undefined;
+  return getDb().select().from(projects).where(eq(projects.id, id)).get() as
+    | Project
+    | undefined
 }
 
 // --- Tasks ---
 
 export function createTask(input: CreateTaskInput): Task {
-  const db = getDb();
-  const now = Date.now();
-  const id = crypto.randomUUID();
+  const db = getDb()
+  const now = Date.now()
+  const id = crypto.randomUUID()
 
   const task: typeof tasks.$inferInsert = {
     id,
@@ -85,23 +84,19 @@ export function createTask(input: CreateTaskInput): Task {
     retry_count: 0,
     created_at: now,
     updated_at: now,
-  };
+  }
 
-  db.insert(tasks).values(task).run();
+  db.insert(tasks).values(task).run()
 
   // Log creation event
-  createTaskEvent(id, 'created', null);
+  createTaskEvent(id, 'created', null)
 
-  return getTaskById(id)!;
+  return getTaskById(id)!
 }
 
 export function getTaskById(id: string): Task | undefined {
-  const row = getDb()
-    .select()
-    .from(tasks)
-    .where(eq(tasks.id, id))
-    .get();
-  return row ? deserializeTags(row as Record<string, unknown>) : undefined;
+  const row = getDb().select().from(tasks).where(eq(tasks.id, id)).get()
+  return row ? deserializeTags(row as Record<string, unknown>) : undefined
 }
 
 export function getTasksByStatus(statusList: string[]): Task[] {
@@ -110,7 +105,7 @@ export function getTasksByStatus(statusList: string[]): Task[] {
     .from(tasks)
     .where(inArray(tasks.status, statusList))
     .all()
-    .map((row) => deserializeTags(row as Record<string, unknown>));
+    .map((row) => deserializeTags(row as Record<string, unknown>))
 }
 
 export function getTasksByProject(projectId: string): Task[] {
@@ -119,38 +114,42 @@ export function getTasksByProject(projectId: string): Task[] {
     .from(tasks)
     .where(eq(tasks.project_id, projectId))
     .all()
-    .map((row) => deserializeTags(row as Record<string, unknown>));
+    .map((row) => deserializeTags(row as Record<string, unknown>))
 }
 
 export function getQueuedTasks(projectId?: string): Task[] {
-  const db = getDb();
-  const conditions = [eq(tasks.status, 'queued')];
+  const db = getDb()
+  const conditions = [eq(tasks.status, 'queued')]
   if (projectId) {
-    conditions.push(eq(tasks.project_id, projectId));
+    conditions.push(eq(tasks.project_id, projectId))
   }
   return db
     .select()
     .from(tasks)
     .where(and(...conditions))
     .all()
-    .map((row) => deserializeTags(row as Record<string, unknown>));
+    .map((row) => deserializeTags(row as Record<string, unknown>))
 }
 
 export function updateTask(
   id: string,
-  updates: UpdateTaskInput & { status?: string; queue_position?: number | null; retry_count?: number },
+  updates: UpdateTaskInput & {
+    status?: string
+    queue_position?: number | null
+    retry_count?: number
+  },
 ): Task | undefined {
-  const db = getDb();
-  const dbUpdates: Record<string, unknown> = { ...updates, updated_at: Date.now() };
+  const db = getDb()
+  const dbUpdates: Record<string, unknown> = {
+    ...updates,
+    updated_at: Date.now(),
+  }
   // Serialize tags array to JSON string for storage
   if (Array.isArray(dbUpdates.tags)) {
-    dbUpdates.tags = JSON.stringify(dbUpdates.tags);
+    dbUpdates.tags = JSON.stringify(dbUpdates.tags)
   }
-  db.update(tasks)
-    .set(dbUpdates)
-    .where(eq(tasks.id, id))
-    .run();
-  return getTaskById(id);
+  db.update(tasks).set(dbUpdates).where(eq(tasks.id, id)).run()
+  return getTaskById(id)
 }
 
 // --- Task Events ---
@@ -168,7 +167,7 @@ export function createTaskEvent(
       data,
       created_at: Date.now(),
     })
-    .run();
+    .run()
 }
 
 export function getTaskEvents(taskId: string): TaskEvent[] {
@@ -176,72 +175,41 @@ export function getTaskEvents(taskId: string): TaskEvent[] {
     .select()
     .from(taskEvents)
     .where(eq(taskEvents.task_id, taskId))
-    .all() as TaskEvent[];
+    .all() as TaskEvent[]
 }
 
 export function clearParentReferences(parentId: string): void {
-  const db = getDb();
+  const db = getDb()
   db.update(tasks)
     .set({ depends_on: null, updated_at: Date.now() })
     .where(eq(tasks.depends_on, parentId))
-    .run();
+    .run()
   db.update(tasks)
     .set({ parent_task_id: null, updated_at: Date.now() })
     .where(eq(tasks.parent_task_id, parentId))
-    .run();
-}
-
-export function deleteTaskById(id: string): Task | undefined {
-  const db = getDb();
-  const row = db
-    .select()
-    .from(tasks)
-    .where(eq(tasks.id, id))
-    .get();
-  if (!row) return undefined;
-  const task = deserializeTags(row as Record<string, unknown>);
-  clearParentReferences(id);
-  db.delete(subtaskProposals)
-    .where(eq(subtaskProposals.task_id, id))
-    .run();
-  db.delete(taskEvents).where(eq(taskEvents.task_id, id)).run();
-  db.delete(tasks).where(eq(tasks.id, id)).run();
-  return task;
+    .run()
 }
 
 /** Delete tasks and their related records (events, subtask proposals) by ID list. */
 function deleteTasksAndRelated(ids: string[]): void {
-  const db = getDb();
-  for (const id of ids) clearParentReferences(id);
+  const db = getDb()
+  for (const id of ids) clearParentReferences(id)
   db.delete(subtaskProposals)
     .where(inArray(subtaskProposals.task_id, ids))
-    .run();
-  db.delete(taskEvents).where(inArray(taskEvents.task_id, ids)).run();
-  db.delete(tasks).where(inArray(tasks.id, ids)).run();
+    .run()
+  db.delete(taskEvents).where(inArray(taskEvents.task_id, ids)).run()
+  db.delete(tasks).where(inArray(tasks.id, ids)).run()
 }
 
 export function deleteTasksByIds(ids: string[]): Task[] {
-  const db = getDb();
+  const db = getDb()
   const toDelete = db
     .select()
     .from(tasks)
     .where(inArray(tasks.id, ids))
     .all()
-    .map((row) => deserializeTags(row as Record<string, unknown>));
-  if (!toDelete.length) return [];
-  deleteTasksAndRelated(ids);
-  return toDelete;
-}
-
-export function deleteTasksByStatus(statusList: string[]): Task[] {
-  const db = getDb();
-  const toDelete = db
-    .select()
-    .from(tasks)
-    .where(inArray(tasks.status, statusList))
-    .all()
-    .map((row) => deserializeTags(row as Record<string, unknown>));
-  if (!toDelete.length) return [];
-  deleteTasksAndRelated(toDelete.map((t) => t.id));
-  return toDelete;
+    .map((row) => deserializeTags(row as Record<string, unknown>))
+  if (!toDelete.length) return []
+  deleteTasksAndRelated(ids)
+  return toDelete
 }

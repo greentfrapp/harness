@@ -30,6 +30,7 @@ Wraps the full API message object. The `message.content` array contains the actu
 **Content block types inside `message.content`:**
 
 #### Text block
+
 ```json
 {
   "type": "assistant",
@@ -48,6 +49,7 @@ Wraps the full API message object. The `message.content` array contains the actu
 ```
 
 #### Tool use block
+
 ```json
 {
   "type": "assistant",
@@ -70,6 +72,7 @@ Wraps the full API message object. The `message.content` array contains the actu
 ```
 
 #### Thinking block (extended thinking)
+
 ```json
 {
   "type": "assistant",
@@ -94,6 +97,7 @@ A single assistant message can contain **multiple** content blocks (e.g., thinki
 Wraps tool results and synthetic messages. **Important:** There are no top-level `tool_result` messages — they are always inside `user` messages.
 
 #### Tool result
+
 ```json
 {
   "type": "user",
@@ -128,6 +132,7 @@ The `tool_use_result` top-level field contains rich structured data (e.g., file 
 #### Synthetic user messages (hooks)
 
 Hook feedback arrives as `user` messages with `isSynthetic: true`:
+
 ```json
 {
   "type": "user",
@@ -179,6 +184,7 @@ Final message when the session completes. Contains summary, cost, and duration.
 When `--permission-mode default` is active and a tool requires approval, the CLI does **not** emit a special permission event. Instead, the tool result is returned as an error. The wording varies by tool:
 
 **Format 1 — Bash and similar tools:**
+
 ```json
 {
   "type": "user",
@@ -201,6 +207,7 @@ When `--permission-mode default` is active and a tool requires approval, the CLI
 ```
 
 **Format 2 — WebSearch, WebFetch, and deferred tools:**
+
 ```json
 {
   "type": "user",

@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer } from 'drizzle-orm/sqlite-core';
+import { integer, sqliteTable, text } from 'drizzle-orm/sqlite-core'
 
 export const projects = sqliteTable('projects', {
   id: text('id').primaryKey(),
@@ -11,7 +11,7 @@ export const projects = sqliteTable('projects', {
   created_at: integer('created_at')
     .notNull()
     .$defaultFn(() => Date.now()),
-});
+})
 
 export const tasks = sqliteTable('tasks', {
   id: text('id').primaryKey(),
@@ -41,7 +41,7 @@ export const tasks = sqliteTable('tasks', {
   updated_at: integer('updated_at')
     .notNull()
     .$defaultFn(() => Date.now()),
-});
+})
 
 export const taskEvents = sqliteTable('task_events', {
   id: integer('id').primaryKey({ autoIncrement: true }),
@@ -53,7 +53,7 @@ export const taskEvents = sqliteTable('task_events', {
   created_at: integer('created_at')
     .notNull()
     .$defaultFn(() => Date.now()),
-});
+})
 
 export const subtaskProposals = sqliteTable('subtask_proposals', {
   id: integer('id').primaryKey({ autoIncrement: true }),
@@ -69,4 +69,4 @@ export const subtaskProposals = sqliteTable('subtask_proposals', {
   created_at: integer('created_at')
     .notNull()
     .$defaultFn(() => Date.now()),
-});
+})
