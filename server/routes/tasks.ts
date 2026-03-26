@@ -199,10 +199,12 @@ export function createTaskRoutes(ctx: AppContext) {
 
     sseManager.broadcast('task:created', updated)
 
-    // Trigger dispatch check
+    // Trigger dispatch — may change status to in_progress synchronously
     dispatcher.tryDispatch()
 
-    return c.json(updated, 201)
+    // Re-read after dispatch so the response reflects the current status
+    const current = queries.getTaskById(task.id)!
+    return c.json(current, 201)
   })
 
   /** Send a draft: transition from draft to queued. */
@@ -243,11 +245,15 @@ export function createTaskRoutes(ctx: AppContext) {
     serverLog.info(`Draft task sent to queue`, id)
 
     taskQueue.recomputePositions(task.project_id)
-    const final = queries.getTaskById(id)!
-    sseManager.broadcast('task:updated', final)
+    const sent = queries.getTaskById(id)!
+    sseManager.broadcast('task:updated', sent)
+
+    // Trigger dispatch — may change status to in_progress synchronously
     dispatcher.tryDispatch()
 
-    return c.json(final)
+    // Re-read after dispatch so the response reflects the current status
+    const current = queries.getTaskById(id)!
+    return c.json(current)
   })
 
   app.patch('/tasks/:id', async (c) => {
