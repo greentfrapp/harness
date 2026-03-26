@@ -24,7 +24,7 @@ import {
   transition,
   type TransitionAction,
 } from '../../shared/transitions'
-import { CONFIG_PATH, readConfigRaw, saveConfigRaw } from '../config'
+import { CONFIG_PATH, getDefaultTaskTypes, readConfigRaw, saveConfigRaw } from '../config'
 import type { AppContext } from '../context'
 import * as git from '../git'
 import { serverLog } from '../log'
@@ -136,6 +136,11 @@ export function createTaskRoutes(ctx: AppContext) {
 
   app.get('/config', (c) => {
     return c.json({ task_types: config.task_types, tags: config.tags })
+  })
+
+  /** Return built-in default task types for the "restore defaults" button. */
+  app.get('/config/defaults/task-types', (c) => {
+    return c.json(getDefaultTaskTypes())
   })
 
   /** Read raw config.jsonc content for the settings editor. */

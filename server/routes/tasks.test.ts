@@ -13,6 +13,11 @@ import { createTaskRoutes } from './tasks'
 vi.mock('../config.ts', () => ({
   readConfigRaw: vi.fn(),
   saveConfigRaw: vi.fn(),
+  getDefaultTaskTypes: vi.fn().mockReturnValue({
+    do: { prompt_template: '...', needs_worktree: true, default_priority: 'P2' },
+    discuss: { prompt_template: '...', needs_worktree: false, default_priority: 'P2' },
+    plan: { prompt_template: '...', needs_worktree: false, default_priority: 'P2' },
+  }),
   CONFIG_PATH: '/mock/.harness/config.jsonc',
 }))
 
@@ -250,6 +255,18 @@ describe('Task Routes', () => {
       expect(res.status).toBe(400)
       const body = await res.json()
       expect(body.error).toMatch(/repo_path/)
+    })
+  })
+
+  describe('GET /config/defaults/task-types', () => {
+    it('returns default task types including plan', async () => {
+      const res = await app.request('/config/defaults/task-types')
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body).toHaveProperty('do')
+      expect(body).toHaveProperty('discuss')
+      expect(body).toHaveProperty('plan')
+      expect(body.plan.needs_worktree).toBe(false)
     })
   })
 

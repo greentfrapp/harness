@@ -86,6 +86,7 @@ const pool = new AgentPool({
   createTaskEvent: queries.createTaskEvent,
   broadcast: (event, data) => sseManager.broadcast(event, data),
   getTaskById: queries.getTaskById,
+  getSubtaskProposals: queries.getSubtaskProposals,
   onTaskCompleted: (taskId: string) => {
     // Re-check queue when an agent finishes (slot freed)
     dispatcher?.tryDispatch()

@@ -5,6 +5,7 @@ import type {
   HarnessConfig,
   Project,
   SSEEventType,
+  SubtaskProposal,
   Task,
 } from '../shared/types'
 import { transition } from '../shared/transitions'
@@ -61,6 +62,7 @@ interface PoolDeps {
   ) => void
   broadcast: (event: SSEEventType, data: unknown) => void
   getTaskById: (id: string) => Task | undefined
+  getSubtaskProposals: (taskId: string) => SubtaskProposal[]
   onTaskCompleted: (taskId: string) => void
 }
 
@@ -608,6 +610,18 @@ Only propose subtasks when you have clear, actionable sub-pieces. Not every task
     serverLog.info(`Agent completed successfully`, taskId)
     const task = this.deps.getTaskById(taskId)
     if (!task) return
+
+    // Plan tasks must produce subtask proposals — error if they didn't
+    if (task.type === 'plan') {
+      const proposals = this.deps.getSubtaskProposals(taskId)
+      if (proposals.length === 0) {
+        this.pushToError(
+          taskId,
+          'Plan task completed without proposing any subtasks. Plan tasks must propose subtasks via the Harness CLI.',
+        )
+        return
+      }
+    }
 
     // Capture diff stats and full diff for Do tasks
     let diffSummary: string | null = null

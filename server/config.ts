@@ -42,6 +42,18 @@ Rules:
 Topic:
 {user_prompt}`
 
+const DEFAULT_PLAN_PROMPT = `You are a planning agent. Your job is to analyze the task below, research the codebase, and produce a structured set of subtasks that can be executed by other agents.
+
+Rules:
+- Do NOT modify any files. Read and search only.
+- Thoroughly investigate the codebase to understand what changes are needed.
+- Break the work into clear, actionable subtasks — each should be independently executable by an agent.
+- Each subtask should have a descriptive title and detailed prompt with specific instructions.
+- When ready, propose your subtasks using the Harness CLI. You MUST propose subtasks before finishing.
+
+Task:
+{user_prompt}`
+
 const DEFAULT_CONFIG: HarnessConfig = {
   worktree_limit: 3,
   conversation_limit: 5,
@@ -54,6 +66,11 @@ const DEFAULT_CONFIG: HarnessConfig = {
     },
     discuss: {
       prompt_template: DEFAULT_DISCUSS_PROMPT,
+      needs_worktree: false,
+      default_priority: 'P2',
+    },
+    plan: {
+      prompt_template: DEFAULT_PLAN_PROMPT,
       needs_worktree: false,
       default_priority: 'P2',
     },
@@ -78,6 +95,11 @@ const DEFAULT_CONFIG_TEMPLATE = `{
       "prompt_template": "You are in research/plan mode...\\n\\nTopic:\\n{user_prompt}",
       "needs_worktree": false,
       "default_priority": "P2"
+    },
+    "plan": {
+      "prompt_template": "You are a planning agent. Analyze the task and propose subtasks...\\n\\nTask:\\n{user_prompt}",
+      "needs_worktree": false,
+      "default_priority": "P2"
     }
   },
 
@@ -99,6 +121,11 @@ const DEFAULT_CONFIG_TEMPLATE = `{
   ]
 }
 `
+
+/** Return the built-in default task types (for "restore defaults" in settings UI). */
+export function getDefaultTaskTypes(): Record<string, unknown> {
+  return DEFAULT_CONFIG.task_types
+}
 
 export function ensureHarnessDir(): void {
   fs.mkdirSync(HARNESS_DIR, { recursive: true })

@@ -136,6 +136,7 @@ describe('AgentPool progress broadcasting', () => {
       createTaskEvent: vi.fn(),
       broadcast,
       getTaskById: () => makeTask(),
+      getSubtaskProposals: vi.fn(() => []),
       onTaskCompleted: vi.fn(),
     })
   })
@@ -1000,5 +1001,140 @@ describe('AgentPool progress broadcasting', () => {
         agent_summary: 'Done! I fixed the bug in server.ts.',
       }),
     )
+  })
+
+  it('errors plan tasks that finish without proposing subtasks', async () => {
+    const updateTask = vi.fn(() => makeTask({ type: 'plan' }))
+    const createTaskEvent = vi.fn()
+    const onTaskCompleted = vi.fn()
+    const getSubtaskProposals = vi.fn(() => [])
+
+    const config: HarnessConfig = {
+      projects: [],
+      task_types: {
+        do: { prompt_template: '{user_prompt}', uses_worktree: true },
+        plan: { prompt_template: '{user_prompt}', needs_worktree: false },
+      },
+      concurrency: { max_worktrees: 2, max_conversations: 2 },
+    } as any
+
+    const planPool = new AgentPool({
+      config,
+      agentRegistry: fakeRegistry,
+      getProjectById: () => makeProject(),
+      updateTask,
+      createTaskEvent,
+      broadcast,
+      getTaskById: () => makeTask({ type: 'plan', status: 'in_progress' }),
+      getSubtaskProposals,
+      onTaskCompleted,
+    })
+
+    const task = makeTask({ type: 'plan' })
+    await planPool.dispatchDiscussTask(task, makeProject())
+
+    // Emit result
+    const resultMsg = { type: 'result', result: 'Here is my analysis.', session_id: 'sess-1' }
+    spawnedProc.stdout.emit('data', Buffer.from(JSON.stringify(resultMsg) + '\n'))
+
+    updateTask.mockClear()
+    createTaskEvent.mockClear()
+
+    spawnedProc.emit('close', 0)
+
+    // Should have checked for proposals
+    expect(getSubtaskProposals).toHaveBeenCalledWith('task-1')
+
+    // Should have moved to error, not ready
+    expect(updateTask).toHaveBeenCalledWith(
+      'task-1',
+      expect.objectContaining({
+        status: 'error',
+        error_message: expect.stringContaining('without proposing any subtasks'),
+      }),
+    )
+  })
+
+  it('allows plan tasks that proposed subtasks to complete normally', async () => {
+    const updateTask = vi.fn(() => makeTask({ type: 'plan' }))
+    const createTaskEvent = vi.fn()
+    const onTaskCompleted = vi.fn()
+    const getSubtaskProposals = vi.fn(() => [
+      { id: 1, task_id: 'task-1', title: 'Sub 1', status: 'pending' },
+    ])
+
+    const config: HarnessConfig = {
+      projects: [],
+      task_types: {
+        do: { prompt_template: '{user_prompt}', uses_worktree: true },
+        plan: { prompt_template: '{user_prompt}', needs_worktree: false },
+      },
+      concurrency: { max_worktrees: 2, max_conversations: 2 },
+    } as any
+
+    const planPool = new AgentPool({
+      config,
+      agentRegistry: fakeRegistry,
+      getProjectById: () => makeProject(),
+      updateTask,
+      createTaskEvent,
+      broadcast,
+      getTaskById: () => makeTask({ type: 'plan', status: 'in_progress' }),
+      getSubtaskProposals,
+      onTaskCompleted,
+    })
+
+    const task = makeTask({ type: 'plan' })
+    await planPool.dispatchDiscussTask(task, makeProject())
+
+    const resultMsg = { type: 'result', result: 'Proposed subtasks.', session_id: 'sess-1' }
+    spawnedProc.stdout.emit('data', Buffer.from(JSON.stringify(resultMsg) + '\n'))
+
+    updateTask.mockClear()
+    spawnedProc.emit('close', 0)
+
+    // Should complete as ready, not error
+    expect(updateTask).toHaveBeenCalledWith(
+      'task-1',
+      expect.objectContaining({
+        status: 'ready',
+        agent_summary: 'Proposed subtasks.',
+      }),
+    )
+  })
+
+  it('does not check proposals for non-plan tasks', async () => {
+    const getSubtaskProposals = vi.fn(() => [])
+
+    const config: HarnessConfig = {
+      projects: [],
+      task_types: {
+        do: { prompt_template: '{user_prompt}', uses_worktree: true },
+      },
+      concurrency: { max_worktrees: 2, max_conversations: 2 },
+    } as any
+
+    const doPool = new AgentPool({
+      config,
+      agentRegistry: fakeRegistry,
+      getProjectById: () => makeProject(),
+      updateTask: vi.fn(() => makeTask()),
+      createTaskEvent: vi.fn(),
+      broadcast,
+      getTaskById: () => makeTask({ branch_name: 'harness/test-branch' }),
+      getSubtaskProposals,
+      onTaskCompleted: vi.fn(),
+    })
+
+    const task = makeTask({ branch_name: 'harness/test-branch' })
+    await doPool.dispatchDoTask(task, makeProject())
+
+    const resultMsg = { type: 'result', result: 'Done.', session_id: 'sess-1' }
+    spawnedProc.stdout.emit('data', Buffer.from(JSON.stringify(resultMsg) + '\n'))
+
+    spawnedProc.emit('close', 0)
+
+    // Should NOT have queried proposals for a do task
+    expect(getSubtaskProposals).not.toHaveBeenCalled()
   })
 })

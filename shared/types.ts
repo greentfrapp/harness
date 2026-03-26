@@ -1,5 +1,5 @@
 // Task types
-export type TaskType = 'do' | 'discuss' | (string & {})
+export type TaskType = 'do' | 'discuss' | 'plan' | (string & {})
 export type TaskStatus =
   | 'draft'
   | 'queued'

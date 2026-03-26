@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { type ParseError, parse as parseJsonc } from 'jsonc-parser'
+import { type ParseError, modify, parse as parseJsonc, applyEdits } from 'jsonc-parser'
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { api } from '../api'
 
@@ -193,6 +193,19 @@ function onTextareaKeydown(e: KeyboardEvent) {
   }
 }
 
+async function restoreDefaultTaskTypes() {
+  try {
+    const defaults = await api.config.getDefaultTaskTypes()
+    const edits = modify(content.value, ['task_types'], defaults, {
+      formattingOptions: { tabSize: 2, insertSpaces: true },
+    })
+    content.value = applyEdits(content.value, edits)
+  } catch (e) {
+    serverError.value =
+      e instanceof Error ? e.message : 'Failed to fetch defaults'
+  }
+}
+
 async function handleSave() {
   if (!canSave.value) return
 
@@ -270,7 +283,14 @@ async function handleSave() {
           </template>
 
           <!-- Actions -->
-          <div class="flex justify-end gap-2 pt-2">
+          <div class="flex justify-between pt-2">
+            <button
+              type="button"
+              class="px-3 py-2 text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+              @click="restoreDefaultTaskTypes">
+              Restore default task types
+            </button>
+            <div class="flex gap-2">
             <button
               type="button"
               class="px-4 py-2 text-sm text-zinc-400 hover:text-zinc-200 transition-colors"
@@ -284,6 +304,7 @@ async function handleSave() {
               {{ saving ? 'Saving...' : 'Save' }}
               <kbd class="ml-1 text-xs opacity-60">⌘↵</kbd>
             </button>
+            </div>
           </div>
         </div>
       </div>

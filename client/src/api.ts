@@ -48,6 +48,8 @@ export const api = {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content }),
       }),
+    getDefaultTaskTypes: () =>
+      request<Record<string, unknown>>('/api/config/defaults/task-types'),
   },
   views: {
     list: () => request<ViewConfig[]>('/api/views'),
