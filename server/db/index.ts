@@ -28,7 +28,7 @@ const CREATE_TABLES_SQL = `
     type TEXT NOT NULL,
     status TEXT NOT NULL,
     title TEXT,
-    prompt TEXT NOT NULL,
+    prompt TEXT,
     priority TEXT NOT NULL DEFAULT 'P2',
     depends_on TEXT REFERENCES tasks(id),
     parent_task_id TEXT,
@@ -133,6 +133,48 @@ export function initDatabase(): void {
     sqlite.exec('ALTER TABLE tasks ADD COLUMN title TEXT')
   } catch {
     // Column already exists
+  }
+  // Migrate: make tasks.prompt nullable for existing databases
+  // SQLite doesn't support ALTER COLUMN, so we rebuild the table
+  try {
+    const promptColumnInfo = sqlite
+      .prepare("SELECT `notnull` FROM pragma_table_info('tasks') WHERE name = 'prompt'")
+      .get() as { notnull: number } | undefined
+    if (promptColumnInfo && promptColumnInfo.notnull === 1) {
+      sqlite.exec(`
+        CREATE TABLE tasks_new (
+          id TEXT PRIMARY KEY,
+          project_id TEXT NOT NULL REFERENCES projects(id),
+          type TEXT NOT NULL,
+          status TEXT NOT NULL,
+          title TEXT,
+          prompt TEXT,
+          priority TEXT NOT NULL DEFAULT 'P2',
+          depends_on TEXT REFERENCES tasks(id),
+          parent_task_id TEXT,
+          tags TEXT NOT NULL DEFAULT '[]',
+          agent_type TEXT NOT NULL DEFAULT 'claude-code',
+          agent_session_data TEXT,
+          worktree_path TEXT,
+          branch_name TEXT,
+          diff_summary TEXT,
+          diff_full TEXT,
+          agent_summary TEXT,
+          error_message TEXT,
+          retry_count INTEGER NOT NULL DEFAULT 0,
+          queue_position INTEGER,
+          created_at INTEGER NOT NULL,
+          updated_at INTEGER NOT NULL
+        );
+        INSERT INTO tasks_new SELECT * FROM tasks;
+        DROP TABLE tasks;
+        ALTER TABLE tasks_new RENAME TO tasks;
+        CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
+        CREATE INDEX IF NOT EXISTS idx_tasks_project_id ON tasks(project_id);
+      `)
+    }
+  } catch {
+    // Migration already applied or not needed
   }
   db = drizzle(sqlite, { schema })
 }
