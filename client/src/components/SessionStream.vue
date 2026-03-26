@@ -7,6 +7,7 @@ import {
 import { marked } from 'marked'
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue'
 import { api } from '../api'
+import Tooltip from './BaseTooltip.vue'
 
 const props = defineProps<{
   taskId: string
@@ -351,19 +352,21 @@ function toolResultSummary(group: ToolCallGroup): string {
         Live Session
       </h4>
       <div class="flex items-center gap-1 flex-wrap">
-        <button
+        <Tooltip
           v-for="f in filterLabels"
           :key="f.type"
-          class="px-1.5 py-0.5 text-[10px] font-medium rounded border transition-colors"
-          :class="
-            activeFilters.has(f.type)
-              ? f.activeColor
-              : 'bg-zinc-900 border-zinc-700 text-zinc-600 hover:text-zinc-400'
-          "
-          @click="toggleFilter(f.type)"
-          :title="`Toggle ${f.label} messages`">
-          {{ f.label }}
-        </button>
+          :text="`Toggle ${f.label} messages`">
+          <button
+            class="px-1.5 py-0.5 text-[10px] font-medium rounded border transition-colors"
+            :class="
+              activeFilters.has(f.type)
+                ? f.activeColor
+                : 'bg-zinc-900 border-zinc-700 text-zinc-600 hover:text-zinc-400'
+            "
+            @click="toggleFilter(f.type)">
+            {{ f.label }}
+          </button>
+        </Tooltip>
       </div>
     </div>
     <div

@@ -7,6 +7,7 @@ import type {
   Task,
 } from '@shared/types'
 import { computed, nextTick, onMounted, ref } from 'vue'
+import Tooltip from './BaseTooltip.vue'
 
 const TAG_COLORS: Record<
   string,
@@ -321,18 +322,20 @@ const priorities: { value: Priority; label: string }[] = [
               >Tags</label
             >
             <div class="flex flex-wrap gap-1">
-              <button
+              <Tooltip
                 v-for="tag in availableTags"
                 :key="tag.name"
-                type="button"
-                class="px-2.5 py-1 text-xs font-medium rounded-md transition-all"
-                :class="
-                  getTagClasses(tag.name, selectedTags.includes(tag.name))
-                "
-                :title="tag.description"
-                @click="toggleTag(tag.name)">
-                {{ tag.name }}
-              </button>
+                :text="tag.description">
+                <button
+                  type="button"
+                  class="px-2.5 py-1 text-xs font-medium rounded-md transition-all"
+                  :class="
+                    getTagClasses(tag.name, selectedTags.includes(tag.name))
+                  "
+                  @click="toggleTag(tag.name)">
+                  {{ tag.name }}
+                </button>
+              </Tooltip>
             </div>
           </div>
 

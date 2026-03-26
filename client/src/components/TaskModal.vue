@@ -3,6 +3,7 @@ import type { Task } from '@shared/types'
 import { onBeforeUnmount, onMounted } from 'vue'
 import { useCheckouts } from '../stores/useCheckouts'
 import TaskDetail from './TaskDetail.vue'
+import Tooltip from './BaseTooltip.vue'
 
 const checkoutsStore = useCheckouts()
 
@@ -94,9 +95,9 @@ function statusColor(status: string) {
               {{ task.id.slice(0, 8) }}
             </span>
           </div>
+          <Tooltip text="Close (Esc)">
           <button
             class="p-1.5 text-zinc-400 hover:text-zinc-200 transition-colors rounded-md hover:bg-zinc-800 shrink-0"
-            title="Close (Esc)"
             @click="emit('close')">
             <svg
               class="w-5 h-5"
@@ -110,6 +111,7 @@ function statusColor(status: string) {
                 d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
+          </Tooltip>
         </div>
 
         <!-- Content (scrollable) -->

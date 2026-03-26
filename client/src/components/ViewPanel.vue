@@ -7,6 +7,7 @@ import { useCheckouts } from '../stores/useCheckouts'
 import { useTasks } from '../stores/useTasks'
 import TaskCard from './TaskCard.vue'
 import TaskModal from './TaskModal.vue'
+import Tooltip from './BaseTooltip.vue'
 
 const tagConfigs =
   inject<import('vue').Ref<Record<string, TagConfig>>>('tagConfigs')
@@ -196,22 +197,23 @@ async function handleMaximizeAction(
             class="text-xs bg-zinc-800 text-zinc-400 px-2 py-0.5 rounded-full">
             {{ nonDraftTasks.length }}
           </span>
-          <button
-            class="p-1 text-zinc-600 hover:text-zinc-300 transition-colors rounded"
-            title="Edit view"
-            @click="emit('editView', view)">
-            <svg
-              class="w-3.5 h-3.5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24">
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-            </svg>
-          </button>
+          <Tooltip text="Edit view">
+            <button
+              class="p-1 text-zinc-600 hover:text-zinc-300 transition-colors rounded"
+              @click="emit('editView', view)">
+              <svg
+                class="w-3.5 h-3.5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24">
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
+            </button>
+          </Tooltip>
         </template>
       </div>
       <div v-if="nonDraftTasks.length" class="flex items-center gap-2 text-xs">

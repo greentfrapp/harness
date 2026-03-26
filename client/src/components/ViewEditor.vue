@@ -2,6 +2,7 @@
 import type { Priority, Project, TagConfig, TaskStatus, ViewConfig } from '@shared/types'
 import { computed, inject, onMounted, ref } from 'vue'
 import { api } from '../api'
+import Tooltip from './BaseTooltip.vue'
 
 const ALL_STATUSES: TaskStatus[] = [
   'draft',
@@ -128,22 +129,23 @@ function onKeydown(e: KeyboardEvent) {
           <h2 class="text-lg font-semibold">
             {{ isNew ? 'New View' : 'Edit View' }}
           </h2>
-          <button
-            class="p-1.5 text-zinc-400 hover:text-zinc-200 transition-colors rounded-md hover:bg-zinc-800"
-            title="Close (Esc)"
-            @click="emit('close')">
-            <svg
-              class="w-5 h-5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24">
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                stroke-width="2"
-                d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+          <Tooltip text="Close (Esc)">
+            <button
+              class="p-1.5 text-zinc-400 hover:text-zinc-200 transition-colors rounded-md hover:bg-zinc-800"
+              @click="emit('close')">
+              <svg
+                class="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24">
+                <path
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="2"
+                  d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </Tooltip>
         </div>
 
         <!-- Content -->
