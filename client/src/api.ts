@@ -127,8 +127,8 @@ export const api = {
       request<Task>(`/api/tasks/${id}/approve-plan`, { method: 'POST' }),
     revise: (id: string, prompt: string) =>
       request<Task>(`/api/tasks/${id}/revise`, json({ prompt })),
-    followUp: (id: string, prompt: string) =>
-      request<Task>(`/api/tasks/${id}/follow-up`, json({ prompt })),
+    followUp: (id: string, prompt: string, type?: string) =>
+      request<Task>(`/api/tasks/${id}/follow-up`, json({ prompt, ...(type && { type }) })),
     send: (
       id: string,
       body?: { prompt?: string; priority?: string; depends_on?: string | null },

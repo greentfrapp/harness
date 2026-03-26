@@ -790,22 +790,28 @@ export function createTaskRoutes(ctx: AppContext) {
       )
     }
 
-    const body = await c.req.json<{ prompt: string }>()
+    const body = await c.req.json<{ prompt: string; type?: string }>()
     if (!body.prompt?.trim()) {
       return c.json({ error: 'prompt is required' }, 400)
+    }
+
+    // Resolve follow-up type (defaults to parent type)
+    const followUpType = body.type?.trim() || task.type
+    if (body.type && !config.task_types[followUpType]) {
+      return c.json({ error: `Unknown task type: ${followUpType}` }, 400)
     }
 
     // Parse parent session data to carry forward the session ID
     const parentSession = getSessionData(task)
 
-    // Resolve agent_type from task type config
-    const taskTypeConfig = config.task_types[task.type]
+    // Resolve agent_type from the follow-up type's config
+    const taskTypeConfig = config.task_types[followUpType]
     const agentType = taskTypeConfig?.agent ?? task.agent_type ?? 'claude-code'
 
     // Create follow-up task with parent_task_id for lineage (not depends_on)
     const followUpTask = queries.createTask({
       project_id: task.project_id,
-      type: task.type,
+      type: followUpType,
       prompt: body.prompt.trim(),
       priority: task.priority,
       agent_type: agentType,

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { TagConfig, Task } from '@shared/types'
 import { getTaskContext, OUTBOX_STATUSES, TERMINAL_STATUSES } from '@shared/types'
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { api } from '../api'
 import { useCheckouts } from '../stores/useCheckouts'
 import TaskDetail from './TaskDetail.vue'
@@ -47,8 +47,14 @@ const emit = defineEmits<{
 
 const checkoutsStore = useCheckouts()
 
+const taskTypes = inject<import('vue').Ref<string[]>>('taskTypes')
+const transitionTypes = computed(() =>
+  (taskTypes?.value ?? []).filter((t) => t !== props.task.type),
+)
+
 const expanded = ref(false)
 const autoFollowUp = ref(false)
+const autoFollowUpType = ref('')
 const confirmingDelete = ref(false)
 const deleting = ref(false)
 const collapsedCheckingOut = ref(false)
@@ -604,10 +610,25 @@ async function handleCollapsedReturn(e: Event) {
             (e: Event) => {
               e.stopPropagation()
               autoFollowUp = true
+              autoFollowUpType = ''
               expanded = true
             }
           ">
           Follow Up
+        </button>
+        <button
+          v-for="t in (task.status === 'approved' ? transitionTypes : [])"
+          :key="t"
+          class="px-2 py-1 text-xs font-medium rounded bg-indigo-900 hover:bg-indigo-800 text-indigo-300 transition-colors"
+          @click="
+            (e: Event) => {
+              e.stopPropagation()
+              autoFollowUp = true
+              autoFollowUpType = t
+              expanded = true
+            }
+          ">
+          {{ t.charAt(0).toUpperCase() + t.slice(1) }}
         </button>
         <button
           class="px-2 py-1 text-xs font-medium rounded transition-colors disabled:opacity-50"
@@ -673,6 +694,7 @@ async function handleCollapsedReturn(e: Event) {
       :task="task"
       :context="derivedContext"
       :auto-follow-up="autoFollowUp"
+      :auto-follow-up-type="autoFollowUpType"
       :actions-disabled="actionsDisabled"
       @cancel="emit('cancel', $event)"
       @approve="handleApprove($event)"

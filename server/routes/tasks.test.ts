@@ -864,6 +864,52 @@ describe('Task Routes', () => {
         expect.objectContaining({ parent_task_id: 'parent-1' }),
       )
     })
+
+    it('creates follow-up with overridden task type', async () => {
+      const parent = makeTask({
+        id: 'parent-1',
+        type: 'discuss',
+        status: 'approved',
+        agent_session_data: '{"session_id":"sess-1","pid":0}',
+      })
+      ;(ctx.queries.getTaskById as any)
+        .mockReturnValueOnce(parent)
+        .mockReturnValue(makeTask({ id: 'new-1', type: 'do', parent_task_id: 'parent-1' }))
+      ;(ctx.queries.getTasksByStatus as any).mockReturnValue([])
+      ;(ctx.queries.createTask as any).mockReturnValue(
+        makeTask({ id: 'new-1', type: 'do' }),
+      )
+
+      const res = await app.request('/tasks/parent-1/follow-up', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: 'implement this', type: 'do' }),
+      })
+      expect(res.status).toBe(201)
+
+      expect(ctx.queries.createTask).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'do' }),
+      )
+    })
+
+    it('rejects follow-up with unknown task type', async () => {
+      const parent = makeTask({
+        id: 'parent-1',
+        status: 'approved',
+        agent_session_data: '{"session_id":"sess-1","pid":0}',
+      })
+      ;(ctx.queries.getTaskById as any).mockReturnValue(parent)
+      ;(ctx.queries.getTasksByStatus as any).mockReturnValue([])
+
+      const res = await app.request('/tasks/parent-1/follow-up', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: 'do stuff', type: 'nonexistent' }),
+      })
+      expect(res.status).toBe(400)
+      const body = await res.json()
+      expect(body.error).toContain('Unknown task type')
+    })
   })
 
   describe('reject clears parent references', () => {

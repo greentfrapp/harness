@@ -32,6 +32,7 @@ const editingView = ref<ViewConfig | null | undefined>(undefined)
 // undefined = closed, null = new view, ViewConfig = editing existing
 
 provide('tagConfigs', tagConfigs)
+provide('taskTypes', taskTypes)
 
 function onKeydown(e: KeyboardEvent) {
   const tag = (e.target as HTMLElement)?.tagName

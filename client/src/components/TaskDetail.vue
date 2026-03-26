@@ -8,7 +8,7 @@ import {
   TERMINAL_STATUSES,
 } from '@shared/types'
 import { marked } from 'marked'
-import { computed, nextTick, onMounted, ref } from 'vue'
+import { computed, inject, nextTick, onMounted, ref } from 'vue'
 import { api } from '../api'
 import { useCheckouts } from '../stores/useCheckouts'
 import DiffViewer from './DiffViewer.vue'
@@ -18,8 +18,14 @@ const props = defineProps<{
   task: Task
   context?: 'outbox' | 'inbox' | 'draft'
   autoFollowUp?: boolean
+  autoFollowUpType?: string
   actionsDisabled?: boolean
 }>()
+
+const taskTypes = inject<import('vue').Ref<string[]>>('taskTypes')
+const transitionTypes = computed(() =>
+  (taskTypes?.value ?? []).filter((t) => t !== props.task.type),
+)
 
 
 const emit = defineEmits<{
@@ -44,6 +50,7 @@ const blockedDependents = ref<
   Array<{ id: string; prompt: string; status: string }>
 >([])
 const followUpPrompt = ref('')
+const followUpType = ref('')
 const followingUp = ref(false)
 const showFollowUp = ref(false)
 const followUpTextarea = ref<HTMLTextAreaElement | null>(null)
@@ -157,6 +164,7 @@ onMounted(async () => {
     // Ignore fetch errors
   }
   if (props.autoFollowUp) {
+    followUpType.value = props.autoFollowUpType || props.task.type
     showFollowUp.value = true
     await nextTick()
     followUpTextarea.value?.focus()
@@ -269,7 +277,8 @@ function cancelRevise() {
   revisePrompt.value = ''
 }
 
-function openFollowUp() {
+function openFollowUp(type?: string) {
+  followUpType.value = type || props.task.type
   showFollowUp.value = true
   nextTick(() => followUpTextarea.value?.focus())
 }
@@ -277,6 +286,7 @@ function openFollowUp() {
 function cancelFollowUp() {
   showFollowUp.value = false
   followUpPrompt.value = ''
+  followUpType.value = ''
 }
 
 async function handleRevise() {
@@ -299,8 +309,13 @@ async function handleFollowUp() {
   followingUp.value = true
   actionError.value = ''
   try {
-    await api.tasks.followUp(props.task.id, followUpPrompt.value.trim())
+    const type =
+      followUpType.value && followUpType.value !== props.task.type
+        ? followUpType.value
+        : undefined
+    await api.tasks.followUp(props.task.id, followUpPrompt.value.trim(), type)
     followUpPrompt.value = ''
+    followUpType.value = ''
     showFollowUp.value = false
     emit('followUp', props.task.id)
   } catch (e) {
@@ -649,32 +664,58 @@ function formatTime(ts: number): string {
 
     <!-- Follow-up for approved tasks -->
     <div v-if="task.status === 'approved'" class="space-y-2">
-      <div v-if="!showFollowUp">
+      <div v-if="!showFollowUp" class="flex gap-2 flex-wrap">
         <button
           class="px-3 py-1.5 text-xs font-medium rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors"
           @click="openFollowUp()">
           Follow Up
         </button>
+        <button
+          v-for="t in transitionTypes"
+          :key="t"
+          class="px-3 py-1.5 text-xs font-medium rounded bg-indigo-900 hover:bg-indigo-800 text-indigo-300 transition-colors"
+          @click="openFollowUp(t)">
+          Start {{ t.charAt(0).toUpperCase() + t.slice(1) }} Task
+        </button>
       </div>
       <div v-else class="space-y-2">
         <h4 class="text-xs font-medium text-zinc-500 uppercase">
-          Continue Conversation
+          {{
+            followUpType === task.type
+              ? 'Continue Conversation'
+              : `Start ${followUpType} task from this conversation`
+          }}
         </h4>
         <textarea
           ref="followUpTextarea"
           v-model="followUpPrompt"
           class="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-zinc-200 placeholder-zinc-500 focus:border-zinc-600 focus:outline-none resize-y"
           rows="3"
-          placeholder="Enter your follow-up request..."
+          :placeholder="
+            followUpType === task.type
+              ? 'Enter your follow-up request...'
+              : `Describe what the ${followUpType} task should accomplish...`
+          "
           :disabled="followingUp"
           @keydown.meta.enter="handleFollowUp"
           @keydown.ctrl.enter="handleFollowUp" />
         <div class="flex gap-2">
           <button
-            class="px-3 py-1.5 text-xs font-medium rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-300 transition-colors disabled:opacity-50"
+            class="px-3 py-1.5 text-xs font-medium rounded transition-colors disabled:opacity-50"
+            :class="
+              followUpType === task.type
+                ? 'bg-zinc-800 hover:bg-zinc-700 text-zinc-300'
+                : 'bg-indigo-900 hover:bg-indigo-800 text-indigo-300'
+            "
             :disabled="followingUp || !followUpPrompt.trim()"
             @click="handleFollowUp">
-            {{ followingUp ? 'Sending...' : 'Send Follow-Up' }}
+            {{
+              followingUp
+                ? 'Sending...'
+                : followUpType === task.type
+                  ? 'Send Follow-Up'
+                  : `Start ${followUpType.charAt(0).toUpperCase() + followUpType.slice(1)} Task`
+            }}
           </button>
           <button
             class="px-3 py-1.5 text-xs font-medium rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-400 transition-colors"
