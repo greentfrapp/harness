@@ -1,26 +1,26 @@
-import type { AgentAdapter } from './adapter.ts';
-import { ClaudeCodeAdapter } from './claude-code.ts';
+import type { AgentAdapter } from './adapter'
+import { ClaudeCodeAdapter } from './claude-code'
 
-export { type AgentAdapter, type AgentProgressEvent } from './adapter.ts';
+export { type AgentAdapter, type AgentProgressEvent } from './adapter'
 
-const defaultAdapter = new ClaudeCodeAdapter();
+const defaultAdapter = new ClaudeCodeAdapter()
 
 export class AgentRegistry {
-  private adapters = new Map<string, AgentAdapter>();
+  private adapters = new Map<string, AgentAdapter>()
 
   constructor() {
-    this.adapters.set(defaultAdapter.id, defaultAdapter);
+    this.adapters.set(defaultAdapter.id, defaultAdapter)
   }
 
   get(id: string): AgentAdapter | undefined {
-    return this.adapters.get(id);
+    return this.adapters.get(id)
   }
 
   getOrDefault(id?: string): AgentAdapter {
-    return this.adapters.get(id ?? 'claude-code') ?? defaultAdapter;
+    return this.adapters.get(id ?? 'claude-code') ?? defaultAdapter
   }
 
   register(adapter: AgentAdapter): void {
-    this.adapters.set(adapter.id, adapter);
+    this.adapters.set(adapter.id, adapter)
   }
 }

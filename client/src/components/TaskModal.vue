@@ -1,40 +1,40 @@
 <script setup lang="ts">
-import { onMounted, onBeforeUnmount } from 'vue';
-import type { Task } from '@shared/types';
-import TaskDetail from './TaskDetail.vue';
-import { useCheckouts } from '../stores/useCheckouts';
+import type { Task } from '@shared/types'
+import { onBeforeUnmount, onMounted } from 'vue'
+import { useCheckouts } from '../stores/useCheckouts'
+import TaskDetail from './TaskDetail.vue'
 
-const checkoutsStore = useCheckouts();
+const checkoutsStore = useCheckouts()
 
 const props = defineProps<{
-  task: Task;
-  context: 'outbox' | 'inbox';
-}>();
+  task: Task
+  context: 'outbox' | 'inbox'
+}>()
 
 const emit = defineEmits<{
-  close: [];
-  cancel: [id: string];
-  approve: [id: string];
-  reject: [id: string];
-  retry: [id: string];
-  defer: [id: string];
-  delete: [id: string];
-  followUp: [id: string];
-}>();
+  close: []
+  cancel: [id: string]
+  approve: [id: string]
+  reject: [id: string]
+  retry: [id: string]
+  defer: [id: string]
+  delete: [id: string]
+  followUp: [id: string]
+}>()
 
 function onKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape') {
-    emit('close');
+    emit('close')
   }
 }
 
 onMounted(() => {
-  window.addEventListener('keydown', onKeydown);
-});
+  window.addEventListener('keydown', onKeydown)
+})
 
 onBeforeUnmount(() => {
-  window.removeEventListener('keydown', onKeydown);
-});
+  window.removeEventListener('keydown', onKeydown)
+})
 
 const statusConfig: Record<string, { color: string; label: string }> = {
   queued: { color: 'text-zinc-400', label: 'Queued' },
@@ -48,14 +48,14 @@ const statusConfig: Record<string, { color: string; label: string }> = {
   approved: { color: 'text-zinc-400', label: 'Approved' },
   rejected: { color: 'text-red-500', label: 'Rejected' },
   cancelled: { color: 'text-zinc-500', label: 'Cancelled' },
-};
+}
 
 function statusLabel(status: string) {
-  return statusConfig[status]?.label ?? status;
+  return statusConfig[status]?.label ?? status
 }
 
 function statusColor(status: string) {
-  return statusConfig[status]?.color ?? 'text-zinc-400';
+  return statusConfig[status]?.color ?? 'text-zinc-400'
 }
 </script>
 
@@ -63,18 +63,18 @@ function statusColor(status: string) {
   <Teleport to="body">
     <div class="fixed inset-0 z-50 flex items-center justify-center">
       <!-- Backdrop -->
-      <div
-        class="absolute inset-0 bg-black/60"
-        @click="emit('close')"
-      />
+      <div class="absolute inset-0 bg-black/60" @click="emit('close')" />
 
       <!-- Modal -->
-      <div class="relative bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl w-full max-w-4xl mx-4 max-h-[90vh] flex flex-col">
+      <div
+        class="relative bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl w-full max-w-4xl mx-4 max-h-[90vh] flex flex-col">
         <!-- Header -->
-        <div class="px-6 py-4 border-b border-zinc-800 flex items-center justify-between shrink-0">
+        <div
+          class="px-6 py-4 border-b border-zinc-800 flex items-center justify-between shrink-0">
           <div class="flex items-center gap-3 min-w-0">
             <h2 class="text-lg font-semibold truncate">Task</h2>
-            <span class="text-xs font-medium px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 shrink-0">
+            <span
+              class="text-xs font-medium px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-400 shrink-0">
               {{ task.type }}
             </span>
             <span
@@ -84,11 +84,12 @@ function statusColor(status: string) {
                 'bg-orange-900 text-orange-300': task.priority === 'P1',
                 'bg-zinc-800 text-zinc-400': task.priority === 'P2',
                 'bg-zinc-800 text-zinc-500': task.priority === 'P3',
-              }"
-            >
+              }">
               {{ task.priority }}
             </span>
-            <span class="text-xs font-medium shrink-0" :class="statusColor(task.status)">
+            <span
+              class="text-xs font-medium shrink-0"
+              :class="statusColor(task.status)">
               {{ statusLabel(task.status) }}
             </span>
             <span class="text-xs text-zinc-600 font-mono shrink-0">
@@ -98,10 +99,17 @@ function statusColor(status: string) {
           <button
             class="p-1.5 text-zinc-400 hover:text-zinc-200 transition-colors rounded-md hover:bg-zinc-800 shrink-0"
             title="Close (Esc)"
-            @click="emit('close')"
-          >
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            @click="emit('close')">
+            <svg
+              class="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24">
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                stroke-width="2"
+                d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         </div>
@@ -111,15 +119,19 @@ function statusColor(status: string) {
           <TaskDetail
             :task="task"
             :context="context"
-            :actions-disabled="checkoutsStore.isProjectLockedByOtherTask(task.project_id, task.id)"
+            :actions-disabled="
+              checkoutsStore.isProjectLockedByOtherTask(
+                task.project_id,
+                task.id,
+              )
+            "
             @cancel="emit('cancel', $event)"
             @approve="emit('approve', $event)"
             @reject="emit('reject', $event)"
             @retry="emit('retry', $event)"
             @defer="emit('defer', $event)"
             @delete="emit('delete', $event)"
-            @follow-up="emit('followUp', $event)"
-          />
+            @follow-up="emit('followUp', $event)" />
         </div>
       </div>
     </div>

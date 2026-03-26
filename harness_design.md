@@ -63,6 +63,7 @@ The main view is a **two-column layout**: Outbox (left) and Inbox (right), both 
 **New Task** is accessed via a button or keyboard shortcut and opens as a **modal overlay**. The user picks Do or Discuss, optionally sets priority and dependencies, and submits. The modal closes and the task appears in the Outbox.
 
 **Task Detail** uses an **accordion pattern** — clicking a task expands it inline within its column, showing the relevant detail content. An **Expand button** opens the detail in a full modal for more space (useful for diffs and extended conversations). What the detail shows depends on context:
+
 - For an in-progress outbox task: streams the live Claude Code session output
 - For a completed Do task in the inbox: shows the diff viewer
 - For any task in conversation mode: shows a chat UI (see "Conversational Mode" below)
@@ -80,14 +81,16 @@ Completed or blocked tasks surfaced for review. Items are grouped by directory o
 ### Task Lifecycle
 
 ```
-User writes task → New Task modal → Outbox/Queue → Agent executes → Batcher → Inbox → User reviews
-                                        ↑               ↓ (on failure)           ↓
-                                        │          Retry (up to max)    Approve (merge & done)
-                                        │               ↓ (max retries) Reject (discard & done)
-                                        │          Inbox (with error)    Revise (--resume, back to outbox)
-                                        │                                Defer (deprioritize)
-                                        └────────────────────────────────────┘
+User writes task → New Task modal → [Draft] ──Send──→ Outbox/Queue → Agent executes → Inbox → User reviews
+                                  (or direct to queue)      ↑               ↓ (on failure)        ↓
+                                                            │          Retry (up to max)  Approve (merge & done)
+                                                            │               ↓ (max retries) Reject (discard & done)
+                                                            │          Inbox (with error)  Revise (--resume, back to outbox)
+                                                            │                              Defer (deprioritize)
+                                                            └──────────────────────────────────┘
 ```
+
+**Draft tasks**: Tasks can be created as drafts (`as_draft: true` in CreateTaskInput). Drafts have status `draft` and do not enter the queue. They can be edited (prompt, priority, tags, dependencies) before being sent. `POST /tasks/:id/send` transitions a draft to `queued` and enters it into the dispatch queue. Tasks can also be submitted directly to the queue without the draft step.
 
 ---
 
@@ -95,9 +98,9 @@ User writes task → New Task modal → Outbox/Queue → Agent executes → Batc
 
 There are two functional task types in v1, each driving genuinely different system behavior. The user selects the type when submitting a task — no LLM classifier in v1.
 
-| Type | Behavior |
-|------|----------|
-| **Do** | Dispatch to agent pool. Agent executes the task in a worktree and returns a diff. Covers all actionable work — features, fixes, refactors, tests. |
+| Type        | Behavior                                                                                                                                                                                                                              |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Do**      | Dispatch to agent pool. Agent executes the task in a worktree and returns a diff. Covers all actionable work — features, fixes, refactors, tests.                                                                                     |
 | **Discuss** | Agent researches the topic using Claude Code's **plan mode** (read-only — no file writes, no code execution). Presents structured analysis in a chat interface. May suggest subtasks that the user can approve and spawn as Do tasks. |
 
 ### Conversational Mode
@@ -111,7 +114,7 @@ Conversations don't consume worktree slots but are capped at **5 concurrent sess
 - **Chat** = plan mode, read-only, stays in inbox. Quick Q&A about the work.
 - **Revise** = full mode, resumes in worktree, moves to outbox. New work happens.
 
-If the user asks for changes during chat, the agent explains what it *would* do and the UI prompts a formal **Revise**. Chat never changes code; revise always does.
+If the user asks for changes during chat, the agent explains what it _would_ do and the UI prompts a formal **Revise**. Chat never changes code; revise always does.
 
 Discuss tasks start in conversational mode by design. Do tasks enter it on demand.
 
@@ -135,7 +138,7 @@ Discuss tasks do **not** consume worktree slots — they run in plan mode (read-
 ### 2. Task Queue
 
 - Priority queue sorted by: dependency order (blocked tasks should never be started) > priority > recency
-- Priority is set by the user when submitting a task (urgent / normal / low, default normal)
+- Priority is set by the user when submitting a task (P0 / P1 / P2 / P3, default P2)
 - Dependencies are user-declared only. When submitting a task, the user can optionally link it to an existing task as "after X completes"
 - Dependencies are satisfied only when a task is **approved** (not when the agent finishes)
 - When a worktree slot is free, the queue dispatches the highest-priority ready Do task
@@ -145,6 +148,7 @@ Discuss tasks do **not** consume worktree slots — they run in plan mode (read-
 ### 3. Agent Pool (Claude Code Integration)
 
 Each Do task worker spawns a Claude Code session via CLI:
+
 - Use `claude --json` for structured output
 - Use `--allowedTools` to scope permissions per task type
 - Each session runs in its own git worktree
@@ -158,6 +162,7 @@ Discuss tasks spawn Claude Code in **plan mode** (`--plan` or equivalent flag), 
 **Worktree lifecycle**: Worktrees are created fresh for each Do task and destroyed after the task is approved (branch merged), rejected (branch discarded), or cancelled. Fresh creation avoids stale-state contamination from previous tasks — the overhead is seconds, not minutes, and the reliability gain outweighs the cost. When a worktree is destroyed, its slot is immediately freed for the next queued task.
 
 **Error handling**: When an agent fails (crash, timeout, bad state):
+
 1. Retry automatically via `--resume` with the prior session ID (agent sees what went wrong and its prior work)
 2. After max retries (default 3), push the task to the inbox with the error message, logs, and partial work
 3. The user can then revise (add guidance and retry) or reject (discard)
@@ -165,6 +170,7 @@ Discuss tasks spawn Claude Code in **plan mode** (`--plan` or equivalent flag), 
 **Session resumption**: All human-in-the-loop interactions (revise, conversational mode, retries) use Claude Code's `--resume` flag with the stored session ID. This restarts the process and replays the conversation history to the model. This has cost implications — the full prior conversation is re-sent — but preserves complete context. Claude Code has automatic context compaction for long conversations.
 
 **Server crash recovery**: On startup, Harness runs a synchronous recovery routine before accepting connections:
+
 1. **Detect stale tasks**: Query for tasks with status `in_progress` or `retrying` — these were running when the server died.
 2. **Kill orphaned processes**: Check if each stale task's CC process is still running (via PID stored in `agent_session_data`). Kill any survivors.
 3. **Reconcile worktrees**: Compare `git worktree list` against `worktree_path` in `tasks`. Remove orphaned worktrees with no matching task.
@@ -178,22 +184,27 @@ The PID is stored in `agent_session_data` alongside the session ID (e.g., `{"ses
 When a task completes (or needs user input), it enters the inbox. The batcher groups items using two strategies:
 
 **Directory-level grouping**:
+
 - Group inbox items by the directories they modified (based on actual diff data, not predictions)
 - Items touching the same directories are grouped into a single review batch
 - User sees e.g. "3 tasks modified src/auth/ — review together"
 - No transitive closure — grouping is based on direct directory overlap only
 
 **Dependency-aware holding**:
+
 - If task B depends on task A, and A is in the inbox awaiting review, B's result is held
 - Once the user reviews A (approve/reject/modify), B is either released to inbox or re-queued
 - Prevents the user from reviewing work that may be invalidated by an upstream decision
 
 **Inbox item states**:
+
 - `ready` — ready for user review
-- `held` — waiting for a dependency to be reviewed first
+- `held` — waiting for a dependency or plan approval
 - `deferred` — user explicitly deferred it
 - `error` — agent failed after max retries, needs user attention
 - `permission` — agent needs a tool permission approval (prioritized above all other items)
+- `approved` — task approved, shown with muted styling (terminal)
+- `rejected` — task rejected, shown with muted styling (terminal)
 
 ### 5. Merger
 
@@ -208,6 +219,7 @@ If conflicts are detected, they are highlighted to the user before any merges ex
 ### 6. Inbox Review Experience
 
 Each Do task inbox item presents:
+
 - Task summary (original prompt + type)
 - Agent's work summary (what it did, key decisions it made)
 - Diff view (files changed)
@@ -215,6 +227,7 @@ Each Do task inbox item presents:
 - Error details and retry history (if the task errored)
 
 User actions per item:
+
 - **Approve** — merge the branch into the target branch, task leaves the system
 - **Reject** — discard the branch and worktree, task leaves the system. If the rejected task has dependent tasks still queued, the user is notified: they can cancel the dependents, revise them (e.g., remove the dependency), or leave them queued (the dependency becomes unsatisfiable and they'll remain blocked until addressed)
 - **Revise** — user adds feedback, task returns to outbox; the prior session is resumed via `--resume`, preserving the worktree branch and all prior work
@@ -230,6 +243,7 @@ User actions per item:
 Cancel kills the Claude Code process, destroys the worktree (if any), and deletes the branch — all artifacts are cleaned up.
 
 **Cascading cancellation**: If a cancelled task has dependent tasks (other tasks declared "after X completes"), those dependents are also affected. The system shows a confirmation warning listing all tasks that would cascade. The user can:
+
 - **Confirm cascade** — cancel all dependent tasks
 - **Move to inbox** — send the dependent tasks to the inbox for individual review and editing (the user can revise their prompts, remove the dependency, or cancel them individually)
 
@@ -238,12 +252,19 @@ Cancel kills the Claude Code process, destroys the worktree (if any), and delete
 When Claude Code encounters a tool use that requires approval, it emits a `permission_request` event in its JSON stream. Harness detects this, kills the agent process, and surfaces the task as an inbox item with status `permission`. These are **prioritized above all other inbox items** and trigger a **red notification badge** on the inbox header, since permission-blocked agents are idle and waiting.
 
 The item shows:
+
 - Which task triggered the request
 - What tool the agent wanted to use (stored in `error_message`)
 
 The user can **Grant** (task re-queues and resumes via `--resume` with `--permission-mode bypassPermissions`, giving the agent full tool access going forward) or **Reject** (task is discarded). The kill-and-resume approach is used because Claude Code's CLI does not support sending permission responses via stdin in headless mode.
 
-**Why permission requests happen**: Do tasks normally run with `--permission-mode bypassPermissions` and should never trigger permission prompts. However, resumed sessions (`--resume` for retries, revises, fixes, follow-ups) must explicitly re-pass the permission mode flag. The `buildResumeArgs` method mirrors the permission logic from `buildArgs` to ensure resumed tasks retain their permission mode.
+**Why permission requests happen**: Do tasks normally run with a configured `permission_mode` (e.g. `bypassPermissions`) and should rarely trigger permission prompts. However, resumed sessions (`--resume` for retries, revises, fixes, follow-ups) must explicitly re-pass the permission mode flag. The `buildResumeArgs` method mirrors the permission logic from `buildArgs` to ensure resumed tasks retain their permission mode. Permission mode is configurable per task type via the `permission_mode` field in `config.jsonc` (e.g., `'bypassPermissions'`, `'plan'`). If omitted, the adapter's default is used.
+
+### 9. Plan Mode Approval (Two-Phase Plan)
+
+When a task type uses `permission_mode: 'plan'` (e.g., Discuss tasks), the agent runs in plan mode and must request approval before executing changes. When the agent calls the `ExitPlanMode` tool, the adapter emits a `plan_approval_request` event. Harness intercepts this, kills the agent process, and transitions the task to `held` status.
+
+The task appears in the inbox awaiting plan approval. `POST /tasks/:id/approve-plan` resumes the agent with the plan approved (`plan_approved` flag set in `agent_session_data`), transitioning back to `in_progress`. This enables a two-phase workflow: the agent plans, the user reviews the plan, then the agent executes.
 
 ---
 
@@ -273,7 +294,7 @@ The agent proposes subtasks by including a JSON block in its output:
     {
       "title": "Short task title",
       "prompt": "Full task description for the agent",
-      "priority": "normal",
+      "priority": "P2",
       "depends_on": null
     }
   ]
@@ -281,9 +302,10 @@ The agent proposes subtasks by including a JSON block in its output:
 ```
 
 Harness parses JSON blocks from the agent's output stream. Fields:
+
 - `title` (required): Short label shown in the outbox
 - `prompt` (required): The full prompt passed to the Do task agent
-- `priority` (optional, default "normal"): "urgent", "normal", or "low"
+- `priority` (optional, default "P2"): "P0", "P1", "P2", or "P3"
 - `depends_on` (optional): Title of another subtask in the same proposal, for ordering
 
 If parsing fails after 3 retries, Harness shows the raw agent output and lets the user create tasks manually from the New Task modal.
@@ -320,7 +342,7 @@ Rules:
 - Structure your response as: (1) Problem statement, (2) Relevant code references, (3) Proposed approaches with tradeoffs.
 - If you identify concrete implementation tasks, propose them as subtasks using this JSON format:
 
-  {"subtasks": [{"title": "...", "prompt": "...", "priority": "normal", "depends_on": null}]}
+  {"subtasks": [{"title": "...", "prompt": "...", "priority": "P2", "depends_on": null}]}
 
 - Only propose subtasks when you have a clear, actionable recommendation. Not every discussion needs subtasks.
 
@@ -335,6 +357,7 @@ Uses `--resume` with no additional system prompt — the prior session context i
 ### Custom task types
 
 Users can define custom task types in `config.jsonc` with their own system prompt templates. Each custom type specifies:
+
 - A name and system prompt template (with `{user_prompt}` placeholder)
 - Whether the type needs a worktree (like Do) or runs read-only (like Discuss)
 - Default priority
@@ -355,12 +378,13 @@ Mutable task rows for current state (fast queries) + an append-only events table
 -- Configured projects
 projects (
   id            TEXT PRIMARY KEY,       -- uuid
-  name          TEXT NOT NULL,
+  name          TEXT NOT NULL UNIQUE,
   repo_path     TEXT NOT NULL,          -- absolute path to git repo
   target_branch TEXT DEFAULT 'main',
   worktree_limit INTEGER DEFAULT 3,
   conversation_limit INTEGER DEFAULT 5,
-  created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  auto_push     INTEGER DEFAULT 0,     -- boolean: auto-push approved branches to remote
+  created_at    INTEGER NOT NULL        -- epoch ms (Date.now())
 )
 
 -- Core task state (mutable)
@@ -368,24 +392,26 @@ tasks (
   id            TEXT PRIMARY KEY,       -- uuid
   project_id    TEXT NOT NULL REFERENCES projects(id),
   type          TEXT NOT NULL,          -- 'do' | 'discuss' | custom type name
-  status        TEXT NOT NULL,          -- 'queued' | 'in_progress' | 'retrying' | 'ready' |
+  status        TEXT NOT NULL,          -- 'draft' | 'queued' | 'in_progress' | 'retrying' | 'ready' |
                                         --   'held' | 'deferred' | 'error' | 'permission' |
                                         --   'approved' | 'rejected' | 'cancelled'
   prompt        TEXT NOT NULL,          -- user's original prompt (+ revise feedback appended)
-  priority      TEXT DEFAULT 'normal',  -- 'urgent' | 'normal' | 'low'
+  priority      TEXT DEFAULT 'P2',      -- 'P0' | 'P1' | 'P2' | 'P3'
   depends_on    TEXT REFERENCES tasks(id),  -- nullable, user-declared dependency
   parent_task_id TEXT,                      -- nullable, links follow-up tasks to their parent (lineage only, not a dependency)
+  tags          TEXT DEFAULT '[]',      -- JSON array of string tags (e.g. merge-conflict, needs-commit)
   agent_type    TEXT DEFAULT 'claude-code',  -- which agent adapter to use
   agent_session_data TEXT,              -- agent-specific session state (JSON, nullable until dispatched)
   worktree_path TEXT,                   -- absolute path (nullable, worktree types only)
   branch_name   TEXT,                   -- git branch name (nullable, worktree types only)
   diff_summary  TEXT,                   -- files changed + stats (nullable, populated on completion)
+  diff_full     TEXT,                   -- full diff content (nullable, populated on completion)
   agent_summary TEXT,                   -- agent's work summary (nullable)
   error_message TEXT,                   -- last error (nullable)
   retry_count   INTEGER DEFAULT 0,
   queue_position INTEGER,               -- for display ordering
-  created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  created_at    INTEGER NOT NULL,       -- epoch ms (Date.now())
+  updated_at    INTEGER NOT NULL        -- epoch ms (Date.now())
 )
 
 -- Append-only event log (audit trail + revise history)
@@ -398,7 +424,7 @@ task_events (
                                         --   'deferred' | 'error'
   data          TEXT,                   -- JSON payload (event-specific: revise feedback, error details,
                                         --   permission tool/reason, previous status, etc.)
-  created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  created_at    INTEGER NOT NULL        -- epoch ms (Date.now())
 )
 
 -- Subtask proposals from Discuss tasks
@@ -407,11 +433,11 @@ subtask_proposals (
   task_id       TEXT NOT NULL REFERENCES tasks(id),  -- the Discuss task that proposed it
   title         TEXT NOT NULL,
   prompt        TEXT NOT NULL,
-  priority      TEXT DEFAULT 'normal',
+  priority      TEXT DEFAULT 'P2',
   depends_on_title TEXT,                -- title of another proposal in same batch (nullable)
   status        TEXT DEFAULT 'pending', -- 'pending' | 'approved' | 'dismissed'
   spawned_task_id TEXT REFERENCES tasks(id),  -- the Do task created on approval (nullable)
-  created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  created_at    INTEGER NOT NULL        -- epoch ms (Date.now())
 )
 ```
 
@@ -422,7 +448,7 @@ subtask_proposals (
 - **No conversation storage**: The agent manages its own session files. Harness only stores `agent_session_data` to resume. This avoids duplicating potentially large conversation histories. If a future agent doesn't handle its own persistence, conversation data can be stored in `task_events` as `data` payloads.
 - **Agent-agnostic fields**: `agent_type` identifies which adapter to use. `agent_session_data` is a JSON blob each adapter interprets (CC stores a session ID, Codex might store a thread ID, etc.).
 - **`subtask_proposals` as a separate table**: Clean separation from the task lifecycle. Links back to both the source Discuss task and the spawned Do task (if approved).
-- **Diff storage**: Only the summary (files changed, line counts) is stored in SQLite. The full diff is read from the git worktree on demand. If the committed diff is empty but the worktree has uncommitted changes (`git diff HEAD` in the worktree), those are returned with an `uncommitted` flag so the UI can prompt the user to request a commit.
+- **Diff storage**: Both `diff_summary` (files changed, line counts) and `diff_full` (complete diff content) are stored in SQLite on task completion. This allows diff display even after the worktree has been destroyed. If the committed diff is empty but the worktree has uncommitted changes (`git diff HEAD` in the worktree), those are returned with an `uncommitted` flag so the UI can prompt the user to request a commit.
 - **`parent_task_id` for lineage**: Follow-up tasks link to their parent via `parent_task_id` (separate from `depends_on`). This is purely for provenance/UI display — not a dispatch dependency. When a parent is deleted/rejected/cancelled, `clearParentReferences()` nulls out both `depends_on` and `parent_task_id` on children.
 - **Custom types**: The `type` column accepts any string, not just 'do'/'discuss'. Task type definitions (including whether a worktree is needed) live in `config.jsonc`.
 
@@ -432,7 +458,7 @@ subtask_proposals (
 
 Harness runs as a localhost web app and needs to know which repositories to operate on.
 
-**Settings file**: `~/.harness/config.jsonc` — JSONC (JSON with comments) because this is a dev tool and config files benefit from inline documentation. Example:
+**Settings file**: `~/.harness/config.jsonc` — JSONC (JSON with comments) because this is a dev tool and config files benefit from inline documentation. The config includes global defaults, agent definitions (`agents`), task type definitions (`task_types`), tag definitions (`tags`), and the project list (`projects`). Example:
 
 ```jsonc
 {
@@ -440,24 +466,51 @@ Harness runs as a localhost web app and needs to know which repositories to oper
   "worktree_limit": 3,
   "conversation_limit": 5,
 
+  // Agent definitions — task types reference these by key
+  "agents": {
+    "claude-code": {
+      "adapter": "claude-code",
+      "extra_args": [], // appended to adapter's buildArgs output
+    },
+    // "codex": { "adapter": "codex", "extra_args": ["--model", "o3"] }
+  },
+
   // Task types — "do" and "discuss" are built-in, but users can add custom types
   "task_types": {
     "do": {
       "prompt_template": "You are working on a task in a git worktree branch...",
       "needs_worktree": true,
-      "default_priority": "normal"
+      "default_priority": "P2",
+      "agent": "claude-code",
+      "permission_mode": "bypassPermissions",
     },
     "discuss": {
       "prompt_template": "You are in research/plan mode...",
       "needs_worktree": false,
-      "default_priority": "normal"
-    }
+      "default_priority": "P2",
+      "agent": "claude-code",
+      "permission_mode": "plan",
+    },
     // Custom types example:
     // "review": {
     //   "prompt_template": "Review the following code area and produce a report...",
     //   "needs_worktree": false,
-    //   "default_priority": "low"
+    //   "default_priority": "P3",
+    //   "agent": "claude-code"
     // }
+  },
+
+  // Tag definitions — color and description for categorization tags
+  "tags": {
+    "merge-conflict": {
+      "color": "red",
+      "description": "Merge conflict on approve",
+    },
+    "checkout-failed": { "color": "orange", "description": "Checkout failed" },
+    "needs-commit": {
+      "color": "amber",
+      "description": "Agent didn't commit changes",
+    },
   },
 
   // Projects
@@ -465,11 +518,12 @@ Harness runs as a localhost web app and needs to know which repositories to oper
     {
       "name": "my-app",
       "repo_path": "/home/user/projects/my-app",
-      "target_branch": "main"
+      "target_branch": "main",
+      "auto_push": false,
       // Per-project overrides:
       // "worktree_limit": 5
-    }
-  ]
+    },
+  ],
 }
 ```
 
@@ -482,12 +536,14 @@ In v1, the user selects which project/repo to work with at startup or via the UI
 ## Tech Stack
 
 ### Backend (Node.js)
+
 - **Framework**: Hono
 - **Real-time**: SSE (Server-Sent Events) for task progress and inbox arrivals
 - **Process management**: `child_process.spawn` for Claude Code sessions
 - **Storage**: SQLite (via better-sqlite3) + Drizzle ORM in `~/.harness/` for task state, queue, and history
 
 ### Frontend (Vue 3)
+
 - **Build**: Vite
 - **State**: Pinia stores
 - **UI**: Two-column layout (Outbox + Inbox), New Task modal, accordion Task Detail with expand-to-modal
@@ -531,15 +587,19 @@ harness/
 │   │   │   ├── InboxPanel.vue      # Right column — review view with multi-select
 │   │   │   ├── TaskCard.vue        # Task summary with inline actions
 │   │   │   ├── TaskDetail.vue      # Accordion detail + expand-to-modal
+│   │   │   ├── TaskModal.vue       # Full-screen task detail modal
 │   │   │   ├── DiffViewer.vue      # diff2html side-by-side display
 │   │   │   ├── SessionStream.vue   # Live CC session output with progress buffering
-│   │   │   ├── SettingsModal.vue   # JSONC config editor
+│   │   │   ├── SettingsModal.vue   # JSONC config editor with IDE-like keyboard handling
 │   │   │   └── ActivityLog.vue     # Server activity log viewer
 │   │   ├── stores/
-│   │   │   ├── useOutbox.ts        # Outbox + queue state and actions
+│   │   │   ├── useOutbox.ts        # Outbox + queue state and actions (includes drafts)
 │   │   │   ├── useInbox.ts         # Inbox state, review actions
 │   │   │   ├── useEvents.ts        # SSE connection, event handlers, reconnection
-│   │   │   └── useLog.ts           # Activity log state
+│   │   │   ├── useLog.ts           # Activity log state
+│   │   │   ├── useCheckouts.ts     # Track active checkout state per repo
+│   │   │   ├── useRepoStatus.ts    # Track repo dirty status
+│   │   │   └── taskArrayUtils.ts   # Helper for task array mutations
 │   │   └── composables/
 │   │       └── useTaskSelection.ts # Multi-select helper for batch operations
 │   └── index.html
@@ -554,43 +614,50 @@ harness/
 ### Phase 1: Foundation
 
 **Project setup**
+
 - [x] Initialize monorepo: `package.json`, TypeScript config, Prettier
 - [x] Set up Vite + Vue 3 for client (`client/`)
-- [x] Set up Hono for server (`server/`) — *changed from Express/Fastify to Hono*
+- [x] Set up Hono for server (`server/`) — _changed from Express/Fastify to Hono_
 - [x] Set up SQLite via better-sqlite3 + Drizzle ORM (`server/db/`)
 - [x] Create `~/.harness/` directory on first run
 - [x] JSONC config loader — read and parse `~/.harness/config.jsonc` with defaults
 - [x] Validate config on startup (repo paths exist, are git repos, target branches exist)
 
 **Shared types**
-- [x] Define core types in `shared/types.ts`: `Task`, `TaskType`, `TaskStatus`, `Priority`, `TaskEvent`, `SubtaskProposal`, `ProjectConfig`, `HarnessConfig`, `CreateTaskInput`, `UpdateTaskInput`
-- [x] Define SSE event types: `task:created`, `task:updated`, `task:progress`, `inbox:new`, `inbox:updated` — *changed from WebSocket to SSE*
+
+- [x] Define core types in `shared/types.ts`: `Task`, `TaskType`, `TaskStatus`, `Priority`, `TaskEvent`, `SubtaskProposal`, `ProjectConfig`, `HarnessConfig`, `CreateTaskInput`, `UpdateTaskInput`, `AgentConfig`, `TaskTypeConfig`, `TagConfig`, `CheckoutInfo`, `RepoStatus`, `LogEntry`, `SSEEvent`
+- [x] Define SSE event types: `task:created`, `task:updated`, `task:removed`, `task:progress`, `inbox:new`, `inbox:updated`, `task:checked_out`, `task:returned`, `log:entry` — _changed from WebSocket to SSE_
 
 **Database**
+
 - [x] Create SQLite schema: `projects`, `tasks`, `task_events`, `subtask_proposals` tables
 - [x] Seed `projects` table from `config.jsonc` on startup (upsert by name)
 - [x] Basic CRUD queries for tasks: create, update status, list by status, list by project
 
 **Task queue**
+
 - [x] Priority queue implementation (`server/queue.ts`): sort by priority > dependency order > recency
 - [x] User-declared dependency tracking: `depends_on` field, dependency satisfaction check (approved only)
 - [x] Queue dispatch logic: when a worktree slot frees, dispatch highest-priority ready Do task
 
 **Frontend — layout**
+
 - [x] Two-column layout: `OutboxPanel.vue` (left), `InboxPanel.vue` (right)
 - [x] Responsive split — both panels always visible
-- [x] `NewTaskModal.vue`: task type selector (dropdown, supports custom types from config), prompt textarea, priority picker (urgent/normal/low), optional dependency picker (list of active tasks)
+- [x] `NewTaskModal.vue`: task type selector (dropdown, supports custom types from config), prompt textarea, priority picker (P0/P1/P2/P3), optional dependency picker (list of active tasks)
 - [x] Keyboard shortcut to open New Task modal (`Ctrl+N` / `Cmd+N`)
 - [x] `TaskCard.vue`: summary display with status indicator, elapsed time, queue position
 - [x] `TaskDetail.vue`: accordion expand inline with action buttons
 - [x] Notification badge on inbox header (count of pending items, red when permissions pending)
 
 **State management**
+
 - [x] `useOutbox.ts` Pinia store: task list, queue state, create/cancel actions
 - [x] `useInbox.ts` Pinia store: inbox items, review actions
-- [x] `useEvents.ts` Pinia store: SSE connection, event handlers, reconnection logic — *changed from `useSocket.ts`/WebSocket to SSE*
+- [x] `useEvents.ts` Pinia store: SSE connection, event handlers, reconnection logic — _changed from `useSocket.ts`/WebSocket to SSE_
 
-**Real-time (SSE)** — *changed from WebSocket/Socket.io to SSE*
+**Real-time (SSE)** — _changed from WebSocket/Socket.io to SSE_
+
 - [x] SSE manager (`server/sse.ts`) with client tracking and broadcast
 - [x] SSE endpoint (`GET /events`) in server entry
 - [x] SSE client in `useEvents.ts` with auto-reconnect and backoff
@@ -598,17 +665,19 @@ harness/
 - [x] Client receives events and updates Pinia stores reactively
 
 **Tests**
+
 - [x] Vitest test infrastructure (`vitest.config.ts`, test scripts)
 - [x] TaskQueue unit tests — priority sorting, dependency checking, dispatch (13 tests)
 - [x] SSEManager unit tests — client tracking, broadcast formatting (4 tests)
 - [x] Route handler tests — API endpoints with mocked AppContext (10 tests)
 - [x] DB integration tests — CRUD with in-memory SQLite (9 tests)
 
-**Verification**: Submit a task via the modal, see it appear in the outbox with correct type/priority. Task persists across page reload (SQLite). SSE events flow from server to client. Dependency picker shows existing tasks. 41 tests pass.
+**Verification**: Submit a task via the modal, see it appear in the outbox with correct type/priority. Task persists across page reload (SQLite). SSE events flow from server to client. Dependency picker shows existing tasks.
 
 ### Phase 2: Agent Integration + Basic Review
 
 **Agent pool**
+
 - [x] Agent pool manager (`server/pool.ts`): track worktree slots (default 3) and conversation slots (default 5)
 - [x] Spawn Claude Code via `child_process.spawn` with `--json` and `--system-prompt` (from config template)
 - [x] Branch naming convention: `harness/{task-id-short}-{sanitized-title}` (max 50 chars)
@@ -616,9 +685,10 @@ harness/
 - [x] Git worktree destruction: `git worktree remove` + branch delete on approval/rejection/cancel
 - [x] Store PID and session ID in `agent_session_data` JSON blob
 - [x] Discuss tasks: spawn CC with read-only `--allowedTools`, run in main repo directory, no worktree
-- [x] Stream CC `--json` output via stdout parsing, emit progress events over SSE — *changed from WebSocket to SSE*
+- [x] Stream CC `--json` output via stdout parsing, emit progress events over SSE — _changed from WebSocket to SSE_
 
 **Task dispatch**
+
 - [x] Queue watcher (`server/dispatcher.ts`): on worktree slot free, dispatch next ready Do task
 - [x] Discuss tasks dispatch immediately (consume conversation slot, not worktree slot)
 - [x] On agent completion: parse exit code, capture diff (`git diff target..branch`), extract agent summary from CC output, store session ID
@@ -627,6 +697,7 @@ harness/
 - [x] After max retries: push to inbox as `error` with error message and partial work
 
 **Crash recovery**
+
 - [x] On startup: query tasks with status `in_progress` or `retrying`
 - [x] Kill orphaned CC processes via stored PIDs
 - [x] Reconcile worktrees: `git worktree list` vs. `worktree_path` in tasks — remove orphans
@@ -634,8 +705,9 @@ harness/
 - [x] Log `task_event` with `event_type = 'recovered'`
 
 **Frontend — live session + basic review**
+
 - [x] `SessionStream.vue`: render live CC `--json` output in accordion/modal (tool calls, file edits, assistant messages)
-- [x] `DiffViewer.vue`: diff2html component, render `git diff` output — *used diff2html instead of Monaco*
+- [x] `DiffViewer.vue`: diff2html component, render `git diff` output — _used diff2html instead of Monaco_
 - [x] Outbox task cards: click to expand accordion with SessionStream (in-progress) or summary (completed)
 - [x] Inbox task cards: click to expand accordion with DiffViewer + agent summary
 - [x] Approve action: merge branch into target branch (`git merge`), destroy worktree, update status to `approved`
@@ -643,13 +715,14 @@ harness/
 - [x] Reject with dependents: show notification listing blocked tasks, options to cancel/revise/leave them
 - [x] Cancel action: kill CC process, destroy worktree + branch, update status to `cancelled`
 
-**Tests**: git.ts unit tests (branch naming), dispatcher unit tests (dispatch logic, slot limits, error handling), recovery unit tests (stale task transitions, orphaned process cleanup), updated route tests (approve/reject/cancel/diff endpoints), pool progress broadcasting tests, stream filter tests, claude-code adapter tests. 124 tests across 11 test files.
+**Tests**: git.ts unit tests (branch naming), dispatcher unit tests (dispatch logic, slot limits, error handling), recovery unit tests (stale task transitions, orphaned process cleanup), updated route tests (approve/reject/cancel/diff endpoints), pool progress broadcasting tests, stream filter tests, claude-code adapter tests. 196 tests across 11 test files.
 
 **Verification**: Submit a Do task, watch it dispatch to CC, see live session stream in accordion. Task completes, diff appears in inbox. Approve merges to target branch. Reject discards. Cancel kills process. Server restart recovers stale tasks.
 
 ### Phase 3: Conversation + Interactive Review
 
 **Conversational mode**
+
 - [ ] `ChatUI.vue`: chat interface component — message list, input field, send button
 - [ ] Chat action on inbox Do tasks: `--resume` with stored session ID in plan mode (read-only)
 - [ ] Chat consumes a conversation slot (not worktree slot), queues if limit reached
@@ -657,6 +730,7 @@ harness/
 - [ ] If agent detects change request in chat, suggest Revise via UI prompt
 
 **Discussion flow**
+
 - [ ] Discuss task dispatch: CC in plan mode with Discuss system prompt
 - [ ] Research phase: agent runs autonomously, streams progress (consumes conversation slot)
 - [ ] On research completion: transition task from outbox to inbox with chat UI
@@ -666,6 +740,7 @@ harness/
 - [ ] Add `closed` to TaskStatus enum for non-diff-producing tasks
 
 **Subtask proposals**
+
 - [ ] `SubtaskProposal.vue`: render proposed subtasks inline in chat with approve/dismiss buttons
 - [ ] Parse subtask JSON blocks from agent output stream (format: `{"subtasks": [...]}`)
 - [ ] On parse failure: send error message back to agent, retry up to 3 times
@@ -674,34 +749,38 @@ harness/
 - [ ] Store proposals in `subtask_proposals` table, link to source Discuss task and spawned Do task
 
 **Task checkout (manual testing before accept)**
-- [ ] "Checkout" button on inbox Do tasks — lets the user load a task's changes into the relevant repo's working tree for manual testing before accepting
-- [ ] `POST /api/tasks/:id/checkout`: determines the task's repo (from its project config), merges the task's branch into a temporary branch (`harness/checkout-{task-id}`) based on the target branch, then checks it out in that repo
-- [ ] Per-repo checkout tracking: each repo can have at most one task checked out at a time — enforce server-side with a map of `repo_path → checked_out_task_id`; return 409 if the same repo already has a checkout active
-- [ ] Multiple repos can have independent checkouts simultaneously (e.g., task A checked out in repo-frontend, task B checked out in repo-backend)
-- [ ] UI shows a prominent "Checked Out" banner at the top of the inbox (or globally) listing all currently checked-out tasks and their repos, each with a "Return" button
-- [ ] `POST /api/tasks/:id/return`: checks the task's repo back to its target branch, deletes the temporary checkout branch, clears that repo's checkout state
-- [ ] Auto-return safety: if the user attempts to Accept/Reject/Checkout/Revise a task in a repo that already has a checkout active, prompt to return the existing checkout first
-- [ ] After returning, the user can Accept or Reject as normal — checkout does not modify the task's actual branch or status
-- [ ] SSE events `task:checked_out` and `task:returned` (include `repo_path` in payload) to keep all clients in sync
+
+- [x] "Checkout" button on inbox Do tasks — lets the user load a task's changes into the relevant repo's working tree for manual testing before accepting
+- [x] `POST /api/tasks/:id/checkout`: determines the task's repo (from its project config), merges the task's branch into a temporary branch (`harness/checkout-{task-id}`) based on the target branch, then checks it out in that repo
+- [x] Per-repo checkout tracking: each repo can have at most one task checked out at a time — enforce server-side with a map of `repo_path → checked_out_task_id`; return 409 if the same repo already has a checkout active — _`checkoutState` in AppContext, `useCheckouts.ts` store on client_
+- [x] Multiple repos can have independent checkouts simultaneously (e.g., task A checked out in repo-frontend, task B checked out in repo-backend)
+- [x] UI shows a prominent "Checked Out" banner at the top of the inbox (or globally) listing all currently checked-out tasks and their repos, each with a "Return" button
+- [x] `POST /api/tasks/:id/return`: checks the task's repo back to its target branch, deletes the temporary checkout branch, clears that repo's checkout state
+- [x] Auto-return safety: if the user attempts to Accept/Reject/Checkout/Revise a task in a repo that already has a checkout active, prompt to return the existing checkout first — _`autoReturnIfCheckedOut()` called in approve, reject, revise, fix endpoints_
+- [x] After returning, the user can Accept or Reject as normal — checkout does not modify the task's actual branch or status
+- [x] SSE events `task:checked_out` and `task:returned` (include `repo_path` in payload) to keep all clients in sync — _checkout state also recovered from git branches on server restart_
 
 **Revise flow**
-- [x] Revise action on inbox Do tasks: user adds feedback text — *`POST /tasks/:id/revise` endpoint, purple "Revise" button in `TaskDetail.vue`*
-- [x] `--resume` with stored session ID in full mode (not plan mode), feedback replaces prompt — *`agent_session_data` preserved; pool.ts:92-101 detects session ID and spawns with `--resume`*
-- [x] Task returns to outbox with status `queued`, preserving worktree and branch — *changed from `in_progress` to `queued` so dispatcher handles it normally*
-- [x] Dispatcher reuses existing worktree for revised tasks — *`dispatchDoTask()` skips `createWorktree` when `task.worktree_path` and `task.branch_name` already exist, preserving original commits*
-- [x] Auto-return checkout on revise — *`autoReturnIfCheckedOut(id)` called at start of revise endpoint, matching approve/reject pattern*
+
+- [x] Revise action on inbox Do tasks: user adds feedback text — _`POST /tasks/:id/revise` endpoint, purple "Revise" button in `TaskDetail.vue`_
+- [x] `--resume` with stored session ID in full mode (not plan mode), feedback replaces prompt — _`agent_session_data` preserved; pool.ts:92-101 detects session ID and spawns with `--resume`_
+- [x] Task returns to outbox with status `queued`, preserving worktree and branch — _changed from `in_progress` to `queued` so dispatcher handles it normally_
+- [x] Dispatcher reuses existing worktree for revised tasks — _`dispatchDoTask()` skips `createWorktree` when `task.worktree_path` and `task.branch_name` already exist, preserving original commits_
+- [x] Auto-return checkout on revise — _`autoReturnIfCheckedOut(id)` called at start of revise endpoint, matching approve/reject pattern_
 - [x] Log `task_event` with `event_type = 'revised'` and feedback in `data`
 
 **Defer**
+
 - [x] Defer action on inbox items: set status to `deferred`, move to bottom of inbox
-- [x] Deferred items remain visible but deprioritized — *sorted to bottom in `useInbox.ts` `sortedItems` computed*
-- [x] User can un-defer (restore to `ready`) — *via `PATCH /api/tasks/:id`*
+- [x] Deferred items remain visible but deprioritized — _sorted to bottom in `useInbox.ts` `sortedItems` computed_
+- [x] User can un-defer (restore to `ready`) — _via `PATCH /api/tasks/:id`_
 
 **Verification**: Open chat on a completed Do task — verify plan mode (read-only, no file changes). Create a Discuss task — verify research runs, chat opens in inbox, subtask proposals render. Approve a subtask — verify Do task appears in outbox. Checkout a Do task — verify branch is loaded in main repo, banner shows, other checkouts blocked. Return — verify main repo reverts to target branch. Revise a Do task — verify it returns to outbox with feedback.
 
 ### Phase 4: Batching + Merging + Advanced Operations
 
 **Inbox batcher**
+
 - [ ] `server/batcher.ts`: on task completion, compute directory-level grouping from actual diff data
 - [ ] Group inbox items touching the same directories into review batches (no transitive closure)
 - [ ] Assign batch IDs to grouped tasks, emit grouping info over SSE
@@ -709,6 +788,7 @@ harness/
 - [ ] On task A approval/rejection: release or re-evaluate held dependents
 
 **Merger**
+
 - [ ] `server/merger.ts`: dry-merge implementation (`git merge --no-commit --no-ff` in temp area)
 - [ ] Single-item dry merge: test branch against current target branch before approve
 - [ ] Batch dry merge: test all branches against target + each other's cumulative changes
@@ -716,6 +796,7 @@ harness/
 - [ ] Surface conflict results to frontend via SSE event
 
 **Frontend — batching + merge UX**
+
 - [ ] `InboxBatch.vue`: grouped review items with shared header ("3 tasks modified src/auth/")
 - [ ] Conflict indicators: visual flag on items with dry-merge conflicts
 - [ ] Batch approve button: approve all clean items in a group, flag conflicting items
@@ -723,18 +804,20 @@ harness/
 - [ ] Merge conflict → auto-create Do task in outbox (with conflict context in prompt)
 
 **Cancel cascading**
-- [x] On cancel/reject/delete: clear `depends_on` and `parent_task_id` on children — *`clearParentReferences()` in `queries.ts`, called from reject, cancel, and all delete paths*
+
+- [x] On cancel/reject/delete: clear `depends_on` and `parent_task_id` on children — _`clearParentReferences()` in `queries.ts`, called from reject, cancel, and all delete paths_
 - [ ] Show confirmation dialog listing all tasks in cascade chain
 - [ ] Confirm cascade: cancel all dependents recursively
 - [ ] Move to inbox: send dependents to inbox for individual review/editing
 
 **Permission requests**
-- [x] Detect CC permission prompts from `--json` output stream — *`ClaudeCodeAdapter.parseMessage()` detects `subtype: 'permission_request'` and returns `type: 'permission_request'` event*
-- [x] Kill agent and create inbox item with status `permission`, store tool name in `error_message` — *`handleAgentEvent()` in `pool.ts` detects permission_request, calls `killAgent()`, updates status, broadcasts `inbox:new`*
-- [x] Prioritize permission items above all others in inbox — *`useInbox.ts` `sortedItems` sorts `permission` status first*
-- [x] Red notification badge when permissions are pending — *`hasPermissionRequests` computed in `useInbox.ts`, pulsing red badge in `statusConfig`*
-- [x] Grant: re-queue task with `--resume` and `--permission-mode bypassPermissions` — *`POST /tasks/:id/grant-permission` route preserves `agent_session_data`/worktree/branch; `buildResumeArgs` now passes permission flags matching `buildArgs`*
-- [x] Reject: user rejects the task (discard branch and worktree) — *reuses existing reject flow*
+
+- [x] Detect CC permission prompts from `--json` output stream — _`ClaudeCodeAdapter.parseMessage()` detects `subtype: 'permission_request'` and returns `type: 'permission_request'` event_
+- [x] Kill agent and create inbox item with status `permission`, store tool name in `error_message` — _`handleAgentEvent()` in `pool.ts` detects permission_request, calls `killAgent()`, updates status, broadcasts `inbox:new`_
+- [x] Prioritize permission items above all others in inbox — _`useInbox.ts` `sortedItems` sorts `permission` status first_
+- [x] Red notification badge when permissions are pending — _`hasPermissionRequests` computed in `useInbox.ts`, pulsing red badge in `statusConfig`_
+- [x] Grant: re-queue task with `--resume` and `--permission-mode bypassPermissions` — _`POST /tasks/:id/grant-permission` route preserves `agent_session_data`/worktree/branch; `buildResumeArgs` now passes permission flags matching `buildArgs`_
+- [x] Reject: user rejects the task (discard branch and worktree) — _reuses existing reject flow_
 
 **Verification**: Submit 3 Do tasks touching overlapping directories. Verify they're grouped in inbox. Batch approve — confirm sequential merge with re-check after each. Introduce a conflict — verify it's flagged before merge. Approve conflicting items — verify auto-created conflict-resolution task. Cancel a task with dependents — verify cascade warning. Permission request — verify red badge, approve/deny flow.
 
@@ -745,7 +828,7 @@ These features were implemented during development but weren't tracked in the or
 - **Revise flow**: `POST /tasks/:id/revise` returns a `ready` or `error` task to the outbox with new feedback, preserving `agent_session_data`, `worktree_path`, and `branch_name`. The agent resumes via `--resume` in the same worktree with full conversation context. The dispatcher reuses the existing worktree (skipping `createWorktree`) so original commits are preserved. Auto-returns any active checkout before re-queuing. This is the primary pre-approval feedback mechanism.
 - **Follow-up flow**: `POST /tasks/:id/follow-up` creates a continuation task from an `approved` parent, carrying forward the session ID for `--resume` in a fresh worktree. Uses `parent_task_id` for lineage (not `depends_on`). Guarded against concurrent follow-ups on the same parent (409).
 - **Orphan cleanup**: `clearParentReferences()` nulls out `depends_on` and `parent_task_id` on children when a parent task is rejected, cancelled, or deleted — preventing orphaned tasks from being blocked forever on unsatisfiable dependencies.
-- **Fix flow**: `POST /tasks/:id/fix` re-queues a task with `[MERGE CONFLICT]` context prepended to the prompt, preserving `agent_session_data`, `worktree_path`, and `branch_name`. The agent resumes via `--resume` in its existing worktree and merges `target_branch` to resolve conflicts directly, rather than redoing work from scratch. Auto-returns any active checkout. Used when merge fails on approve.
+- **Fix flow**: `POST /tasks/:id/fix` re-queues a task preserving `agent_session_data`, `worktree_path`, and `branch_name`. Fix type is specified via `body.type` (one of `merge-conflict`, `checkout-failed`, `needs-commit`; default `merge-conflict`). Instead of modifying the prompt, the fix type is added as a **tag** on the task. At dispatch time, `buildFixPrompt()` in `pool.ts` reads the task's tags and constructs an appropriate resume prompt: merge-conflict tags prompt the agent to merge `target_branch` and resolve conflicts; checkout-failed tags prompt branch recovery; needs-commit tags prompt the agent to commit its changes. The original prompt is never overwritten. Auto-returns any active checkout. Used when merge fails on approve or when uncommitted changes are detected.
 - **Bulk operations**: `POST /tasks/bulk-delete` (delete by IDs) and `DELETE /tasks?status=...` (delete by status filter) with multi-select UI in `InboxPanel.vue`.
 - **Activity log**: `ActivityLog.vue` + `useLog.ts` + `server/log.ts` — server-side activity log streamed via SSE `log:entry` events, capped at 200 entries.
 - **Progress buffering**: `GET /api/tasks/:id/progress` returns buffered agent output for late-joining SSE clients, so they see prior progress when expanding a running task.
@@ -777,11 +860,11 @@ These features were implemented during development but weren't tracked in the or
 - **Batch approve**: Dry-merge all branches against target branch first. Re-check after each sequential merge. Highlight conflicts before executing. Clean items proceed; conflicting items flagged.
 - **Dry merge timing**: Cheap operation (milliseconds). Re-run automatically whenever target branch updates.
 - **Target branch**: Configurable per-project in `config.json`. Defaults to the repo's default branch. All worktree branches are created from and merged back into this branch.
-- **No classifier in v1**: User selects task type (Do/Discuss) and priority manually. Removes the only external API dependency from the critical path, enabling fully offline operation.
+- **No classifier in v1**: User selects task type (Do/Discuss) and priority (P0–P3) manually. Removes the only external API dependency from the critical path, enabling fully offline operation.
 - **Cancel behavior**: Kills CC process, destroys worktree, deletes branch. Children's `depends_on` and `parent_task_id` are nulled out via `clearParentReferences()`, unblocking them. Full cascade UI (confirmation dialog, recursive cancel) is not yet implemented.
 - **Reject with dependents**: User is notified of blocked dependents in the response. Children's `depends_on` and `parent_task_id` are nulled out automatically. Options: cancel them, revise them, or leave them queued (now unblocked).
 - **Live progress**: Outbox shows task status at summary level (state indicator, elapsed time). Clicking a task opens accordion detail with live CC session stream; expand button opens modal for more space.
-- **Subtask spawning**: JSON format with `title`, `prompt`, `priority`, `depends_on` fields. Max 3 format retries; fallback to raw text with manual task creation. User approves or dismisses each proposal.
+- **Subtask spawning**: JSON format with `title`, `prompt`, `priority` (P0–P3), `depends_on` fields. Max 3 format retries; fallback to raw text with manual task creation. User approves or dismisses each proposal.
 - **Claude Code permissions**: Tool permission requests surface as priority inbox items with red badge. User approves or denies. Agent continues or adapts accordingly.
 - **Project config**: JSONC settings file (`~/.harness/config.jsonc`) with project list, per-project settings (target branch, limits), and task type definitions. DB and config live in `~/.harness/`, separate from repos. Single-project focus in v1.
 - **Custom task types**: Users can define custom task types with their own system prompt templates. Each type specifies whether it needs a worktree and its default priority. Do and Discuss are built-in defaults, not hard constraints.
@@ -791,6 +874,11 @@ These features were implemented during development but weren't tracked in the or
 - **Chat vs. Revise boundary**: Conversational mode on Do tasks uses plan mode (read-only). Chat never changes code; revise always does. If the user requests changes during chat, the agent explains what it would do and the UI prompts a formal Revise.
 - **External repo changes**: Out of scope for v1. Future work will add periodic sync/re-validation.
 - **Agent-agnostic abstraction**: Deferred to future work, but v1 implementation should use a clean agent manager interface so Claude Code integration is swappable.
+- **Draft tasks**: Tasks can be created as drafts, edited freely, then sent to the queue. This avoids accidental dispatch of incomplete tasks. The `draft` status is separate from the outbox/inbox status groups.
+- **Tags**: Tasks carry a `tags` string array (stored as JSON in SQLite). Tags are used for categorization and to drive fix-flow behavior (e.g., `merge-conflict`, `needs-commit`). Tag definitions (color, description) are configured in `config.jsonc`.
+- **Agent configuration**: Named agent definitions (`agents` map in config) allow configuring `adapter` and `extra_args` per agent. Task types reference agents by key, decoupling type behavior from adapter implementation.
+- **Plan mode approval**: Two-phase workflow for plan-mode tasks. Agent plans in read-only mode, requests approval via ExitPlanMode tool, task moves to `held`. User reviews and approves plan, agent resumes with full permissions. Prevents agents from executing without user sign-off on the approach.
+- **Priority scheme**: P0–P3 numeric priorities (P2 default) replaced the original urgent/normal/low scheme. Provides finer granularity without being overwhelming.
 
 ## Open Issues
 
@@ -835,7 +923,7 @@ Crash recovery handles ungraceful shutdown, but there's no specification for gra
 - **Agent roles**: Initialize different agent roles (e.g. engineer, QA, designer, UI copywriter). Different task types might require reviews by groups of different roles.
 - **Multiplayer**: Support for teams beyond solo developers - multiple developers working together, or teams with multiple roles, replacing or complementary to agent roles.
 - **Conflict detection**: Proactively warn when concurrent tasks are likely to overlap in scope, before they conflict at merge time.
-- ~~**Settings UI**~~: Implemented — `SettingsModal.vue` provides a JSONC config editor with real-time validation, backed by `GET/PUT /api/config/raw`.
+- ~~**Settings UI**~~: Implemented — `SettingsModal.vue` provides a JSONC config editor with IDE-like keyboard handling and real-time validation, backed by `GET/PUT /api/config/raw`.
 - **External repo sync**: Watch for external changes to the target branch (direct commits, pulls) and re-validate in-progress worktrees and dry-merge results.
 - **Multi-repo tasks**: Tasks that span multiple repositories in the project config.
 - **Agent-agnostic abstraction**: Define the interface for plugging in agents beyond Claude Code. V1 should use a clean agent manager interface to make this feasible.

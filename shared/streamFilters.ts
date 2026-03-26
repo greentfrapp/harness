@@ -10,43 +10,54 @@
  */
 
 export interface StreamMessage {
-  type: string;
-  message?: string | Record<string, unknown>;
-  content?: unknown;
-  tool?: string;
-  subtype?: string;
-  is_error?: boolean;
-  result?: string;
-  cost_usd?: number;
-  duration_ms?: number;
-  duration_api_ms?: number;
-  session_id?: string;
-  [key: string]: unknown;
+  type: string
+  message?: string | Record<string, unknown>
+  content?: unknown
+  tool?: string
+  subtype?: string
+  is_error?: boolean
+  result?: string
+  cost_usd?: number
+  duration_ms?: number
+  duration_api_ms?: number
+  session_id?: string
+  [key: string]: unknown
 }
 
 /** A single renderable item produced by expanding a StreamMessage. */
 export interface DisplayItem {
-  displayType: 'text' | 'tool_use' | 'tool_result' | 'result' | 'system' | 'error' | 'unknown';
-  text?: string;
-  toolName?: string;
-  toolInput?: unknown;
-  toolUseId?: string;
-  toolResult?: unknown;
-  isError?: boolean;
-  resultText?: string;
-  raw?: StreamMessage;
+  displayType:
+    | 'text'
+    | 'tool_use'
+    | 'tool_result'
+    | 'result'
+    | 'system'
+    | 'error'
+    | 'unknown'
+  text?: string
+  toolName?: string
+  toolInput?: unknown
+  toolUseId?: string
+  toolResult?: unknown
+  isError?: boolean
+  resultText?: string
+  raw?: StreamMessage
 }
 
 /** Metadata-only fields to exclude from the prettified view. */
 const METADATA_FIELDS = new Set([
-  'cost_usd', 'duration_ms', 'duration_api_ms', 'session_id',
-  'model', 'stop_reason', 'cwd', 'num_turns',
-]);
+  'cost_usd',
+  'duration_ms',
+  'duration_api_ms',
+  'session_id',
+  'model',
+  'stop_reason',
+  'cwd',
+  'num_turns',
+])
 
 /** Message types that are never displayable (pure metadata/internal events). */
-const SKIP_TYPES = new Set([
-  'rate_limit_event',
-]);
+const SKIP_TYPES = new Set(['rate_limit_event'])
 
 /**
  * Extract displayable text from a message's content field.
@@ -56,14 +67,14 @@ const SKIP_TYPES = new Set([
  *   - an object (tool input)
  */
 export function extractText(content: unknown): string {
-  if (typeof content === 'string') return content;
+  if (typeof content === 'string') return content
   if (Array.isArray(content)) {
     return content
       .filter((b: any) => b && (b.type === 'text' || b.text))
       .map((b: any) => b.text ?? '')
-      .join('');
+      .join('')
   }
-  return '';
+  return ''
 }
 
 /**
@@ -77,63 +88,64 @@ export function extractText(content: unknown): string {
  */
 export function getAssistantText(msg: StreamMessage): string {
   if (msg.message) {
-    if (typeof msg.message === 'string') return msg.message;
+    if (typeof msg.message === 'string') return msg.message
     // Real Claude Code format: message is the API response object with a content array
     if (typeof msg.message === 'object' && msg.message !== null) {
-      const apiMsg = msg.message as Record<string, unknown>;
+      const apiMsg = msg.message as Record<string, unknown>
       if (apiMsg.content) {
-        return extractText(apiMsg.content);
+        return extractText(apiMsg.content)
       }
     }
   }
-  return extractText(msg.content);
+  return extractText(msg.content)
 }
 
 /** Get the content blocks array from a message's API message object. */
 function getContentBlocks(msg: StreamMessage): unknown[] {
   if (typeof msg.message === 'object' && msg.message !== null) {
-    const apiMsg = msg.message as Record<string, unknown>;
-    if (Array.isArray(apiMsg.content)) return apiMsg.content;
+    const apiMsg = msg.message as Record<string, unknown>
+    if (Array.isArray(apiMsg.content)) return apiMsg.content
   }
-  if (Array.isArray(msg.content)) return msg.content;
-  return [];
+  if (Array.isArray(msg.content)) return msg.content
+  return []
 }
 
 /** Determine if a message has meaningful content worth displaying. */
 export function hasDisplayableContent(msg: StreamMessage): boolean {
   // Skip known non-displayable event types
-  if (SKIP_TYPES.has(msg.type)) return false;
+  if (SKIP_TYPES.has(msg.type)) return false
 
   // Assistant messages: check for text OR tool_use content blocks
   if (msg.type === 'assistant') {
-    const blocks = getContentBlocks(msg);
+    const blocks = getContentBlocks(msg)
     if (blocks.length > 0) {
-      return blocks.some((b: any) => b.type === 'text' || b.type === 'tool_use');
+      return blocks.some((b: any) => b.type === 'text' || b.type === 'tool_use')
     }
     // Legacy string formats
-    if (typeof msg.message === 'string') return !!msg.message;
-    if (typeof msg.content === 'string') return !!msg.content;
-    return false;
+    if (typeof msg.message === 'string') return !!msg.message
+    if (typeof msg.content === 'string') return !!msg.content
+    return false
   }
 
   // User messages: displayable if they contain tool_result blocks
   if (msg.type === 'user') {
-    const blocks = getContentBlocks(msg);
-    return blocks.some((b: any) => b.type === 'tool_result');
+    const blocks = getContentBlocks(msg)
+    return blocks.some((b: any) => b.type === 'tool_result')
   }
 
   // Legacy top-level types (kept for backward compatibility)
-  if (msg.type === 'tool_use') return true;
-  if (msg.type === 'tool_result') return msg.content !== undefined;
-  if (msg.type === 'result') return !!msg.result;
-  if (msg.type === 'system') return !!(typeof msg.message === 'string' && msg.message);
-  if (msg.type === 'error') return true;
+  if (msg.type === 'tool_use') return true
+  if (msg.type === 'tool_result') return msg.content !== undefined
+  if (msg.type === 'result') return !!msg.result
+  if (msg.type === 'system')
+    return !!(typeof msg.message === 'string' && msg.message)
+  if (msg.type === 'error') return true
 
   // Filter out messages that only carry metadata (e.g. usage updates)
   const hasNonMetadata = Object.keys(msg).some(
     (k) => k !== 'type' && !METADATA_FIELDS.has(k),
-  );
-  return hasNonMetadata;
+  )
+  return hasNonMetadata
 }
 
 /**
@@ -143,11 +155,11 @@ export function hasDisplayableContent(msg: StreamMessage): boolean {
  */
 function extractToolResultContent(block: any, msg: StreamMessage): unknown {
   // The block itself may have a string content
-  if (block.content !== undefined) return block.content;
+  if (block.content !== undefined) return block.content
   // Check the top-level tool_use_result field for rich data
-  const toolUseResult = (msg as any).tool_use_result;
-  if (toolUseResult) return toolUseResult;
-  return undefined;
+  const toolUseResult = (msg as any).tool_use_result
+  if (toolUseResult) return toolUseResult
+  return undefined
 }
 
 /**
@@ -158,19 +170,19 @@ function extractToolResultContent(block: any, msg: StreamMessage): unknown {
  * its own DisplayItem so the UI can render them individually.
  */
 export function expandMessages(messages: StreamMessage[]): DisplayItem[] {
-  const items: DisplayItem[] = [];
+  const items: DisplayItem[] = []
 
   for (const msg of messages) {
-    if (!hasDisplayableContent(msg)) continue;
+    if (!hasDisplayableContent(msg)) continue
 
     // --- Assistant messages: expand content blocks ---
     if (msg.type === 'assistant') {
-      const blocks = getContentBlocks(msg);
+      const blocks = getContentBlocks(msg)
       if (blocks.length > 0) {
         for (const block of blocks) {
-          const b = block as any;
+          const b = block as any
           if (b.type === 'text' && b.text) {
-            items.push({ displayType: 'text', text: b.text, raw: msg });
+            items.push({ displayType: 'text', text: b.text, raw: msg })
           } else if (b.type === 'tool_use') {
             items.push({
               displayType: 'tool_use',
@@ -178,26 +190,26 @@ export function expandMessages(messages: StreamMessage[]): DisplayItem[] {
               toolInput: b.input,
               toolUseId: b.id,
               raw: msg,
-            });
+            })
           }
           // Skip thinking blocks, etc.
         }
         // If no items were produced (e.g. only thinking blocks), skip
-        continue;
+        continue
       }
       // Legacy string format
-      const text = getAssistantText(msg);
+      const text = getAssistantText(msg)
       if (text) {
-        items.push({ displayType: 'text', text, raw: msg });
+        items.push({ displayType: 'text', text, raw: msg })
       }
-      continue;
+      continue
     }
 
     // --- User messages: extract tool_result blocks ---
     if (msg.type === 'user') {
-      const blocks = getContentBlocks(msg);
+      const blocks = getContentBlocks(msg)
       for (const block of blocks) {
-        const b = block as any;
+        const b = block as any
         if (b.type === 'tool_result') {
           items.push({
             displayType: 'tool_result',
@@ -205,10 +217,10 @@ export function expandMessages(messages: StreamMessage[]): DisplayItem[] {
             toolUseId: b.tool_use_id,
             isError: b.is_error === true,
             raw: msg,
-          });
+          })
         }
       }
-      continue;
+      continue
     }
 
     // --- Legacy top-level tool_use ---
@@ -218,8 +230,8 @@ export function expandMessages(messages: StreamMessage[]): DisplayItem[] {
         toolName: msg.tool,
         toolInput: msg.content,
         raw: msg,
-      });
-      continue;
+      })
+      continue
     }
 
     // --- Legacy top-level tool_result ---
@@ -229,8 +241,8 @@ export function expandMessages(messages: StreamMessage[]): DisplayItem[] {
         toolResult: msg.content,
         isError: msg.is_error === true,
         raw: msg,
-      });
-      continue;
+      })
+      continue
     }
 
     // --- Result ---
@@ -239,8 +251,8 @@ export function expandMessages(messages: StreamMessage[]): DisplayItem[] {
         displayType: 'result',
         resultText: msg.result,
         raw: msg,
-      });
-      continue;
+      })
+      continue
     }
 
     // --- System ---
@@ -249,8 +261,8 @@ export function expandMessages(messages: StreamMessage[]): DisplayItem[] {
         displayType: 'system',
         text: typeof msg.message === 'string' ? msg.message : undefined,
         raw: msg,
-      });
-      continue;
+      })
+      continue
     }
 
     // --- Error ---
@@ -259,8 +271,8 @@ export function expandMessages(messages: StreamMessage[]): DisplayItem[] {
         displayType: 'error',
         text: typeof msg.message === 'string' ? msg.message : undefined,
         raw: msg,
-      });
-      continue;
+      })
+      continue
     }
 
     // --- Fallback ---
@@ -268,8 +280,8 @@ export function expandMessages(messages: StreamMessage[]): DisplayItem[] {
       displayType: 'unknown',
       text: String(msg.message || extractText(msg.content) || ''),
       raw: msg,
-    });
+    })
   }
 
-  return items;
+  return items
 }
