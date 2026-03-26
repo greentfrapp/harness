@@ -198,3 +198,23 @@ export interface SSEEvent<T = unknown> {
   type: SSEEventType;
   data: T;
 }
+
+/** Extract error message from unknown catch value. */
+export function getErrorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+// Priority ordering — shared between queue and dispatcher
+export const PRIORITY_ORDER: Record<Priority, number> = {
+  P0: 0,
+  P1: 1,
+  P2: 2,
+  P3: 3,
+};
+
+export function comparePriority(a: Task, b: Task): number {
+  const pa = PRIORITY_ORDER[a.priority] ?? 1;
+  const pb = PRIORITY_ORDER[b.priority] ?? 1;
+  if (pa !== pb) return pa - pb;
+  return a.created_at - b.created_at;
+}

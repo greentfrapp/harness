@@ -4,6 +4,7 @@ import os from 'node:os';
 import { execSync } from 'node:child_process';
 import { parse as parseJsonc } from 'jsonc-parser';
 import type { HarnessConfig, ProjectConfig, TagConfig } from '../shared/types.ts';
+import { getErrorMessage } from '../shared/types.ts';
 
 const DEFAULT_TAGS: Record<string, TagConfig> = {
   bug: { color: 'red', description: 'Bug fix' },
@@ -183,8 +184,7 @@ export function saveConfigRaw(
   try {
     validateConfig(config);
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    return { ok: false, error: msg };
+    return { ok: false, error: getErrorMessage(err) };
   }
 
   // Write to disk

@@ -3,6 +3,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
 import { serverLog } from './log.ts';
+import { getErrorMessage } from '../shared/types.ts';
 
 /**
  * Git operations for worktree management, diff capture, and branch merging.
@@ -86,7 +87,7 @@ export function getDiff(
       maxBuffer: 10 * 1024 * 1024, // 10MB
     });
   } catch (err) {
-    serverLog.warn(`getDiff failed for ${branchName}: ${err instanceof Error ? err.message : String(err)}`);
+    serverLog.warn(`getDiff failed for ${branchName}: ${getErrorMessage(err)}`);
     return '';
   }
 }
@@ -103,7 +104,7 @@ export function getDiffStats(
       encoding: 'utf-8',
     }).trim();
   } catch (err) {
-    serverLog.warn(`getDiffStats failed for ${branchName}: ${err instanceof Error ? err.message : String(err)}`);
+    serverLog.warn(`getDiffStats failed for ${branchName}: ${getErrorMessage(err)}`);
     return '';
   }
 }
@@ -132,7 +133,7 @@ export function getUncommittedDiff(worktreePath: string): string {
       maxBuffer: 10 * 1024 * 1024,
     });
   } catch (err) {
-    serverLog.warn(`getUncommittedDiff failed for ${worktreePath}: ${err instanceof Error ? err.message : String(err)}`);
+    serverLog.warn(`getUncommittedDiff failed for ${worktreePath}: ${getErrorMessage(err)}`);
     return '';
   }
 }
@@ -146,7 +147,7 @@ export function getUncommittedDiffStats(worktreePath: string): string {
       encoding: 'utf-8',
     }).trim();
   } catch (err) {
-    serverLog.warn(`getUncommittedDiffStats failed for ${worktreePath}: ${err instanceof Error ? err.message : String(err)}`);
+    serverLog.warn(`getUncommittedDiffStats failed for ${worktreePath}: ${getErrorMessage(err)}`);
     return '';
   }
 }

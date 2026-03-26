@@ -1,4 +1,5 @@
 import type { Task, Project, HarnessConfig, SSEEventType } from '../shared/types.ts';
+import { comparePriority, getErrorMessage } from '../shared/types.ts';
 
 interface AgentPoolLike {
   activeWorktreeCount: number;
@@ -83,7 +84,7 @@ export class Dispatcher {
           project,
         );
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
+        const msg = getErrorMessage(err);
         this.deps.updateTask(task.id, {
           status: 'error',
           error_message: `Failed to dispatch: ${msg}`,
@@ -123,7 +124,7 @@ export class Dispatcher {
           project,
         );
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
+        const msg = getErrorMessage(err);
         this.deps.updateTask(task.id, {
           status: 'error',
           error_message: `Failed to dispatch: ${msg}`,
@@ -158,16 +159,3 @@ export class Dispatcher {
   }
 }
 
-const PRIORITY_ORDER: Record<string, number> = {
-  P0: 0,
-  P1: 1,
-  P2: 2,
-  P3: 3,
-};
-
-function comparePriority(a: Task, b: Task): number {
-  const pa = PRIORITY_ORDER[a.priority] ?? 1;
-  const pb = PRIORITY_ORDER[b.priority] ?? 1;
-  if (pa !== pb) return pa - pb;
-  return a.created_at - b.created_at;
-}

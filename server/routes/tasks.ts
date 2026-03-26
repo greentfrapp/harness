@@ -1,14 +1,51 @@
 import { Hono } from 'hono';
+import type { Context } from 'hono';
 import type { AppContext } from '../context.ts';
-import type { CreateTaskInput, UpdateTaskInput } from '../../shared/types.ts';
+import type { CreateTaskInput, UpdateTaskInput, Task, Project } from '../../shared/types.ts';
 import { OUTBOX_STATUSES, INBOX_STATUSES, DRAFT_STATUSES } from '../../shared/types.ts';
 import * as git from '../git.ts';
 import { readConfigRaw, saveConfigRaw, CONFIG_PATH } from '../config.ts';
 import { serverLog } from '../log.ts';
+import { getErrorMessage } from '../../shared/types.ts';
 
 export function createTaskRoutes(ctx: AppContext) {
   const app = new Hono();
   const { queries, sseManager, taskQueue, pool, dispatcher, config, checkoutState } = ctx;
+
+  /** Look up a task by ID or return a 404 response. */
+  function getTaskOr404(c: Context, id: string): Task | Response {
+    const task = queries.getTaskById(id);
+    if (!task) return c.json({ error: 'Task not found' }, 404);
+    return task;
+  }
+
+  /** Look up a task and its project, or return a 404 response. */
+  function getTaskWithProjectOr404(c: Context, id: string): { task: Task; project: Project } | Response {
+    const task = queries.getTaskById(id);
+    if (!task) return c.json({ error: 'Task not found' }, 404);
+    const project = queries.getProjectById(task.project_id);
+    if (!project) return c.json({ error: 'Project not found' }, 404);
+    return { task, project };
+  }
+
+  /** Clean up a task's worktree and branch. */
+  function cleanupWorktree(project: Project, task: Task): void {
+    if (task.worktree_path) {
+      serverLog.info(`Removing worktree ${task.worktree_path}`, task.id);
+      git.removeWorktree(project.repo_path, task.worktree_path);
+    }
+    if (task.branch_name) {
+      serverLog.info(`Deleting branch ${task.branch_name}`, task.id);
+      git.deleteBranch(project.repo_path, task.branch_name);
+    }
+  }
+
+  /** Parse agent session data with a safe fallback. */
+  function parseSessionData(task: Task): Record<string, any> {
+    return task.agent_session_data
+      ? JSON.parse(task.agent_session_data)
+      : { session_id: null, pid: 0 };
+  }
 
   /** Auto-return a checkout if the given task is currently checked out. */
   function autoReturnIfCheckedOut(taskId: string): void {
@@ -21,7 +58,7 @@ export function createTaskRoutes(ctx: AppContext) {
             git.returnCheckout(repoPath, project.target_branch, entry.checkoutBranch);
             serverLog.info(`Auto-returned checkout before action`, taskId);
           } catch (err) {
-            serverLog.warn(`Auto-return failed: ${err instanceof Error ? err.message : String(err)}`, taskId);
+            serverLog.warn(`Auto-return failed: ${getErrorMessage(err)}`, taskId);
           }
         }
         checkoutState.delete(repoPath);
@@ -97,10 +134,10 @@ export function createTaskRoutes(ctx: AppContext) {
   });
 
   app.get('/tasks/:id', (c) => {
-    const task = queries.getTaskById(c.req.param('id'));
-    if (!task) return c.json({ error: 'Task not found' }, 404);
-    const events = queries.getTaskEvents(task.id);
-    return c.json({ ...task, events });
+    const result = getTaskOr404(c, c.req.param('id'));
+    if (result instanceof Response) return result;
+    const events = queries.getTaskEvents(result.id);
+    return c.json({ ...result, events });
   });
 
   app.post('/tasks', async (c) => {
@@ -141,8 +178,9 @@ export function createTaskRoutes(ctx: AppContext) {
   /** Send a draft: transition from draft to queued. */
   app.post('/tasks/:id/send', async (c) => {
     const id = c.req.param('id');
-    const task = queries.getTaskById(id);
-    if (!task) return c.json({ error: 'Task not found' }, 404);
+    const result = getTaskOr404(c, id);
+    if (result instanceof Response) return result;
+    const task = result;
     if (task.status !== 'draft') {
       return c.json({ error: 'Only draft tasks can be sent' }, 400);
     }
@@ -169,8 +207,9 @@ export function createTaskRoutes(ctx: AppContext) {
 
   app.patch('/tasks/:id', async (c) => {
     const id = c.req.param('id');
-    const existing = queries.getTaskById(id);
-    if (!existing) return c.json({ error: 'Task not found' }, 404);
+    const result = getTaskOr404(c, id);
+    if (result instanceof Response) return result;
+    const existing = result;
 
     const body = await c.req.json<UpdateTaskInput>();
     const updated = queries.updateTask(id, body);
@@ -199,17 +238,15 @@ export function createTaskRoutes(ctx: AppContext) {
   /** Approve: merge branch into target, destroy worktree, mark approved. */
   app.post('/tasks/:id/approve', (c) => {
     const id = c.req.param('id');
-    const task = queries.getTaskById(id);
-    if (!task) return c.json({ error: 'Task not found' }, 404);
+    const result = getTaskWithProjectOr404(c, id);
+    if (result instanceof Response) return result;
+    const { task, project } = result;
     if (task.status !== 'ready' && task.status !== 'error') {
       return c.json({ error: 'Task cannot be approved in current status' }, 400);
     }
 
     // Auto-return if this task is currently checked out
     autoReturnIfCheckedOut(id);
-
-    const project = queries.getProjectById(task.project_id);
-    if (!project) return c.json({ error: 'Project not found' }, 404);
 
     // Merge branch if it exists
     if (task.branch_name) {
@@ -225,18 +262,13 @@ export function createTaskRoutes(ctx: AppContext) {
         });
         serverLog.info(`Merge successful${project.auto_push ? ' (pushed to remote)' : ''}`, id);
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
+        const msg = getErrorMessage(err);
         serverLog.error(`Merge failed: ${msg}`, id);
         return c.json({ error: `Merge failed: ${msg}` }, 409);
       }
 
       // Clean up worktree and branch
-      if (task.worktree_path) {
-        serverLog.info(`Removing worktree ${task.worktree_path}`, id);
-        git.removeWorktree(project.repo_path, task.worktree_path);
-      }
-      serverLog.info(`Deleting branch ${task.branch_name}`, id);
-      git.deleteBranch(project.repo_path, task.branch_name);
+      cleanupWorktree(project, task);
     }
 
     const updated = queries.updateTask(id, {
@@ -257,8 +289,9 @@ export function createTaskRoutes(ctx: AppContext) {
   /** Reject: destroy worktree + branch, mark rejected. */
   app.post('/tasks/:id/reject', (c) => {
     const id = c.req.param('id');
-    const task = queries.getTaskById(id);
-    if (!task) return c.json({ error: 'Task not found' }, 404);
+    const result = getTaskWithProjectOr404(c, id);
+    if (result instanceof Response) return result;
+    const { task, project } = result;
     if (task.status !== 'ready' && task.status !== 'error' && task.status !== 'held') {
       return c.json({ error: 'Task cannot be rejected in current status' }, 400);
     }
@@ -266,18 +299,7 @@ export function createTaskRoutes(ctx: AppContext) {
     // Auto-return if this task is currently checked out
     autoReturnIfCheckedOut(id);
 
-    const project = queries.getProjectById(task.project_id);
-    if (!project) return c.json({ error: 'Project not found' }, 404);
-
-    // Clean up worktree and branch
-    if (task.worktree_path) {
-      serverLog.info(`Removing worktree ${task.worktree_path}`, id);
-      git.removeWorktree(project.repo_path, task.worktree_path);
-    }
-    if (task.branch_name) {
-      serverLog.info(`Deleting branch ${task.branch_name}`, id);
-      git.deleteBranch(project.repo_path, task.branch_name);
-    }
+    cleanupWorktree(project, task);
 
     const updated = queries.updateTask(id, {
       status: 'rejected',
@@ -309,14 +331,12 @@ export function createTaskRoutes(ctx: AppContext) {
   /** Fix: re-queue a ready/error task to address an issue (merge conflict, checkout failure, uncommitted changes, etc.). */
   app.post('/tasks/:id/fix', async (c) => {
     const id = c.req.param('id');
-    const task = queries.getTaskById(id);
-    if (!task) return c.json({ error: 'Task not found' }, 404);
+    const result = getTaskWithProjectOr404(c, id);
+    if (result instanceof Response) return result;
+    const { task } = result;
     if (task.status !== 'ready' && task.status !== 'error') {
       return c.json({ error: 'Only ready or error tasks can be fixed' }, 400);
     }
-
-    const project = queries.getProjectById(task.project_id);
-    if (!project) return c.json({ error: 'Project not found' }, 404);
 
     // Auto-return if this task is currently checked out
     autoReturnIfCheckedOut(id);
@@ -356,19 +376,15 @@ export function createTaskRoutes(ctx: AppContext) {
   /** Approve plan: re-queue a held plan-mode task for execution with full permissions. */
   app.post('/tasks/:id/approve-plan', (c) => {
     const id = c.req.param('id');
-    const task = queries.getTaskById(id);
-    if (!task) return c.json({ error: 'Task not found' }, 404);
+    const result = getTaskWithProjectOr404(c, id);
+    if (result instanceof Response) return result;
+    const { task } = result;
     if (task.status !== 'held') {
       return c.json({ error: 'Only held tasks can have plans approved' }, 400);
     }
 
-    const project = queries.getProjectById(task.project_id);
-    if (!project) return c.json({ error: 'Project not found' }, 404);
-
     // Mark plan as approved in session data
-    const sessionData = task.agent_session_data
-      ? JSON.parse(task.agent_session_data)
-      : { session_id: null, pid: 0 };
+    const sessionData = parseSessionData(task);
     sessionData.plan_approved = true;
 
     const updated = queries.updateTask(id, {
@@ -392,18 +408,16 @@ export function createTaskRoutes(ctx: AppContext) {
   /** Grant permission: add the blocked tool to granted_tools, re-queue for --resume. */
   app.post('/tasks/:id/grant-permission', (c) => {
     const id = c.req.param('id');
-    const task = queries.getTaskById(id);
-    if (!task) return c.json({ error: 'Task not found' }, 404);
+    const result = getTaskWithProjectOr404(c, id);
+    if (result instanceof Response) return result;
+    const { task } = result;
     if (task.status !== 'permission') {
       return c.json({ error: 'Only permission tasks can be granted' }, 400);
     }
 
-    const project = queries.getProjectById(task.project_id);
-    if (!project) return c.json({ error: 'Project not found' }, 404);
-
     // Add the blocked tool to the cumulative granted_tools list.
     // For Bash, use command-level patterns like Bash(curl:*) instead of blanket Bash.
-    const sessionData = task.agent_session_data ? JSON.parse(task.agent_session_data) : {};
+    const sessionData = parseSessionData(task);
     const grantedTools = new Set<string>(sessionData.granted_tools ?? []);
     if (sessionData.pending_tool) {
       let grantPattern = sessionData.pending_tool;
@@ -438,24 +452,15 @@ export function createTaskRoutes(ctx: AppContext) {
   /** Retry: clean up old worktree/branch, re-queue for a fresh run. */
   app.post('/tasks/:id/retry', (c) => {
     const id = c.req.param('id');
-    const task = queries.getTaskById(id);
-    if (!task) return c.json({ error: 'Task not found' }, 404);
+    const result = getTaskWithProjectOr404(c, id);
+    if (result instanceof Response) return result;
+    const { task, project } = result;
     if (task.status !== 'error') {
       return c.json({ error: 'Only error tasks can be retried' }, 400);
     }
 
-    const project = queries.getProjectById(task.project_id);
-    if (!project) return c.json({ error: 'Project not found' }, 404);
-
     // Clean up old worktree and branch
-    if (task.worktree_path) {
-      serverLog.info(`Removing worktree ${task.worktree_path}`, id);
-      git.removeWorktree(project.repo_path, task.worktree_path);
-    }
-    if (task.branch_name) {
-      serverLog.info(`Deleting branch ${task.branch_name}`, id);
-      git.deleteBranch(project.repo_path, task.branch_name);
-    }
+    cleanupWorktree(project, task);
 
     const updated = queries.updateTask(id, {
       status: 'queued',
@@ -500,14 +505,7 @@ export function createTaskRoutes(ctx: AppContext) {
         hadRunning = true;
       }
       const project = queries.getProjectById(task.project_id);
-      if (project) {
-        if (task.worktree_path) {
-          git.removeWorktree(project.repo_path, task.worktree_path);
-        }
-        if (task.branch_name) {
-          git.deleteBranch(project.repo_path, task.branch_name);
-        }
-      }
+      if (project) cleanupWorktree(project, task);
     }
 
     const deleted = queries.deleteTasksByIds(tasksToDelete.map((t) => t.id));
@@ -543,14 +541,7 @@ export function createTaskRoutes(ctx: AppContext) {
         hadRunning = true;
       }
       const project = queries.getProjectById(task.project_id);
-      if (project) {
-        if (task.worktree_path) {
-          git.removeWorktree(project.repo_path, task.worktree_path);
-        }
-        if (task.branch_name) {
-          git.deleteBranch(project.repo_path, task.branch_name);
-        }
-      }
+      if (project) cleanupWorktree(project, task);
     }
 
     const deleted = queries.deleteTasksByStatus(statuses);
@@ -574,8 +565,9 @@ export function createTaskRoutes(ctx: AppContext) {
    */
   app.delete('/tasks/:id', (c) => {
     const id = c.req.param('id');
-    const existing = queries.getTaskById(id);
-    if (!existing) return c.json({ error: 'Task not found' }, 404);
+    const result = getTaskOr404(c, id);
+    if (result instanceof Response) return result;
+    const existing = result;
 
     const terminalStatuses = ['approved', 'rejected', 'cancelled'];
     const forcePermanent = c.req.query('permanent') === 'true';
@@ -588,14 +580,7 @@ export function createTaskRoutes(ctx: AppContext) {
 
       // Clean up worktree and branch
       const project = queries.getProjectById(existing.project_id);
-      if (project) {
-        if (existing.worktree_path) {
-          git.removeWorktree(project.repo_path, existing.worktree_path);
-        }
-        if (existing.branch_name) {
-          git.deleteBranch(project.repo_path, existing.branch_name);
-        }
-      }
+      if (project) cleanupWorktree(project, existing);
 
       // Permanently delete from database
       queries.deleteTaskById(id);
@@ -613,18 +598,8 @@ export function createTaskRoutes(ctx: AppContext) {
     pool.killAgent(id);
 
     // Clean up worktree and branch
-    if (existing.worktree_path) {
-      const project = queries.getProjectById(existing.project_id);
-      if (project) {
-        git.removeWorktree(project.repo_path, existing.worktree_path);
-      }
-    }
-    if (existing.branch_name) {
-      const project = queries.getProjectById(existing.project_id);
-      if (project) {
-        git.deleteBranch(project.repo_path, existing.branch_name);
-      }
-    }
+    const cancelProject = queries.getProjectById(existing.project_id);
+    if (cancelProject) cleanupWorktree(cancelProject, existing);
 
     // Unblock children that depended on or followed up from this task
     queries.clearParentReferences(id);
@@ -646,8 +621,9 @@ export function createTaskRoutes(ctx: AppContext) {
   /** Revise: return a ready/error task to the outbox with feedback, preserving worktree and session. */
   app.post('/tasks/:id/revise', async (c) => {
     const id = c.req.param('id');
-    const task = queries.getTaskById(id);
-    if (!task) return c.json({ error: 'Task not found' }, 404);
+    const result = getTaskOr404(c, id);
+    if (result instanceof Response) return result;
+    const task = result;
     if (task.status !== 'ready' && task.status !== 'error' && task.status !== 'held') {
       return c.json({ error: 'Only ready, error, or held tasks can be revised' }, 400);
     }
@@ -683,8 +659,9 @@ export function createTaskRoutes(ctx: AppContext) {
   /** Follow up: create a new task that resumes the conversation from an approved task. */
   app.post('/tasks/:id/follow-up', async (c) => {
     const id = c.req.param('id');
-    const task = queries.getTaskById(id);
-    if (!task) return c.json({ error: 'Task not found' }, 404);
+    const result = getTaskOr404(c, id);
+    if (result instanceof Response) return result;
+    const task = result;
     if (task.status !== 'approved') {
       return c.json({ error: 'Only approved tasks can have follow-ups' }, 400);
     }
@@ -706,9 +683,7 @@ export function createTaskRoutes(ctx: AppContext) {
     }
 
     // Parse parent session data to carry forward the session ID
-    const parentSession = task.agent_session_data
-      ? JSON.parse(task.agent_session_data)
-      : null;
+    const parentSession = task.agent_session_data ? parseSessionData(task) : null;
 
     // Resolve agent_type from task type config
     const taskTypeConfig = config.task_types[task.type];
@@ -770,17 +745,15 @@ export function createTaskRoutes(ctx: AppContext) {
   /** Checkout: merge task branch into a temp branch and check it out in the repo for manual testing. */
   app.post('/tasks/:id/checkout', (c) => {
     const id = c.req.param('id');
-    const task = queries.getTaskById(id);
-    if (!task) return c.json({ error: 'Task not found' }, 404);
+    const result = getTaskWithProjectOr404(c, id);
+    if (result instanceof Response) return result;
+    const { task, project } = result;
     if (task.status !== 'ready' && task.status !== 'error') {
       return c.json({ error: 'Only ready or error tasks can be checked out' }, 400);
     }
     if (!task.branch_name) {
       return c.json({ error: 'Task has no branch to checkout' }, 400);
     }
-
-    const project = queries.getProjectById(task.project_id);
-    if (!project) return c.json({ error: 'Project not found' }, 404);
 
     // Check if this repo already has a checkout active
     const existing = checkoutState.get(project.repo_path);
@@ -798,7 +771,7 @@ export function createTaskRoutes(ctx: AppContext) {
     try {
       git.checkoutTask(project.repo_path, project.target_branch, task.branch_name, checkoutBranch);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg = getErrorMessage(err);
       serverLog.error(`Checkout failed: ${msg}`, id);
       return c.json({ error: `Checkout failed: ${msg}` }, 500);
     }
@@ -822,11 +795,9 @@ export function createTaskRoutes(ctx: AppContext) {
   /** Return: switch repo back to target branch, delete checkout branch, clear state. */
   app.post('/tasks/:id/return', (c) => {
     const id = c.req.param('id');
-    const task = queries.getTaskById(id);
-    if (!task) return c.json({ error: 'Task not found' }, 404);
-
-    const project = queries.getProjectById(task.project_id);
-    if (!project) return c.json({ error: 'Project not found' }, 404);
+    const result = getTaskWithProjectOr404(c, id);
+    if (result instanceof Response) return result;
+    const { task, project } = result;
 
     const existing = checkoutState.get(project.repo_path);
     if (!existing || existing.taskId !== id) {
@@ -836,7 +807,7 @@ export function createTaskRoutes(ctx: AppContext) {
     try {
       git.returnCheckout(project.repo_path, project.target_branch, existing.checkoutBranch);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg = getErrorMessage(err);
       serverLog.error(`Return failed: ${msg}`, id);
       return c.json({ error: `Return failed: ${msg}` }, 500);
     }
@@ -852,11 +823,9 @@ export function createTaskRoutes(ctx: AppContext) {
   /** Get diff for a completed task. */
   app.get('/tasks/:id/diff', (c) => {
     const id = c.req.param('id');
-    const task = queries.getTaskById(id);
-    if (!task) return c.json({ error: 'Task not found' }, 404);
-
-    const project = queries.getProjectById(task.project_id);
-    if (!project) return c.json({ error: 'Project not found' }, 404);
+    const result = getTaskWithProjectOr404(c, id);
+    if (result instanceof Response) return result;
+    const { task, project } = result;
 
     let diff = '';
     let stats = '';
@@ -900,8 +869,8 @@ export function createTaskRoutes(ctx: AppContext) {
 
   app.get('/tasks/:id/events', (c) => {
     const id = c.req.param('id');
-    const existing = queries.getTaskById(id);
-    if (!existing) return c.json({ error: 'Task not found' }, 404);
+    const result = getTaskOr404(c, id);
+    if (result instanceof Response) return result;
 
     return c.json(queries.getTaskEvents(id));
   });
@@ -909,8 +878,8 @@ export function createTaskRoutes(ctx: AppContext) {
   /** Get buffered progress messages for an in-progress task (for late-joining clients). */
   app.get('/tasks/:id/progress', (c) => {
     const id = c.req.param('id');
-    const task = queries.getTaskById(id);
-    if (!task) return c.json({ error: 'Task not found' }, 404);
+    const result = getTaskOr404(c, id);
+    if (result instanceof Response) return result;
 
     const messages = pool.getProgressBuffer(id);
     return c.json({ messages });

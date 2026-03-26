@@ -209,6 +209,17 @@ export function deleteTaskById(id: string): Task | undefined {
   return task;
 }
 
+/** Delete tasks and their related records (events, subtask proposals) by ID list. */
+function deleteTasksAndRelated(ids: string[]): void {
+  const db = getDb();
+  for (const id of ids) clearParentReferences(id);
+  db.delete(subtaskProposals)
+    .where(inArray(subtaskProposals.task_id, ids))
+    .run();
+  db.delete(taskEvents).where(inArray(taskEvents.task_id, ids)).run();
+  db.delete(tasks).where(inArray(tasks.id, ids)).run();
+}
+
 export function deleteTasksByIds(ids: string[]): Task[] {
   const db = getDb();
   const toDelete = db
@@ -218,12 +229,7 @@ export function deleteTasksByIds(ids: string[]): Task[] {
     .all()
     .map((row) => deserializeTags(row as Record<string, unknown>));
   if (!toDelete.length) return [];
-  for (const id of ids) clearParentReferences(id);
-  db.delete(subtaskProposals)
-    .where(inArray(subtaskProposals.task_id, ids))
-    .run();
-  db.delete(taskEvents).where(inArray(taskEvents.task_id, ids)).run();
-  db.delete(tasks).where(inArray(tasks.id, ids)).run();
+  deleteTasksAndRelated(ids);
   return toDelete;
 }
 
@@ -236,12 +242,6 @@ export function deleteTasksByStatus(statusList: string[]): Task[] {
     .all()
     .map((row) => deserializeTags(row as Record<string, unknown>));
   if (!toDelete.length) return [];
-  const ids = toDelete.map((t) => t.id);
-  for (const id of ids) clearParentReferences(id);
-  db.delete(subtaskProposals)
-    .where(inArray(subtaskProposals.task_id, ids))
-    .run();
-  db.delete(taskEvents).where(inArray(taskEvents.task_id, ids)).run();
-  db.delete(tasks).where(inArray(tasks.id, ids)).run();
+  deleteTasksAndRelated(toDelete.map((t) => t.id));
   return toDelete;
 }

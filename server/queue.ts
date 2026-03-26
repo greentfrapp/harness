@@ -1,11 +1,5 @@
-import type { Task, Priority, SSEEventType } from '../shared/types.ts';
-
-const PRIORITY_ORDER: Record<Priority, number> = {
-  P0: 0,
-  P1: 1,
-  P2: 2,
-  P3: 3,
-};
+import type { Task, SSEEventType } from '../shared/types.ts';
+import { comparePriority } from '../shared/types.ts';
 
 interface TaskQueueDeps {
   getTaskById: (id: string) => Task | undefined;
@@ -62,9 +56,3 @@ export class TaskQueue {
   }
 }
 
-function comparePriority(a: Task, b: Task): number {
-  const pa = PRIORITY_ORDER[a.priority as Priority] ?? 1;
-  const pb = PRIORITY_ORDER[b.priority as Priority] ?? 1;
-  if (pa !== pb) return pa - pb;
-  return a.created_at - b.created_at;
-}
