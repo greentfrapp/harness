@@ -1,6 +1,11 @@
 <script setup lang="ts">
-import { type ParseError, modify, parse as parseJsonc, applyEdits } from 'jsonc-parser'
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import {
+  type ParseError,
+  applyEdits,
+  modify,
+  parse as parseJsonc,
+} from 'jsonc-parser'
+import { computed, nextTick, onMounted, ref, useTemplateRef, watch } from 'vue'
 import { api } from '../api'
 
 const emit = defineEmits<{
@@ -225,11 +230,18 @@ async function handleSave() {
     saving.value = false
   }
 }
+
+const settingsModal = useTemplateRef('settings-model')
+onMounted(() => {
+  settingsModal.value?.focus()
+})
 </script>
 
 <template>
   <Teleport to="body">
     <div
+      ref="settings-model"
+      tabindex="-1"
       class="fixed inset-0 z-50 flex items-center justify-center"
       @keydown="onKeydown">
       <!-- Backdrop -->
@@ -291,19 +303,19 @@ async function handleSave() {
               Restore default task types
             </button>
             <div class="flex gap-2">
-            <button
-              type="button"
-              class="px-4 py-2 text-sm text-zinc-400 hover:text-zinc-200 transition-colors"
-              @click="emit('close')">
-              Cancel
-            </button>
-            <button
-              :disabled="!canSave"
-              class="px-4 py-2 text-sm font-medium bg-zinc-600 hover:bg-zinc-500 rounded-md transition-colors disabled:opacity-50"
-              @click="handleSave">
-              {{ saving ? 'Saving...' : 'Save' }}
-              <kbd class="ml-1 text-xs opacity-60">⌘↵</kbd>
-            </button>
+              <button
+                type="button"
+                class="px-4 py-2 text-sm text-zinc-400 hover:text-zinc-200 transition-colors"
+                @click="emit('close')">
+                Cancel
+              </button>
+              <button
+                :disabled="!canSave"
+                class="px-4 py-2 text-sm font-medium bg-zinc-600 hover:bg-zinc-500 rounded-md transition-colors disabled:opacity-50"
+                @click="handleSave">
+                {{ saving ? 'Saving...' : 'Save' }}
+                <kbd class="ml-1 text-xs opacity-60">⌘↵</kbd>
+              </button>
             </div>
           </div>
         </div>
