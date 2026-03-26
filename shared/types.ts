@@ -9,6 +9,7 @@ export type TaskStatus =
   | 'held'
   | 'error'
   | 'waiting_on_subtasks'
+  | 'subtasks_proposed'
   | 'permission'
   | 'approved'
   | 'rejected'
@@ -31,6 +32,7 @@ export const OUTBOX_STATUSES: TaskStatus[] = [
 export const INBOX_STATUSES: TaskStatus[] = [
   'ready',
   'held',
+  'subtasks_proposed',
   'error',
   'permission',
   'approved',
@@ -51,7 +53,7 @@ export const RUNNING_STATUSES: TaskStatus[] = ['in_progress', 'retrying']
 export const REVIEWABLE_STATUSES: TaskStatus[] = ['ready', 'error']
 
 // Statuses where the task can be rejected/revised
-export const REJECTABLE_STATUSES: TaskStatus[] = ['ready', 'error', 'held']
+export const REJECTABLE_STATUSES: TaskStatus[] = ['ready', 'error', 'held', 'subtasks_proposed']
 
 // Non-terminal statuses (task is still in the pipeline)
 export const ACTIVE_STATUSES: TaskStatus[] = [
@@ -59,6 +61,7 @@ export const ACTIVE_STATUSES: TaskStatus[] = [
   'in_progress',
   'retrying',
   'waiting_on_subtasks',
+  'subtasks_proposed',
   'ready',
   'held',
 ]
@@ -92,6 +95,7 @@ export const DEFAULT_VIEWS: ViewConfig[] = [
       statuses: [
         'ready',
         'held',
+        'subtasks_proposed',
         'error',
         'permission',
         'approved',

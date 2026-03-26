@@ -24,6 +24,7 @@ const ALL_STATUSES: TaskStatus[] = [
 const STATUS_SORT_ORDER: Record<string, number> = {
   permission: 0,
   waiting_on_subtasks: 1,
+  subtasks_proposed: 1,
   held: 1,
   error: 2,
   ready: 3,

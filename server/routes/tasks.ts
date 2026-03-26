@@ -1037,17 +1037,14 @@ export function createTaskRoutes(ctx: AppContext) {
     // Store proposals
     const proposals = queries.createSubtaskProposals(id, body.subtasks)
 
-    // Transition to waiting_on_subtasks BEFORE killing (so exit handler early-returns)
-    const newStatus = guardTransition(c, task.status, 'propose_subtasks')
-    if (newStatus instanceof Response) return newStatus
-
-    queries.updateTask(id, { status: newStatus })
-
-    // Kill the agent
-    pool.killAgent(id)
-
     if (config.auto_approve_subtasks) {
-      // Auto-approve: create tasks immediately
+      // Auto-approve: go straight to waiting_on_subtasks
+      const newStatus = guardTransition(c, task.status, 'auto_approve_subtasks')
+      if (newStatus instanceof Response) return newStatus
+      // Transition BEFORE killing so exit handler early-returns
+      queries.updateTask(id, { status: newStatus })
+      pool.killAgent(id)
+      // Create tasks immediately
       for (const proposal of proposals) {
         const newTask = queries.createTask({
           project_id: task.project_id,
@@ -1068,6 +1065,12 @@ export function createTaskRoutes(ctx: AppContext) {
       sseManager.broadcast('task:updated', updated)
       dispatcher.tryDispatch()
     } else {
+      // Manual review: move to subtasks_proposed (inbox) for user review
+      const newStatus = guardTransition(c, task.status, 'propose_subtasks')
+      if (newStatus instanceof Response) return newStatus
+      // Transition BEFORE killing so exit handler early-returns
+      queries.updateTask(id, { status: newStatus })
+      pool.killAgent(id)
       queries.createTaskEvent(id, 'subtasks_proposed', null)
       const updated = queries.getTaskById(id)
       sseManager.broadcast('task:updated', updated)
@@ -1092,9 +1095,9 @@ export function createTaskRoutes(ctx: AppContext) {
     if (result instanceof Response) return result
     const task = result
 
-    if (task.status !== 'waiting_on_subtasks') {
+    if (task.status !== 'subtasks_proposed') {
       return c.json(
-        { error: `Task must be waiting_on_subtasks, got '${task.status}'` },
+        { error: `Task must be subtasks_proposed, got '${task.status}'` },
         400,
       )
     }
@@ -1154,7 +1157,7 @@ export function createTaskRoutes(ctx: AppContext) {
       }
       resumePrompt += `Continue with your original task.\n\nOriginal task:\n${task.prompt}`
 
-      const newStatus = transition(task.status, 'subtasks_completed')
+      const newStatus = transition(task.status, 'dismiss_all_subtasks')
       queries.updateTask(id, {
         status: newStatus,
         prompt: resumePrompt,
@@ -1168,7 +1171,9 @@ export function createTaskRoutes(ctx: AppContext) {
       sseManager.broadcast('task:updated', updated)
       dispatcher.tryDispatch()
     } else {
-      // Leave parent in waiting_on_subtasks, dispatch new tasks
+      // Transition to waiting_on_subtasks now that subtasks are actually running
+      const newStatus = transition(task.status, 'approve_subtasks')
+      queries.updateTask(id, { status: newStatus })
       const updated = queries.getTaskById(id)
       sseManager.broadcast('task:updated', updated)
       taskQueue.recomputePositions(task.project_id)

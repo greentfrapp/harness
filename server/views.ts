@@ -23,7 +23,7 @@ const DEFAULT_VIEWS_TEMPLATE = `{
       "id": "inbox",
       "name": "Inbox",
       "filter": {
-        "statuses": ["ready", "held", "error", "permission", "approved", "rejected", "cancelled"]
+        "statuses": ["ready", "held", "subtasks_proposed", "error", "permission", "approved", "rejected", "cancelled"]
       }
     }
   ]
@@ -55,6 +55,15 @@ export function loadViews(): ViewConfig[] {
     ) {
       const idx = statuses.indexOf('retrying')
       statuses.splice(idx !== -1 ? idx + 1 : statuses.length, 0, 'waiting_on_subtasks')
+    }
+    // Migration: ensure subtasks_proposed is in views that track held (inbox views)
+    if (
+      statuses &&
+      statuses.includes('held') &&
+      !statuses.includes('subtasks_proposed')
+    ) {
+      const idx = statuses.indexOf('held')
+      statuses.splice(idx + 1, 0, 'subtasks_proposed')
     }
   }
   return parsed.views

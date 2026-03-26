@@ -449,7 +449,8 @@ Only propose subtasks when you have clear, actionable sub-pieces. Not every task
         currentTask.status === 'cancelled' ||
         currentTask.status === 'permission' ||
         currentTask.status === 'held' ||
-        currentTask.status === 'waiting_on_subtasks'
+        currentTask.status === 'waiting_on_subtasks' ||
+        currentTask.status === 'subtasks_proposed'
       )
         return
 

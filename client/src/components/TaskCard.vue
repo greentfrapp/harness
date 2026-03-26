@@ -70,6 +70,10 @@ const isWaitingOnSubtasks = computed(
   () => props.task.status === 'waiting_on_subtasks',
 )
 
+const isSubtasksProposed = computed(
+  () => props.task.status === 'subtasks_proposed',
+)
+
 const hasNoChanges = computed(
   () =>
     props.task.status === 'ready' &&
@@ -114,6 +118,7 @@ const statusConfig: Record<
   held: { color: 'bg-amber-500', label: 'Plan Review' },
   error: { color: 'bg-red-500', label: 'Error' },
   waiting_on_subtasks: { color: 'bg-purple-500', label: 'Subtasks', pulse: true },
+  subtasks_proposed: { color: 'bg-purple-500', label: 'Subtask Review' },
   permission: { color: 'bg-red-500', label: 'Permission', pulse: true },
   approved: { color: 'bg-zinc-500', label: 'Approved' },
   rejected: { color: 'bg-red-600', label: 'Rejected' },
@@ -562,9 +567,9 @@ async function handleCollapsedReturn(e: Event) {
         </button>
       </div>
 
-      <!-- Review Subtasks button (visible in collapsed state for waiting_on_subtasks tasks) -->
+      <!-- Review Subtasks button (visible in collapsed state for subtasks_proposed tasks) -->
       <div
-        v-if="isWaitingOnSubtasks"
+        v-if="isSubtasksProposed"
         class="flex items-center gap-1 shrink-0"
         @click.stop>
         <span class="text-xs text-purple-400">Subtasks proposed</span>
