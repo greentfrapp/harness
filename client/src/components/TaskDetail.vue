@@ -352,6 +352,12 @@ function formatTime(ts: number): string {
       }}</span>
     </div>
 
+    <!-- Title -->
+    <div v-if="task.title">
+      <h4 class="text-xs font-medium text-zinc-500 uppercase mb-1">Title</h4>
+      <p class="text-sm font-medium text-zinc-200">{{ task.title }}</p>
+    </div>
+
     <!-- Full prompt -->
     <div>
       <h4 class="text-xs font-medium text-zinc-500 uppercase mb-1">Prompt</h4>

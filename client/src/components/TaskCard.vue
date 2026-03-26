@@ -399,7 +399,8 @@ async function handleCollapsedReturn(e: Event) {
           </span>
           <span class="text-xs text-zinc-600 ml-auto">{{ elapsed }}</span>
         </div>
-        <p class="text-sm text-zinc-300 leading-snug">{{ truncatedPrompt }}</p>
+        <p v-if="task.title" class="text-sm font-medium text-zinc-200 leading-snug">{{ task.title }}</p>
+        <p class="text-sm leading-snug" :class="task.title ? 'text-zinc-500 text-xs' : 'text-zinc-300'">{{ truncatedPrompt }}</p>
       </div>
 
       <!-- Queue position -->

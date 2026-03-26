@@ -171,6 +171,7 @@ export interface Task {
   project_id: string
   type: TaskType
   status: TaskStatus
+  title: string | null
   prompt: string
   priority: Priority
   tags: string[]
@@ -215,6 +216,7 @@ export interface SubtaskProposal {
 export interface CreateTaskInput {
   project_id: string
   type: TaskType
+  title?: string
   prompt: string
   priority?: Priority
   tags?: string[]
@@ -225,6 +227,7 @@ export interface CreateTaskInput {
 
 export interface UpdateTaskInput {
   status?: TaskStatus
+  title?: string | null
   prompt?: string
   priority?: Priority
   tags?: string[]

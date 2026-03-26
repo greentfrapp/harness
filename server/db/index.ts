@@ -27,6 +27,7 @@ const CREATE_TABLES_SQL = `
     project_id TEXT NOT NULL REFERENCES projects(id),
     type TEXT NOT NULL,
     status TEXT NOT NULL,
+    title TEXT,
     prompt TEXT NOT NULL,
     priority TEXT NOT NULL DEFAULT 'P2',
     depends_on TEXT REFERENCES tasks(id),
@@ -125,6 +126,11 @@ export function initDatabase(): void {
   }
   try {
     sqlite.exec('ALTER TABLE subtask_proposals ADD COLUMN feedback TEXT')
+  } catch {
+    // Column already exists
+  }
+  try {
+    sqlite.exec('ALTER TABLE tasks ADD COLUMN title TEXT')
   } catch {
     // Column already exists
   }

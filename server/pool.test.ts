@@ -42,6 +42,7 @@ function makeTask(overrides: Partial<Task> = {}): Task {
     id: 'task-1',
     project_id: 'proj-1',
     type: 'do',
+    title: null,
     prompt: 'Fix the bug',
     status: 'in_progress',
     priority: 'P2',

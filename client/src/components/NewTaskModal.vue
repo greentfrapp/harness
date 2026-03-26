@@ -87,6 +87,7 @@ const projectId = ref(
   props.editingDraft?.project_id ?? props.projects[0]?.id ?? '',
 )
 const taskType = ref(props.editingDraft?.type ?? 'do')
+const title = ref(props.editingDraft?.title ?? '')
 const prompt = ref(props.editingDraft?.prompt ?? '')
 const priority = ref<Priority>(props.editingDraft?.priority ?? 'P2')
 const selectedTags = ref<string[]>(
@@ -153,6 +154,7 @@ async function handleSubmit() {
     const input: CreateTaskInput = {
       project_id: projectId.value,
       type: taskType.value,
+      title: title.value.trim() || undefined,
       prompt: prompt.value.trim(),
       priority: priority.value,
       tags: selectedTags.value.length > 0 ? [...selectedTags.value] : undefined,
@@ -181,6 +183,7 @@ function handleSaveDraft() {
   const input: CreateTaskInput = {
     project_id: projectId.value,
     type: taskType.value,
+    title: title.value.trim() || undefined,
     prompt: prompt.value.trim(),
     priority: priority.value,
     tags: selectedTags.value.length > 0 ? [...selectedTags.value] : undefined,
@@ -270,6 +273,18 @@ const priorities: { value: Priority; label: string }[] = [
                 {{ t }}
               </option>
             </select>
+          </div>
+
+          <!-- Title (optional) -->
+          <div>
+            <label class="block text-xs font-medium text-zinc-400 mb-1"
+              >Title <span class="text-zinc-600">(optional)</span></label
+            >
+            <input
+              v-model="title"
+              type="text"
+              class="w-full bg-zinc-800 border border-zinc-700 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-600"
+              placeholder="Short label for the task" />
           </div>
 
           <!-- Prompt -->

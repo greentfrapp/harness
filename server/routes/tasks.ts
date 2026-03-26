@@ -1052,6 +1052,7 @@ export function createTaskRoutes(ctx: AppContext) {
         const newTask = queries.createTask({
           project_id: task.project_id,
           type: task.type,
+          title: proposal.title,
           prompt: proposal.prompt,
           priority: proposal.priority as Priority,
         })
@@ -1121,6 +1122,7 @@ export function createTaskRoutes(ctx: AppContext) {
       const newTask = queries.createTask({
         project_id: task.project_id,
         type: task.type,
+        title: proposal.title,
         prompt: a.prompt ?? proposal.prompt,
         priority: a.priority ?? (proposal.priority as Priority),
       })

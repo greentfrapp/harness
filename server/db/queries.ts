@@ -78,6 +78,7 @@ export function createTask(input: CreateTaskInput): Task {
     project_id: input.project_id,
     type: input.type,
     status: input.as_draft ? 'draft' : 'queued',
+    title: input.title ?? null,
     prompt: input.prompt,
     priority: input.priority ?? 'P2',
     tags: JSON.stringify(input.tags ?? []),
