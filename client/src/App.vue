@@ -45,6 +45,10 @@ function onKeydown(e: KeyboardEvent) {
     e.preventDefault()
     showNewTask.value = true
   }
+  if (e.key === 's' && !e.ctrlKey && !e.metaKey && !e.altKey && !isEditing) {
+    e.preventDefault()
+    showSettings.value = true
+  }
   if ((e.ctrlKey || e.metaKey) && e.key === ',') {
     e.preventDefault()
     showSettings.value = true
@@ -241,8 +245,8 @@ onUnmounted(() => {
           </svg>
         </button>
         <button
-          class="p-1.5 text-zinc-400 hover:text-zinc-200 transition-colors rounded-md hover:bg-zinc-800"
-          title="Settings (⌘,)"
+          class="p-1.5 text-zinc-400 hover:text-zinc-200 transition-colors rounded-md hover:bg-zinc-800 flex items-center gap-1"
+          title="Settings (S)"
           @click="showSettings = true">
           <svg
             class="w-5 h-5"
@@ -260,6 +264,7 @@ onUnmounted(() => {
               stroke-width="1.5"
               d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
           </svg>
+          <kbd class="text-xs text-zinc-300 opacity-70">S</kbd>
         </button>
         <button
           class="px-4 py-1.5 bg-zinc-600 hover:bg-zinc-500 text-sm font-medium rounded-md transition-colors"
