@@ -15,6 +15,8 @@ export interface AgentSessionData {
   pid: number
   granted_tools?: string[]
   plan_approved?: boolean
+  pending_tool?: string | null
+  pending_tool_input?: Record<string, unknown> | null
 }
 
 interface ActiveAgent {
@@ -23,6 +25,25 @@ interface ActiveAgent {
   process: ChildProcess
   sessionId: string | null
   usesWorktree: boolean
+}
+
+/** Shape of a raw Claude Code stream-json message with assistant content. */
+interface RawAssistantMessage {
+  type: string
+  message?: {
+    content?: Array<{
+      type: string
+      name?: string
+      text?: string
+      input?: Record<string, unknown>
+    }>
+  }
+}
+
+function asRawMessage(raw: unknown): RawAssistantMessage | null {
+  const msg = raw as RawAssistantMessage
+  if (msg && typeof msg.type === 'string') return msg
+  return null
 }
 
 interface PoolDeps {
@@ -335,8 +356,8 @@ export class AgentPool {
 
         // Track the last tool name from assistant tool_use messages
         // so we can report it when a permission request follows
-        const raw = event.raw as any
-        if (raw?.type === 'assistant' && Array.isArray(raw?.message?.content)) {
+        const raw = asRawMessage(event.raw)
+        if (raw?.type === 'assistant' && Array.isArray(raw.message?.content)) {
           for (const block of raw.message.content) {
             if (block.type === 'tool_use' && block.name) {
               lastToolName = block.name
@@ -463,8 +484,8 @@ export class AgentPool {
       const progressBuf = this.progressBuffers.get(taskId) ?? []
       let pendingToolInput: Record<string, unknown> | null = null
       for (let i = progressBuf.length - 1; i >= 0; i--) {
-        const raw = progressBuf[i] as any
-        if (raw?.type === 'assistant' && Array.isArray(raw?.message?.content)) {
+        const raw = asRawMessage(progressBuf[i])
+        if (raw?.type === 'assistant' && Array.isArray(raw.message?.content)) {
           for (const block of raw.message.content) {
             if (block.type === 'tool_use' && block.name === event.toolName) {
               pendingToolInput = block.input ?? null
@@ -495,8 +516,8 @@ export class AgentPool {
       const sessionData = parseSessionData(
         currentTask?.agent_session_data ?? null,
       ) ?? { session_id: null, pid: 0 }
-      ;(sessionData as any).pending_tool = event.toolName ?? null
-      ;(sessionData as any).pending_tool_input = pendingToolInput
+      sessionData.pending_tool = event.toolName ?? null
+      sessionData.pending_tool_input = pendingToolInput
 
       this.deps.updateTask(taskId, {
         status: 'permission',
@@ -518,7 +539,7 @@ export class AgentPool {
     let buffer = this.progressBuffers.get(taskId)
     if (!buffer) {
       serverLog.info(
-        `First progress event for task (type=${(event.raw as any)?.type ?? event.type})`,
+        `First progress event for task (type=${asRawMessage(event.raw)?.type ?? event.type})`,
         taskId,
       )
     }

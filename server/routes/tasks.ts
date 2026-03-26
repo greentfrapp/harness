@@ -6,12 +6,18 @@ import type {
   Task,
   UpdateTaskInput,
 } from '../../shared/types'
+import type { TaskStatus } from '../../shared/types'
 import {
+  ACTIVE_STATUSES,
   DRAFT_STATUSES,
   INBOX_STATUSES,
   OUTBOX_STATUSES,
+  REJECTABLE_STATUSES,
+  REVIEWABLE_STATUSES,
+  RUNNING_STATUSES,
+  TERMINAL_STATUSES,
+  getErrorMessage,
 } from '../../shared/types'
-import { getErrorMessage } from '../../shared/types'
 import { CONFIG_PATH, readConfigRaw, saveConfigRaw } from '../config'
 import type { AppContext } from '../context'
 import * as git from '../git'
@@ -260,7 +266,7 @@ export function createTaskRoutes(ctx: AppContext) {
         JSON.stringify({ previous: existing.status }),
       )
 
-      if (INBOX_STATUSES.includes(body.status as any)) {
+      if (INBOX_STATUSES.includes(body.status as TaskStatus)) {
         sseManager.broadcast('inbox:new', updated)
       } else {
         sseManager.broadcast('task:updated', updated)
@@ -280,7 +286,7 @@ export function createTaskRoutes(ctx: AppContext) {
     const result = getTaskWithProjectOr404(c, id)
     if (result instanceof Response) return result
     const { task, project } = result
-    if (task.status !== 'ready' && task.status !== 'error') {
+    if (!REVIEWABLE_STATUSES.includes(task.status)) {
       return c.json({ error: 'Task cannot be approved in current status' }, 400)
     }
 
@@ -357,11 +363,7 @@ export function createTaskRoutes(ctx: AppContext) {
     const result = getTaskWithProjectOr404(c, id)
     if (result instanceof Response) return result
     const { task, project } = result
-    if (
-      task.status !== 'ready' &&
-      task.status !== 'error' &&
-      task.status !== 'held'
-    ) {
+    if (!REJECTABLE_STATUSES.includes(task.status)) {
       return c.json({ error: 'Task cannot be rejected in current status' }, 400)
     }
 
@@ -403,7 +405,7 @@ export function createTaskRoutes(ctx: AppContext) {
     const result = getTaskWithProjectOr404(c, id)
     if (result instanceof Response) return result
     const { task } = result
-    if (task.status !== 'ready' && task.status !== 'error') {
+    if (!REVIEWABLE_STATUSES.includes(task.status)) {
       return c.json({ error: 'Only ready or error tasks can be fixed' }, 400)
     }
 
@@ -572,7 +574,7 @@ export function createTaskRoutes(ctx: AppContext) {
   function cleanupAndDeleteTasks(tasksToDelete: Task[]): string[] {
     let hadRunning = false
     for (const task of tasksToDelete) {
-      if (task.status === 'in_progress' || task.status === 'retrying') {
+      if (RUNNING_STATUSES.includes(task.status)) {
         pool.killAgent(task.id)
         hadRunning = true
       }
@@ -634,10 +636,9 @@ export function createTaskRoutes(ctx: AppContext) {
     if (result instanceof Response) return result
     const existing = result
 
-    const terminalStatuses = ['approved', 'rejected', 'cancelled']
     const forcePermanent = c.req.query('permanent') === 'true'
     const isDraft = existing.status === 'draft'
-    const isTerminal = terminalStatuses.includes(existing.status)
+    const isTerminal = TERMINAL_STATUSES.includes(existing.status)
 
     if (isTerminal || isDraft || forcePermanent) {
       // Kill running agent if any (relevant when force-deleting active tasks)
@@ -689,11 +690,7 @@ export function createTaskRoutes(ctx: AppContext) {
     const result = getTaskOr404(c, id)
     if (result instanceof Response) return result
     const task = result
-    if (
-      task.status !== 'ready' &&
-      task.status !== 'error' &&
-      task.status !== 'held'
-    ) {
+    if (!REJECTABLE_STATUSES.includes(task.status)) {
       return c.json(
         { error: 'Only ready, error, or held tasks can be revised' },
         400,
@@ -744,7 +741,7 @@ export function createTaskRoutes(ctx: AppContext) {
 
     // Guard: only one active follow-up per parent task
     const activeFollowUps = queries
-      .getTasksByStatus(['queued', 'in_progress', 'retrying', 'ready', 'error'])
+      .getTasksByStatus([...ACTIVE_STATUSES, 'error'])
       .filter((t) => t.parent_task_id === id)
     if (activeFollowUps.length > 0) {
       return c.json(
@@ -839,7 +836,7 @@ export function createTaskRoutes(ctx: AppContext) {
     const result = getTaskWithProjectOr404(c, id)
     if (result instanceof Response) return result
     const { task, project } = result
-    if (task.status !== 'ready' && task.status !== 'error') {
+    if (!REVIEWABLE_STATUSES.includes(task.status)) {
       return c.json(
         { error: 'Only ready or error tasks can be checked out' },
         400,
@@ -1005,15 +1002,9 @@ export function createTaskRoutes(ctx: AppContext) {
 
 /** Find tasks that depend on the given task. */
 function getDependentTasks(
-  queries: { getTasksByStatus: (s: string[]) => any[] },
+  queries: { getTasksByStatus: (s: string[]) => Task[] },
   taskId: string,
-): any[] {
-  const activeTasks = queries.getTasksByStatus([
-    'queued',
-    'in_progress',
-    'retrying',
-    'ready',
-    'held',
-  ])
-  return activeTasks.filter((t: any) => t.depends_on === taskId)
+): Task[] {
+  const activeTasks = queries.getTasksByStatus([...ACTIVE_STATUSES])
+  return activeTasks.filter((t) => t.depends_on === taskId)
 }

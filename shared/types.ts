@@ -35,6 +35,31 @@ export const INBOX_STATUSES: TaskStatus[] = [
   'rejected',
 ]
 
+// Terminal statuses (task is done, can only be deleted)
+export const TERMINAL_STATUSES: TaskStatus[] = [
+  'approved',
+  'rejected',
+  'cancelled',
+]
+
+// Statuses where the agent is actively running
+export const RUNNING_STATUSES: TaskStatus[] = ['in_progress', 'retrying']
+
+// Statuses where the task can be approved/fixed/checked out
+export const REVIEWABLE_STATUSES: TaskStatus[] = ['ready', 'error']
+
+// Statuses where the task can be rejected/revised
+export const REJECTABLE_STATUSES: TaskStatus[] = ['ready', 'error', 'held']
+
+// Non-terminal statuses (task is still in the pipeline)
+export const ACTIVE_STATUSES: TaskStatus[] = [
+  'queued',
+  'in_progress',
+  'retrying',
+  'ready',
+  'held',
+]
+
 // Config types
 export interface AgentConfig {
   adapter: string // references AgentAdapter.id

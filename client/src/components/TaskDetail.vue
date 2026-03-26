@@ -1,5 +1,11 @@
 <script setup lang="ts">
 import type { Task, TaskEvent } from '@shared/types'
+import {
+  REJECTABLE_STATUSES,
+  REVIEWABLE_STATUSES,
+  RUNNING_STATUSES,
+  TERMINAL_STATUSES,
+} from '@shared/types'
 import { marked } from 'marked'
 import { computed, nextTick, onMounted, ref } from 'vue'
 import { api } from '../api'
@@ -104,15 +110,14 @@ onMounted(async () => {
 
 const showSessionStream = computed(
   () =>
-    props.context === 'outbox' &&
-    (props.task.status === 'in_progress' || props.task.status === 'retrying'),
+    props.context === 'outbox' && RUNNING_STATUSES.includes(props.task.status),
 )
 
 const showDiffViewer = computed(
   () =>
     props.context === 'inbox' &&
     props.task.branch_name &&
-    (props.task.status === 'ready' || props.task.status === 'error'),
+    REVIEWABLE_STATUSES.includes(props.task.status),
 )
 
 const renderedSummary = computed(() => {
@@ -181,9 +186,7 @@ async function handleRetry() {
   }
 }
 
-const isTerminal = computed(() =>
-  ['approved', 'rejected', 'cancelled'].includes(props.task.status),
-)
+const isTerminal = computed(() => TERMINAL_STATUSES.includes(props.task.status))
 
 const hasNoChanges = computed(
   () =>
@@ -449,9 +452,7 @@ function formatTime(ts: number): string {
     <div
       v-if="
         context === 'inbox' &&
-        (task.status === 'ready' ||
-          task.status === 'error' ||
-          task.status === 'held') &&
+        REJECTABLE_STATUSES.includes(task.status) &&
         (!actionsDisabled || isTaskCheckedOut)
       "
       class="space-y-2">

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { TagConfig, Task } from '@shared/types'
+import { TERMINAL_STATUSES } from '@shared/types'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { api } from '../api'
 import { useCheckouts } from '../stores/useCheckouts'
@@ -49,9 +50,7 @@ const deleting = ref(false)
 const collapsedCheckingOut = ref(false)
 const collapsedReturning = ref(false)
 
-const isTerminal = computed(() =>
-  ['approved', 'rejected', 'cancelled'].includes(props.task.status),
-)
+const isTerminal = computed(() => TERMINAL_STATUSES.includes(props.task.status))
 
 const needsInput = computed(
   () => props.context === 'inbox' && props.task.status === 'ready',
