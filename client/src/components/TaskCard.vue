@@ -50,6 +50,8 @@ const deleting = ref(false)
 const collapsedCheckingOut = ref(false)
 const collapsedReturning = ref(false)
 
+const FIX_TAGS = ['merge-conflict', 'checkout-failed', 'needs-commit']
+
 const isTerminal = computed(() => TERMINAL_STATUSES.includes(props.task.status))
 
 const needsInput = computed(
