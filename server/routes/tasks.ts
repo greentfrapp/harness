@@ -12,12 +12,16 @@ import {
   DRAFT_STATUSES,
   INBOX_STATUSES,
   OUTBOX_STATUSES,
-  REJECTABLE_STATUSES,
   REVIEWABLE_STATUSES,
   RUNNING_STATUSES,
   TERMINAL_STATUSES,
   getErrorMessage,
 } from '../../shared/types'
+import {
+  findAction,
+  transition,
+  type TransitionAction,
+} from '../../shared/transitions'
 import { CONFIG_PATH, readConfigRaw, saveConfigRaw } from '../config'
 import type { AppContext } from '../context'
 import * as git from '../git'
@@ -53,6 +57,19 @@ export function createTaskRoutes(ctx: AppContext) {
     const project = queries.getProjectById(task.project_id)
     if (!project) return c.json({ error: 'Project not found' }, 404)
     return { task, project }
+  }
+
+  /** Validate a status transition, returning the new status or a 400 response. */
+  function guardTransition(
+    c: Context,
+    status: TaskStatus,
+    action: TransitionAction,
+  ): TaskStatus | Response {
+    try {
+      return transition(status, action)
+    } catch (e) {
+      return c.json({ error: (e as Error).message }, 400)
+    }
   }
 
   /** Clean up a task's worktree and branch. */
@@ -211,9 +228,8 @@ export function createTaskRoutes(ctx: AppContext) {
     const result = getTaskOr404(c, id)
     if (result instanceof Response) return result
     const task = result
-    if (task.status !== 'draft') {
-      return c.json({ error: 'Only draft tasks can be sent' }, 400)
-    }
+    const newStatus = guardTransition(c, task.status, 'send')
+    if (newStatus instanceof Response) return newStatus
 
     // Allow updating prompt/priority/depends_on/tags when sending
     const body = await c.req
@@ -257,6 +273,20 @@ export function createTaskRoutes(ctx: AppContext) {
     const existing = result
 
     const body = await c.req.json<UpdateTaskInput>()
+
+    // Validate status transitions
+    if (body.status && body.status !== existing.status) {
+      const action = findAction(existing.status, body.status)
+      if (!action) {
+        return c.json(
+          {
+            error: `Cannot transition from '${existing.status}' to '${body.status}'`,
+          },
+          400,
+        )
+      }
+    }
+
     const updated = queries.updateTask(id, body)
 
     if (body.status && body.status !== existing.status) {
@@ -286,9 +316,8 @@ export function createTaskRoutes(ctx: AppContext) {
     const result = getTaskWithProjectOr404(c, id)
     if (result instanceof Response) return result
     const { task, project } = result
-    if (!REVIEWABLE_STATUSES.includes(task.status)) {
-      return c.json({ error: 'Task cannot be approved in current status' }, 400)
-    }
+    const newStatus = guardTransition(c, task.status, 'approve')
+    if (newStatus instanceof Response) return newStatus
 
     // Auto-return if this task is currently checked out
     autoReturnIfCheckedOut(id)
@@ -363,9 +392,8 @@ export function createTaskRoutes(ctx: AppContext) {
     const result = getTaskWithProjectOr404(c, id)
     if (result instanceof Response) return result
     const { task, project } = result
-    if (!REJECTABLE_STATUSES.includes(task.status)) {
-      return c.json({ error: 'Task cannot be rejected in current status' }, 400)
-    }
+    const newStatus = guardTransition(c, task.status, 'reject')
+    if (newStatus instanceof Response) return newStatus
 
     // Auto-return if this task is currently checked out
     autoReturnIfCheckedOut(id)
@@ -373,7 +401,7 @@ export function createTaskRoutes(ctx: AppContext) {
     cleanupWorktree(project, task)
 
     const updated = queries.updateTask(id, {
-      status: 'rejected',
+      status: newStatus,
       worktree_path: null,
       branch_name: null,
     })
@@ -405,9 +433,8 @@ export function createTaskRoutes(ctx: AppContext) {
     const result = getTaskWithProjectOr404(c, id)
     if (result instanceof Response) return result
     const { task } = result
-    if (!REVIEWABLE_STATUSES.includes(task.status)) {
-      return c.json({ error: 'Only ready or error tasks can be fixed' }, 400)
-    }
+    const newStatus = guardTransition(c, task.status, 'fix')
+    if (newStatus instanceof Response) return newStatus
 
     // Auto-return if this task is currently checked out
     autoReturnIfCheckedOut(id)
@@ -457,12 +484,11 @@ export function createTaskRoutes(ctx: AppContext) {
     const result = getTaskWithProjectOr404(c, id)
     if (result instanceof Response) return result
     const { task } = result
-    if (task.status !== 'held') {
-      return c.json({ error: 'Only held tasks can have plans approved' }, 400)
-    }
+    const newStatus = guardTransition(c, task.status, 'approve_plan')
+    if (newStatus instanceof Response) return newStatus
 
     const updated = queries.updateTask(id, {
-      status: 'queued',
+      status: newStatus,
       prompt:
         'Your plan has been approved. Execute it now — you have full permissions to make changes.',
       error_message: null,
@@ -488,9 +514,8 @@ export function createTaskRoutes(ctx: AppContext) {
     const result = getTaskWithProjectOr404(c, id)
     if (result instanceof Response) return result
     const { task } = result
-    if (task.status !== 'permission') {
-      return c.json({ error: 'Only permission tasks can be granted' }, 400)
-    }
+    const newStatus = guardTransition(c, task.status, 'grant_permission')
+    if (newStatus instanceof Response) return newStatus
 
     // Add the blocked tool to the cumulative granted_tools list.
     // For Bash, use command-level patterns like Bash(curl:*) instead of blanket Bash.
@@ -541,9 +566,8 @@ export function createTaskRoutes(ctx: AppContext) {
     const result = getTaskWithProjectOr404(c, id)
     if (result instanceof Response) return result
     const { task, project } = result
-    if (task.status !== 'error') {
-      return c.json({ error: 'Only error tasks can be retried' }, 400)
-    }
+    const newStatus = guardTransition(c, task.status, 'retry')
+    if (newStatus instanceof Response) return newStatus
 
     // Clean up old worktree and branch
     cleanupWorktree(project, task)
@@ -659,6 +683,9 @@ export function createTaskRoutes(ctx: AppContext) {
     }
 
     // Active task — cancel (soft delete)
+    const cancelStatus = guardTransition(c, existing.status, 'cancel')
+    if (cancelStatus instanceof Response) return cancelStatus
+
     pool.killAgent(id)
 
     // Clean up worktree and branch
@@ -669,7 +696,7 @@ export function createTaskRoutes(ctx: AppContext) {
     queries.clearParentReferences(id)
 
     const updated = queries.updateTask(id, {
-      status: 'cancelled',
+      status: cancelStatus,
       worktree_path: null,
       branch_name: null,
     })
@@ -688,12 +715,8 @@ export function createTaskRoutes(ctx: AppContext) {
     const result = getTaskOr404(c, id)
     if (result instanceof Response) return result
     const task = result
-    if (!REJECTABLE_STATUSES.includes(task.status)) {
-      return c.json(
-        { error: 'Only ready, error, or held tasks can be revised' },
-        400,
-      )
-    }
+    const newStatus = guardTransition(c, task.status, 'revise')
+    if (newStatus instanceof Response) return newStatus
 
     // Auto-return if this task is currently checked out
     autoReturnIfCheckedOut(id)

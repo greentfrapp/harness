@@ -5,6 +5,7 @@ import type {
   SSEEventType,
   Task,
 } from '../shared/types'
+import { transition } from '../shared/transitions'
 import type { AgentProgressEvent } from './agents/index'
 import type { AgentRegistry } from './agents/index'
 import * as git from './git'
@@ -455,8 +456,11 @@ export class AgentPool {
       this.killAgent(taskId)
 
       // Store the plan summary and move to held
+      const currentTask = this.deps.getTaskById(taskId)
       this.deps.updateTask(taskId, {
-        status: 'held',
+        status: currentTask
+          ? transition(currentTask.status, 'plan_approval_request')
+          : 'held',
         agent_summary: event.summary || null,
         error_message: null,
       })
@@ -509,7 +513,9 @@ export class AgentPool {
       // Store pending_tool and its input in session data
       const currentTask = this.deps.getTaskById(taskId)
       this.deps.updateTask(taskId, {
-        status: 'permission',
+        status: currentTask
+          ? transition(currentTask.status, 'permission_request')
+          : 'permission',
         error_message: toolInfo,
         agent_session_data: updateSessionData(
           currentTask?.agent_session_data ?? null,
@@ -581,7 +587,7 @@ export class AgentPool {
     }
 
     this.deps.updateTask(taskId, {
-      status: 'ready',
+      status: transition(task.status, 'complete'),
       agent_summary: summary || null,
       diff_summary: diffSummary,
       diff_full: diffFull,
@@ -616,7 +622,7 @@ export class AgentPool {
       )
       // Retry with --resume
       this.deps.updateTask(taskId, {
-        status: 'retrying',
+        status: transition(task.status, 'fail'),
         retry_count: task.retry_count + 1,
         error_message: errorMsg,
       })
@@ -645,8 +651,9 @@ export class AgentPool {
   }
 
   private pushToError(taskId: string, errorMsg: string): void {
+    const task = this.deps.getTaskById(taskId)
     this.deps.updateTask(taskId, {
-      status: 'error',
+      status: task ? transition(task.status, 'dispatch_error') : 'error',
       error_message: errorMsg,
     })
     this.deps.createTaskEvent(

@@ -1,4 +1,5 @@
 import fs from 'node:fs'
+import { transition } from '../shared/transitions'
 import type { Project, Task } from '../shared/types'
 import * as git from './git'
 import { getSessionData } from './pool'
@@ -47,7 +48,7 @@ function recoverTask(deps: RecoveryDeps, task: Task): void {
   const project = deps.getProjectById(task.project_id)
   if (!project) {
     deps.updateTask(task.id, {
-      status: 'error',
+      status: transition(task.status, 'recover_error'),
       error_message: 'Server restarted; project not found',
     })
     deps.createTaskEvent(
@@ -77,7 +78,7 @@ function recoverTask(deps: RecoveryDeps, task: Task): void {
     ) {
       // Has partial work — push to inbox as error so user can review
       deps.updateTask(task.id, {
-        status: 'error',
+        status: transition(task.status, 'recover_error'),
         error_message:
           'Server restarted during execution. Partial work available for review.',
         diff_summary: git.getDiffStats(
@@ -100,7 +101,7 @@ function recoverTask(deps: RecoveryDeps, task: Task): void {
     } else if (!worktreeExists) {
       // Worktree gone — re-queue for fresh dispatch
       deps.updateTask(task.id, {
-        status: 'queued',
+        status: transition(task.status, 'recover_requeue'),
         worktree_path: null,
         branch_name: null,
         agent_session_data: null,
@@ -120,7 +121,7 @@ function recoverTask(deps: RecoveryDeps, task: Task): void {
       git.removeWorktree(project.repo_path, task.worktree_path)
       git.deleteBranch(project.repo_path, task.branch_name)
       deps.updateTask(task.id, {
-        status: 'queued',
+        status: transition(task.status, 'recover_requeue'),
         worktree_path: null,
         branch_name: null,
         agent_session_data: null,
@@ -141,7 +142,7 @@ function recoverTask(deps: RecoveryDeps, task: Task): void {
   } else {
     // Discuss task (no worktree) — re-queue
     deps.updateTask(task.id, {
-      status: 'queued',
+      status: transition(task.status, 'recover_requeue'),
       agent_session_data: null,
       error_message: null,
     })

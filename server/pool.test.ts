@@ -323,7 +323,7 @@ describe('AgentPool progress broadcasting', () => {
       updateTask,
       createTaskEvent,
       broadcast,
-      getTaskById: () => makeTask({ status: 'permission' as any }),
+      getTaskById: () => makeTask({ status: 'in_progress' }),
       onTaskCompleted,
     })
 
@@ -565,7 +565,7 @@ describe('AgentPool progress broadcasting', () => {
       updateTask,
       createTaskEvent,
       broadcast,
-      getTaskById: () => makeTask({ status: 'held' as any }),
+      getTaskById: () => makeTask({ status: 'in_progress' }),
       onTaskCompleted,
     })
 
