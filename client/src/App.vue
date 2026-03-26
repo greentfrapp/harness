@@ -3,6 +3,7 @@ import type { CreateTaskInput, Project, TagConfig, ViewConfig } from '@shared/ty
 import { onMounted, onUnmounted, provide, ref } from 'vue'
 import { api } from './api'
 import ActivityLog from './components/ActivityLog.vue'
+import Tooltip from './components/BaseTooltip.vue'
 import NewTaskModal from './components/NewTaskModal.vue'
 import SettingsModal from './components/SettingsModal.vue'
 import ViewEditor from './components/ViewEditor.vue'
@@ -212,26 +213,29 @@ onUnmounted(() => {
       class="border-b border-zinc-800 bg-zinc-900 px-6 py-3 flex items-center justify-between">
       <div class="flex items-center gap-4">
         <h1 class="text-lg font-semibold tracking-tight">Harness</h1>
-        <div
-          class="w-2 h-2 rounded-full"
-          :class="events.connected ? 'bg-green-500' : 'bg-red-500'"
-          :title="events.connected ? 'Connected' : 'Disconnected'" />
-        <div
+        <Tooltip :text="events.connected ? 'Connected' : 'Disconnected'" position="bottom">
+          <div
+            class="w-2 h-2 rounded-full"
+            :class="events.connected ? 'bg-green-500' : 'bg-red-500'" />
+        </Tooltip>
+        <Tooltip
           v-if="repoStatus.hasDirtyRepos"
-          class="w-2 h-2 rounded-full bg-amber-500"
-          :title="
+          :text="
             repoStatus.dirtyProjects
               .map(
                 (p: import('@shared/types').RepoStatus) =>
                   `${p.projectName}: ${p.fileCount} file${p.fileCount === 1 ? '' : 's'} changed`,
               )
               .join('\n')
-          " />
+          "
+          position="bottom">
+          <div class="w-2 h-2 rounded-full bg-amber-500" />
+        </Tooltip>
       </div>
       <div class="flex items-center gap-2">
+        <Tooltip text="Add View" position="bottom">
         <button
           class="p-1.5 text-zinc-400 hover:text-zinc-200 transition-colors rounded-md hover:bg-zinc-800"
-          title="Add View"
           @click="handleNewView">
           <svg
             class="w-5 h-5"
@@ -245,9 +249,10 @@ onUnmounted(() => {
               d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
           </svg>
         </button>
+        </Tooltip>
+        <Tooltip text="Settings (S)" position="bottom">
         <button
           class="p-1.5 text-zinc-400 hover:text-zinc-200 transition-colors rounded-md hover:bg-zinc-800 flex items-center gap-1"
-          title="Settings (S)"
           @click="showSettings = true">
           <svg
             class="w-5 h-5"
@@ -267,6 +272,7 @@ onUnmounted(() => {
           </svg>
           <kbd class="text-xs text-zinc-300 opacity-70">S</kbd>
         </button>
+        </Tooltip>
         <button
           class="px-4 py-1.5 bg-zinc-600 hover:bg-zinc-500 text-sm font-medium rounded-md transition-colors"
           @click="showNewTask = true">

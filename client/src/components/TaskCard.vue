@@ -5,6 +5,7 @@ import { computed, inject, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { api } from '../api'
 import { useCheckouts } from '../stores/useCheckouts'
 import TaskDetail from './TaskDetail.vue'
+import Tooltip from './BaseTooltip.vue'
 
 const TAG_COLORS: Record<string, { bg: string; text: string }> = {
   red: { bg: 'bg-red-900', text: 'text-red-300' },
@@ -431,20 +432,16 @@ async function handleCollapsedReturn(e: Event) {
         class="flex items-center gap-1 shrink-0"
         @click.stop>
         <template v-if="actionsDisabled">
-          <span
-            class="text-xs text-zinc-500 italic"
-            title="Another task in this repo is checked out"
-            >Locked</span
-          >
+          <Tooltip text="Another task in this repo is checked out">
+            <span class="text-xs text-zinc-500 italic">Locked</span>
+          </Tooltip>
         </template>
         <template v-else-if="collapsedMergeError || collapsedCheckoutError">
-          <span
-            class="text-xs text-red-400 max-w-48 truncate"
-            :title="collapsedMergeError || collapsedCheckoutError"
-            >{{
+          <Tooltip :text="collapsedMergeError || collapsedCheckoutError || ''">
+            <span class="text-xs text-red-400 max-w-48 truncate">{{
               collapsedMergeError ? 'Merge failed' : 'Checkout failed'
-            }}</span
-          >
+            }}</span>
+          </Tooltip>
           <button
             class="px-2 py-1 text-xs font-medium rounded bg-yellow-900 hover:bg-yellow-800 text-yellow-300 transition-colors disabled:opacity-50"
             :disabled="collapsedFixing"
@@ -513,11 +510,9 @@ async function handleCollapsedReturn(e: Event) {
       <!-- Retry button (visible in collapsed state for error tasks) -->
       <div v-if="isError" class="flex items-center gap-1 shrink-0" @click.stop>
         <template v-if="actionsDisabled">
-          <span
-            class="text-xs text-zinc-500 italic"
-            title="Another task in this repo is checked out"
-            >Locked</span
-          >
+          <Tooltip text="Another task in this repo is checked out">
+            <span class="text-xs text-zinc-500 italic">Locked</span>
+          </Tooltip>
         </template>
         <template v-else>
           <button
@@ -534,11 +529,11 @@ async function handleCollapsedReturn(e: Event) {
         v-if="isPermission"
         class="flex items-center gap-1 shrink-0"
         @click.stop>
-        <span
-          class="text-xs text-red-400 max-w-48 truncate"
-          :title="task.error_message ?? ''">
-          {{ task.error_message ?? 'Permission needed' }}
-        </span>
+        <Tooltip :text="task.error_message ?? ''">
+          <span class="text-xs text-red-400 max-w-48 truncate">
+            {{ task.error_message ?? 'Permission needed' }}
+          </span>
+        </Tooltip>
         <button
           class="px-2 py-1 text-xs font-medium rounded bg-green-900 hover:bg-green-800 text-green-300 transition-colors disabled:opacity-50"
           :disabled="collapsedGranting"
@@ -649,11 +644,11 @@ async function handleCollapsedReturn(e: Event) {
       </div>
 
       <!-- Maximize button -->
+      <Tooltip text="Open in modal">
       <span
         role="button"
         tabindex="0"
         class="w-4 h-4 text-zinc-600 hover:text-zinc-300 mt-1 shrink-0 transition-colors cursor-pointer"
-        title="Open in modal"
         @click.stop="emit('maximize', task.id)"
         @keydown.enter.stop="emit('maximize', task.id)"
         @keydown.space.stop="emit('maximize', task.id)">
@@ -669,6 +664,7 @@ async function handleCollapsedReturn(e: Event) {
             d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5" />
         </svg>
       </span>
+      </Tooltip>
 
       <!-- Expand chevron -->
       <svg

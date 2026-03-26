@@ -13,6 +13,7 @@ import { api } from '../api'
 import { useCheckouts } from '../stores/useCheckouts'
 import DiffViewer from './DiffViewer.vue'
 import SessionStream from './SessionStream.vue'
+import Tooltip from './BaseTooltip.vue'
 
 const props = defineProps<{
   task: Task
@@ -768,12 +769,11 @@ function formatTime(ts: number): string {
       </template>
       <template v-if="task.status === 'error'">
         <!-- Errored tasks only show Retry and Revise -->
-        <span
-          v-if="actionsDisabled"
-          class="text-xs text-zinc-500 italic self-center"
-          title="Return the checked-out task first">
-          Actions locked — another task in this repo is checked out
-        </span>
+        <Tooltip v-if="actionsDisabled" text="Return the checked-out task first">
+          <span class="text-xs text-zinc-500 italic self-center">
+            Actions locked — another task in this repo is checked out
+          </span>
+        </Tooltip>
         <template v-else>
           <button
             class="px-3 py-1.5 text-xs font-medium rounded bg-yellow-900 hover:bg-yellow-800 text-yellow-300 transition-colors disabled:opacity-50"
@@ -790,12 +790,11 @@ function formatTime(ts: number): string {
       </template>
       <template v-if="task.status === 'ready'">
         <!-- Warning when actions are disabled due to another task being checked out -->
-        <span
-          v-if="actionsDisabled"
-          class="text-xs text-zinc-500 italic self-center"
-          title="Return the checked-out task first">
-          Actions locked — another task in this repo is checked out
-        </span>
+        <Tooltip v-if="actionsDisabled" text="Return the checked-out task first">
+          <span class="text-xs text-zinc-500 italic self-center">
+            Actions locked — another task in this repo is checked out
+          </span>
+        </Tooltip>
         <!-- No changes: show Revise and Delete instead of Approve/Reject/Checkout -->
         <template v-else-if="hasNoChanges">
           <button

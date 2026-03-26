@@ -3,6 +3,7 @@ import { html as diff2html } from 'diff2html'
 import 'diff2html/bundles/css/diff2html.min.css'
 import { onMounted, ref, watch } from 'vue'
 import { api } from '../api'
+import Tooltip from './BaseTooltip.vue'
 
 const props = defineProps<{
   taskId: string
@@ -169,25 +170,28 @@ async function requestCommit() {
       <!-- Tab bar -->
       <div
         class="diff-tab-bar flex overflow-x-auto border-b border-zinc-800 bg-[#0d1117]">
-        <button
+        <Tooltip
           v-for="(file, idx) in fileDiffs"
           :key="file.fileName"
-          class="diff-tab shrink-0 px-3 py-1.5 text-xs font-mono border-r border-zinc-800 transition-colors whitespace-nowrap"
-          :class="
-            idx === activeFileIndex
-              ? 'bg-[#161b22] text-[#58a6ff] border-b-2 border-b-[#58a6ff]'
-              : 'text-zinc-400 hover:text-zinc-200 hover:bg-[#161b22]/50'
-          "
-          :title="file.fileName"
-          @click="activeFileIndex = idx">
-          {{ shortName(file.fileName) }}
-          <span v-if="file.additions" class="text-green-400 ml-1"
-            >+{{ file.additions }}</span
-          >
-          <span v-if="file.deletions" class="text-red-400 ml-1"
-            >-{{ file.deletions }}</span
-          >
-        </button>
+          :text="file.fileName"
+          position="bottom">
+          <button
+            class="diff-tab shrink-0 px-3 py-1.5 text-xs font-mono border-r border-zinc-800 transition-colors whitespace-nowrap"
+            :class="
+              idx === activeFileIndex
+                ? 'bg-[#161b22] text-[#58a6ff] border-b-2 border-b-[#58a6ff]'
+                : 'text-zinc-400 hover:text-zinc-200 hover:bg-[#161b22]/50'
+            "
+            @click="activeFileIndex = idx">
+            {{ shortName(file.fileName) }}
+            <span v-if="file.additions" class="text-green-400 ml-1"
+              >+{{ file.additions }}</span
+            >
+            <span v-if="file.deletions" class="text-red-400 ml-1"
+              >-{{ file.deletions }}</span
+            >
+          </button>
+        </Tooltip>
       </div>
 
       <!-- Full path of active file -->
