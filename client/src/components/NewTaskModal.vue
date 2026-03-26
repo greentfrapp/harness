@@ -96,6 +96,7 @@ const selectedTags = ref<string[]>(
 const dependsOn = ref<string | null>(props.editingDraft?.depends_on ?? null)
 const submitting = ref(false)
 const error = ref('')
+const titleInput = ref<HTMLInputElement | null>(null)
 const promptInput = ref<HTMLTextAreaElement | null>(null)
 
 const availableTags = computed(() =>
@@ -125,7 +126,7 @@ function getTagClasses(tag: string, active: boolean): string {
 
 onMounted(async () => {
   await nextTick()
-  promptInput.value?.focus()
+  titleInput.value?.focus()
 })
 
 function onKeydown(e: KeyboardEvent) {
@@ -281,6 +282,7 @@ const priorities: { value: Priority; label: string }[] = [
               >Title <span class="text-zinc-600">(optional)</span></label
             >
             <input
+              ref="titleInput"
               v-model="title"
               type="text"
               class="w-full bg-zinc-800 border border-zinc-700 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-zinc-600"
