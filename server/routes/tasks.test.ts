@@ -128,9 +128,7 @@ function makeContext(): AppContext {
       createTaskEvent: vi.fn(),
       getTaskEvents: vi.fn().mockReturnValue([]),
       clearParentReferences: vi.fn(),
-      deleteTaskById: vi.fn(),
       deleteTasksByIds: vi.fn().mockReturnValue([]),
-      deleteTasksByStatus: vi.fn().mockReturnValue([]),
     } as any,
     checkoutState: new Map(),
   }

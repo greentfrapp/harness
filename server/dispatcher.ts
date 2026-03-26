@@ -53,65 +53,37 @@ export class Dispatcher {
     }
     this.dispatching = true
 
+    const { pool, config } = this.deps
+
     try {
       do {
         this.pendingDispatch = false
-        await this.dispatchDoTasks()
-        await this.dispatchDiscussTasks()
+        await this.dispatchTasks({
+          needsWorktree: true,
+          getLimit: () => config.worktree_limit,
+          getActiveCount: () => pool.activeWorktreeCount,
+          dispatch: (t, p) => pool.dispatchDoTask(t, p),
+        })
+        await this.dispatchTasks({
+          needsWorktree: false,
+          getLimit: () => config.conversation_limit,
+          getActiveCount: () => pool.activeConversationCount,
+          dispatch: (t, p) => pool.dispatchDiscussTask(t, p),
+        })
       } while (this.pendingDispatch)
     } finally {
       this.dispatching = false
     }
   }
 
-  private async dispatchDoTasks(): Promise<void> {
-    const { pool, config } = this.deps
-    const worktreeLimit = config.worktree_limit
-
-    while (pool.activeWorktreeCount < worktreeLimit) {
-      const task = this.getNextReadyDoTask()
-      if (!task) break
-
-      const project = this.deps.getProjectById(task.project_id)
-      if (!project) {
-        this.deps.updateTask(task.id, {
-          status: 'error',
-          error_message: 'Project not found',
-        })
-        continue
-      }
-
-      // Mark as dispatched
-      this.deps.updateTask(task.id, { status: 'in_progress' })
-      this.deps.createTaskEvent(task.id, 'dispatched', null)
-      const updated = this.deps.getTaskById(task.id)
-      this.deps.broadcast('task:updated', updated)
-
-      try {
-        await pool.dispatchDoTask(this.deps.getTaskById(task.id)!, project)
-      } catch (err) {
-        const msg = getErrorMessage(err)
-        this.deps.updateTask(task.id, {
-          status: 'error',
-          error_message: `Failed to dispatch: ${msg}`,
-        })
-        this.deps.createTaskEvent(
-          task.id,
-          'error',
-          JSON.stringify({ error: msg }),
-        )
-        const errTask = this.deps.getTaskById(task.id)
-        this.deps.broadcast('inbox:new', errTask)
-      }
-    }
-  }
-
-  private async dispatchDiscussTasks(): Promise<void> {
-    const { pool, config } = this.deps
-    const conversationLimit = config.conversation_limit
-
-    while (pool.activeConversationCount < conversationLimit) {
-      const task = this.getNextReadyDiscussTask()
+  private async dispatchTasks(opts: {
+    needsWorktree: boolean
+    getLimit: () => number
+    getActiveCount: () => number
+    dispatch: (task: Task, project: Project) => Promise<void>
+  }): Promise<void> {
+    while (opts.getActiveCount() < opts.getLimit()) {
+      const task = this.getNextReadyTask(opts.needsWorktree)
       if (!task) break
 
       const project = this.deps.getProjectById(task.project_id)
@@ -129,7 +101,7 @@ export class Dispatcher {
       this.deps.broadcast('task:updated', updated)
 
       try {
-        await pool.dispatchDiscussTask(this.deps.getTaskById(task.id)!, project)
+        await opts.dispatch(this.deps.getTaskById(task.id)!, project)
       } catch (err) {
         const msg = getErrorMessage(err)
         this.deps.updateTask(task.id, {
@@ -147,23 +119,12 @@ export class Dispatcher {
     }
   }
 
-  private getNextReadyDoTask(): Task | null {
+  private getNextReadyTask(needsWorktree: boolean): Task | null {
     const queued = this.deps.getQueuedTasks()
     const ready = queued.filter((t) => {
       const typeConfig = this.deps.config.task_types[t.type]
-      const needsWorktree = typeConfig?.needs_worktree ?? t.type === 'do'
-      return needsWorktree && this.deps.isDependencySatisfied(t)
-    })
-    ready.sort(comparePriority)
-    return ready[0] ?? null
-  }
-
-  private getNextReadyDiscussTask(): Task | null {
-    const queued = this.deps.getQueuedTasks()
-    const ready = queued.filter((t) => {
-      const typeConfig = this.deps.config.task_types[t.type]
-      const needsWorktree = typeConfig?.needs_worktree ?? t.type === 'do'
-      return !needsWorktree && this.deps.isDependencySatisfied(t)
+      const wt = typeConfig?.needs_worktree ?? t.type === 'do'
+      return wt === needsWorktree && this.deps.isDependencySatisfied(t)
     })
     ready.sort(comparePriority)
     return ready[0] ?? null

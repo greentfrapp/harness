@@ -71,7 +71,10 @@ export const api = {
         { method: 'DELETE' },
       ),
     bulkDelete: (ids: string[]) =>
-      request<{ deleted: string[] }>('/api/tasks/bulk-delete', json({ ids })),
+      request<{ deleted: string[] }>('/api/tasks', {
+        method: 'DELETE',
+        ...json({ ids }),
+      }),
     approve: (id: string) =>
       request<
         Task & {

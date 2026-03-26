@@ -16,6 +16,7 @@ import { CONFIG_PATH, readConfigRaw, saveConfigRaw } from '../config'
 import type { AppContext } from '../context'
 import * as git from '../git'
 import { serverLog } from '../log'
+import { parseSessionData } from '../pool'
 
 export function createTaskRoutes(ctx: AppContext) {
   const app = new Hono()
@@ -58,13 +59,6 @@ export function createTaskRoutes(ctx: AppContext) {
       serverLog.info(`Deleting branch ${task.branch_name}`, task.id)
       git.deleteBranch(project.repo_path, task.branch_name)
     }
-  }
-
-  /** Parse agent session data with a safe fallback. */
-  function parseSessionData(task: Task): Record<string, any> {
-    return task.agent_session_data
-      ? JSON.parse(task.agent_session_data)
-      : { session_id: null, pid: 0 }
   }
 
   /** Auto-return a checkout if the given task is currently checked out. */
@@ -466,7 +460,7 @@ export function createTaskRoutes(ctx: AppContext) {
     }
 
     // Mark plan as approved in session data
-    const sessionData = parseSessionData(task)
+    const sessionData = parseSessionData(task.agent_session_data) ?? {}
     sessionData.plan_approved = true
 
     const updated = queries.updateTask(id, {
@@ -500,7 +494,7 @@ export function createTaskRoutes(ctx: AppContext) {
 
     // Add the blocked tool to the cumulative granted_tools list.
     // For Bash, use command-level patterns like Bash(curl:*) instead of blanket Bash.
-    const sessionData = parseSessionData(task)
+    const sessionData = parseSessionData(task.agent_session_data) ?? {}
     const grantedTools = new Set<string>(sessionData.granted_tools ?? [])
     if (sessionData.pending_tool) {
       let grantPattern = sessionData.pending_tool
@@ -574,22 +568,8 @@ export function createTaskRoutes(ctx: AppContext) {
     return c.json(updated)
   })
 
-  /** Bulk delete by IDs: permanently remove specific tasks. */
-  app.post('/tasks/bulk-delete', async (c) => {
-    const body = await c.req.json<{ ids: string[] }>()
-    if (!Array.isArray(body.ids) || body.ids.length === 0) {
-      return c.json({ error: 'ids array is required' }, 400)
-    }
-
-    const tasksToDelete = body.ids
-      .map((id) => queries.getTaskById(id))
-      .filter((t): t is NonNullable<typeof t> => t != null)
-
-    if (tasksToDelete.length === 0) {
-      return c.json({ deleted: [] })
-    }
-
-    // Kill running agents and clean up worktrees/branches
+  /** Kill running agents, clean up worktrees, delete from DB, broadcast removals. */
+  function cleanupAndDeleteTasks(tasksToDelete: Task[]): string[] {
     let hadRunning = false
     for (const task of tasksToDelete) {
       if (task.status === 'in_progress' || task.status === 'retrying') {
@@ -611,43 +591,36 @@ export function createTaskRoutes(ctx: AppContext) {
       dispatcher.tryDispatch()
     }
 
-    return c.json({ deleted: ids })
-  })
+    return ids
+  }
 
-  /** Bulk delete: permanently remove tasks by status. */
-  app.delete('/tasks', (c) => {
+  /** Bulk delete: permanently remove tasks by IDs or by status. */
+  app.delete('/tasks', async (c) => {
     const statusParam = c.req.query('status')
-    if (!statusParam) {
-      return c.json({ error: 'status query parameter is required' }, 400)
-    }
-    const statuses = statusParam.split(',').filter(Boolean)
 
-    // Get tasks before deletion for cleanup
-    const tasksToDelete = queries.getTasksByStatus(statuses)
-
-    // Kill running agents and clean up worktrees/branches
-    let hadRunning = false
-    for (const task of tasksToDelete) {
-      if (task.status === 'in_progress' || task.status === 'retrying') {
-        pool.killAgent(task.id)
-        hadRunning = true
+    let tasksToDelete: Task[]
+    if (statusParam) {
+      const statuses = statusParam.split(',').filter(Boolean)
+      tasksToDelete = queries.getTasksByStatus(statuses)
+    } else {
+      const body = await c.req.json<{ ids?: string[] }>().catch(() => ({}))
+      const ids = (body as { ids?: string[] }).ids
+      if (!Array.isArray(ids) || ids.length === 0) {
+        return c.json(
+          { error: 'ids array or status query parameter is required' },
+          400,
+        )
       }
-      const project = queries.getProjectById(task.project_id)
-      if (project) cleanupWorktree(project, task)
+      tasksToDelete = ids
+        .map((id) => queries.getTaskById(id))
+        .filter((t): t is NonNullable<typeof t> => t != null)
     }
 
-    const deleted = queries.deleteTasksByStatus(statuses)
-    const ids = deleted.map((t) => t.id)
-
-    for (const id of ids) {
-      sseManager.broadcast('task:removed', { id })
+    if (tasksToDelete.length === 0) {
+      return c.json({ deleted: [] })
     }
 
-    if (hadRunning) {
-      dispatcher.tryDispatch()
-    }
-
-    return c.json({ deleted: ids })
+    return c.json({ deleted: cleanupAndDeleteTasks(tasksToDelete) })
   })
 
   /** Cancel or permanently delete a task.
@@ -675,7 +648,7 @@ export function createTaskRoutes(ctx: AppContext) {
       if (project) cleanupWorktree(project, existing)
 
       // Permanently delete from database
-      queries.deleteTaskById(id)
+      queries.deleteTasksByIds([id])
       serverLog.info(`Task permanently deleted`, id)
       sseManager.broadcast('task:removed', { id })
 
@@ -790,7 +763,7 @@ export function createTaskRoutes(ctx: AppContext) {
 
     // Parse parent session data to carry forward the session ID
     const parentSession = task.agent_session_data
-      ? parseSessionData(task)
+      ? parseSessionData(task.agent_session_data)
       : null
 
     // Resolve agent_type from task type config

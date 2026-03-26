@@ -5,7 +5,7 @@ import {
   clearParentReferences,
   createTask,
   createTaskEvent,
-  deleteTaskById,
+  deleteTasksByIds,
   getAllProjects,
   getTaskById,
   getTaskEvents,
@@ -188,7 +188,7 @@ describe('DB Queries', () => {
       expect(getTaskById(followUp.id)!.parent_task_id).toBeNull()
     })
 
-    it('is called automatically by deleteTaskById', () => {
+    it('is called automatically by deleteTasksByIds', () => {
       const projectId = getAllProjects()[0].id
       const parent = createTask({
         project_id: projectId,
@@ -202,7 +202,7 @@ describe('DB Queries', () => {
         depends_on: parent.id,
       })
 
-      deleteTaskById(parent.id)
+      deleteTasksByIds([parent.id])
 
       // Child should have depends_on nulled out
       expect(getTaskById(child.id)!.depends_on).toBeNull()
