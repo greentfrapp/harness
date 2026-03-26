@@ -23,7 +23,7 @@ const DEFAULT_VIEWS_TEMPLATE = `{
       "id": "inbox",
       "name": "Inbox",
       "filter": {
-        "statuses": ["ready", "held", "error", "permission", "approved", "rejected"]
+        "statuses": ["ready", "held", "error", "permission", "approved", "rejected", "cancelled"]
       }
     }
   ]

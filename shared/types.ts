@@ -93,6 +93,7 @@ export const DEFAULT_VIEWS: ViewConfig[] = [
         'permission',
         'approved',
         'rejected',
+        'cancelled',
       ],
     },
   },

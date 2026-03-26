@@ -81,7 +81,7 @@ Task context (outbox vs. inbox behavior) is **derived from task status** via the
 The default configuration provides two views matching the original layout:
 
 - **Outbox**: Filters for `draft`, `queued`, `in_progress`, `retrying` statuses — the queue view showing active work
-- **Inbox**: Filters for `ready`, `held`, `error`, `permission`, `approved`, `rejected` statuses — completed or blocked tasks for review
+- **Inbox**: Filters for `ready`, `held`, `error`, `permission`, `approved`, `rejected`, `cancelled` statuses — completed or blocked tasks for review
 
 Users can customize these or add additional views. Permission requests are **prioritized above all other items** within any view and tagged with a distinct visual indicator.
 
