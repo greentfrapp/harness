@@ -1,5 +1,10 @@
 <script setup lang="ts">
-import type { CreateTaskInput, Project, TagConfig, ViewConfig } from '@shared/types'
+import type {
+  CreateTaskInput,
+  Project,
+  TagConfig,
+  ViewConfig,
+} from '@shared/types'
 import { onMounted, onUnmounted, provide, ref } from 'vue'
 import { api } from './api'
 import ActivityLog from './components/ActivityLog.vue'
@@ -349,7 +354,7 @@ onUnmounted(() => {
 
     <!-- Main dynamic-column layout -->
     <main
-      class="flex-1 min-h-0 grid divide-x divide-zinc-800 overflow-x-auto"
+      class="flex-1 min-h-0 grid divide-x divide-zinc-800 overflow-x-auto p-2 gap-2"
       :style="{
         gridTemplateColumns: `repeat(${viewsStore.views.length}, minmax(300px, 1fr))`,
       }">

@@ -28,7 +28,6 @@ const transitionTypes = computed(() =>
   (taskTypes?.value ?? []).filter((t) => t !== props.task.type),
 )
 
-
 const emit = defineEmits<{
   cancel: [id: string]
   approve: [id: string]
@@ -179,8 +178,7 @@ const showSessionStream = computed(() =>
 
 const showDiffViewer = computed(
   () =>
-    props.task.branch_name &&
-    REVIEWABLE_STATUSES.includes(props.task.status),
+    props.task.branch_name && REVIEWABLE_STATUSES.includes(props.task.status),
 )
 
 const renderedSummary = computed(() => {
@@ -359,7 +357,8 @@ function formatTime(ts: number): string {
 </script>
 
 <template>
-  <div class="border-t border-zinc-800 px-4 py-3 space-y-4 bg-zinc-900/50">
+  <div
+    class="border-t border-zinc-800 px-4 py-3 space-y-4 bg-zinc-900/50 overflow-auto max-h-100">
     <!-- Parent task lineage -->
     <div v-if="task.parent_task_id" class="text-xs text-zinc-500">
       Follow-up of

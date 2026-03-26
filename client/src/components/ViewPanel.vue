@@ -146,7 +146,8 @@ async function handleMaximizeAction(
 </script>
 
 <template>
-  <div class="flex flex-col h-full overflow-hidden">
+  <div
+    class="flex flex-col h-full overflow-hidden rounded-xl border border-zinc-800">
     <div
       class="px-4 h-12 border-b border-zinc-800 flex items-center justify-between">
       <div class="flex items-center gap-2">
