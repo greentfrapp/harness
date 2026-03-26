@@ -79,9 +79,6 @@ const isPermission = computed(() => props.task.status === 'permission')
 
 const isHeld = computed(() => props.task.status === 'held')
 
-const isWaitingOnSubtasks = computed(
-  () => props.task.status === 'waiting_on_subtasks',
-)
 
 const isSubtasksProposed = computed(
   () => props.task.status === 'subtasks_proposed',
