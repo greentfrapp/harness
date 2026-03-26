@@ -744,6 +744,68 @@ describe('AgentPool progress broadcasting', () => {
     )
   })
 
+  it('does not process success/failure when task is waiting_on_subtasks', async () => {
+    const updateTask = vi.fn(() => makeTask())
+    const createTaskEvent = vi.fn()
+    const onTaskCompleted = vi.fn()
+
+    const config: HarnessConfig = {
+      projects: [],
+      task_types: {
+        do: { prompt_template: '{user_prompt}', uses_worktree: true },
+      },
+      concurrency: { max_worktrees: 2, max_conversations: 2 },
+    } as any
+
+    const waitingPool = new AgentPool({
+      config,
+      agentRegistry: fakeRegistry,
+      getProjectById: () => makeProject(),
+      updateTask,
+      createTaskEvent,
+      broadcast,
+      // Return waiting_on_subtasks status to simulate agent being killed after proposing subtasks
+      getTaskById: () =>
+        makeTask({ status: 'waiting_on_subtasks' as any }),
+      onTaskCompleted,
+    })
+
+    const task = makeTask()
+    const project = makeProject()
+    await waitingPool.dispatchDoTask(task, project)
+
+    // Clear setup calls
+    updateTask.mockClear()
+    createTaskEvent.mockClear()
+    onTaskCompleted.mockClear()
+
+    // Simulate process exit with code 0
+    spawnedProc.emit('close', 0)
+
+    // Should NOT have updated task status (early return)
+    expect(updateTask).not.toHaveBeenCalled()
+    expect(createTaskEvent).not.toHaveBeenCalled()
+    expect(onTaskCompleted).not.toHaveBeenCalled()
+  })
+
+  it('injects HARNESS_TASK_ID, HARNESS_API_URL, and HARNESS_CLI env vars', async () => {
+    const { spawn } = await import('node:child_process')
+    const mockSpawn = spawn as ReturnType<typeof vi.fn>
+    mockSpawn.mockClear()
+
+    const task = makeTask()
+    const project = makeProject()
+    await pool.dispatchDoTask(task, project)
+
+    expect(mockSpawn).toHaveBeenCalled()
+    const spawnCall = mockSpawn.mock.calls[mockSpawn.mock.calls.length - 1]
+    const spawnOpts = spawnCall[2]
+
+    expect(spawnOpts.env.HARNESS_TASK_ID).toBe('task-1')
+    expect(spawnOpts.env.HARNESS_API_URL).toMatch(/^http:\/\/localhost:\d+$/)
+    expect(spawnOpts.env.HARNESS_CLI).toMatch(/cli\/harness\.mjs$/)
+  })
+
   it('falls back to last assistant text when result has no summary', async () => {
     const updateTask = vi.fn(() => makeTask())
     const createTaskEvent = vi.fn()

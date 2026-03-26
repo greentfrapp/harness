@@ -3,6 +3,8 @@ import type {
   CreateTaskInput,
   HarnessConfig,
   Project,
+  SubtaskProposal,
+  SubtaskProposalInput,
   Task,
   TaskEvent,
   UpdateTaskInput,
@@ -212,4 +214,65 @@ export function deleteTasksByIds(ids: string[]): Task[] {
   if (!toDelete.length) return []
   deleteTasksAndRelated(ids)
   return toDelete
+}
+
+// --- Subtask Proposals ---
+
+export function createSubtaskProposals(
+  taskId: string,
+  proposals: SubtaskProposalInput[],
+): SubtaskProposal[] {
+  const db = getDb()
+  const now = Date.now()
+  const results: SubtaskProposal[] = []
+
+  for (const p of proposals) {
+    const row = db
+      .insert(subtaskProposals)
+      .values({
+        task_id: taskId,
+        title: p.title,
+        prompt: p.prompt,
+        priority: p.priority ?? 'P2',
+        status: 'pending',
+        created_at: now,
+      })
+      .returning()
+      .get()
+    results.push(row as SubtaskProposal)
+  }
+
+  return results
+}
+
+export function getSubtaskProposals(taskId: string): SubtaskProposal[] {
+  return getDb()
+    .select()
+    .from(subtaskProposals)
+    .where(eq(subtaskProposals.task_id, taskId))
+    .all() as SubtaskProposal[]
+}
+
+export function updateSubtaskProposal(
+  id: number,
+  updates: {
+    status?: string
+    feedback?: string | null
+    spawned_task_id?: string | null
+  },
+): void {
+  getDb()
+    .update(subtaskProposals)
+    .set(updates)
+    .where(eq(subtaskProposals.id, id))
+    .run()
+}
+
+export function getChildTasks(parentTaskId: string): Task[] {
+  return getDb()
+    .select()
+    .from(tasks)
+    .where(eq(tasks.parent_task_id, parentTaskId))
+    .all()
+    .map((row) => deserializeTags(row as Record<string, unknown>))
 }

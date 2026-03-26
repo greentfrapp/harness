@@ -62,6 +62,7 @@ const CREATE_TABLES_SQL = `
     priority TEXT NOT NULL DEFAULT 'P2',
     depends_on_title TEXT,
     status TEXT NOT NULL DEFAULT 'pending',
+    feedback TEXT,
     spawned_task_id TEXT REFERENCES tasks(id),
     created_at INTEGER NOT NULL
   );
@@ -121,6 +122,11 @@ export function initDatabase(): void {
     `)
   } catch {
     // Migration already applied or tables empty
+  }
+  try {
+    sqlite.exec('ALTER TABLE subtask_proposals ADD COLUMN feedback TEXT')
+  } catch {
+    // Column already exists
   }
   db = drizzle(sqlite, { schema })
 }

@@ -65,6 +65,7 @@ export const subtaskProposals = sqliteTable('subtask_proposals', {
   priority: text('priority').notNull().default('P2'),
   depends_on_title: text('depends_on_title'),
   status: text('status').notNull().default('pending'),
+  feedback: text('feedback'),
   spawned_task_id: text('spawned_task_id').references(() => tasks.id),
   created_at: integer('created_at')
     .notNull()

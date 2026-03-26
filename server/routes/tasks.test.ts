@@ -129,6 +129,10 @@ function makeContext(): AppContext {
       getTaskEvents: vi.fn().mockReturnValue([]),
       clearParentReferences: vi.fn(),
       deleteTasksByIds: vi.fn().mockReturnValue([]),
+      createSubtaskProposals: vi.fn().mockReturnValue([]),
+      getSubtaskProposals: vi.fn().mockReturnValue([]),
+      updateSubtaskProposal: vi.fn(),
+      getChildTasks: vi.fn().mockReturnValue([]),
     } as any,
     checkoutState: new Map(),
   }
@@ -1162,6 +1166,316 @@ describe('Task Routes', () => {
           taskId: 'task-1',
         }),
       )
+    })
+  })
+
+  describe('POST /tasks/:id/propose-subtasks', () => {
+    it('stores proposals and transitions to waiting_on_subtasks', async () => {
+      const task = makeTask({ status: 'in_progress' })
+      ;(ctx.queries.getTaskById as any).mockReturnValue(task)
+      ;(ctx.queries.createSubtaskProposals as any).mockReturnValue([
+        { id: 1, title: 'Fix auth', prompt: 'Fix the auth bug', priority: 'P2', status: 'pending' },
+        { id: 2, title: 'Add tests', prompt: 'Add unit tests', priority: 'P2', status: 'pending' },
+      ])
+
+      const res = await app.request('/tasks/task-1/propose-subtasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          subtasks: [
+            { title: 'Fix auth', prompt: 'Fix the auth bug' },
+            { title: 'Add tests', prompt: 'Add unit tests' },
+          ],
+        }),
+      })
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.ok).toBe(true)
+      expect(body.proposal_count).toBe(2)
+
+      expect(ctx.queries.createSubtaskProposals).toHaveBeenCalledWith('task-1', [
+        { title: 'Fix auth', prompt: 'Fix the auth bug' },
+        { title: 'Add tests', prompt: 'Add unit tests' },
+      ])
+      expect(ctx.queries.updateTask).toHaveBeenCalledWith('task-1', { status: 'waiting_on_subtasks' })
+      expect(ctx.pool.killAgent).toHaveBeenCalledWith('task-1')
+      expect(ctx.queries.createTaskEvent).toHaveBeenCalledWith('task-1', 'subtasks_proposed', null)
+    })
+
+    it('rejects if task is not in_progress', async () => {
+      const task = makeTask({ status: 'queued' })
+      ;(ctx.queries.getTaskById as any).mockReturnValue(task)
+
+      const res = await app.request('/tasks/task-1/propose-subtasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subtasks: [{ title: 'X', prompt: 'Y' }] }),
+      })
+      expect(res.status).toBe(400)
+    })
+
+    it('rejects empty subtasks array', async () => {
+      const task = makeTask({ status: 'in_progress' })
+      ;(ctx.queries.getTaskById as any).mockReturnValue(task)
+
+      const res = await app.request('/tasks/task-1/propose-subtasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subtasks: [] }),
+      })
+      expect(res.status).toBe(400)
+    })
+
+    it('rejects subtasks missing title or prompt', async () => {
+      const task = makeTask({ status: 'in_progress' })
+      ;(ctx.queries.getTaskById as any).mockReturnValue(task)
+
+      const res = await app.request('/tasks/task-1/propose-subtasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subtasks: [{ title: '', prompt: 'Y' }] }),
+      })
+      expect(res.status).toBe(400)
+    })
+
+    it('returns 404 for unknown task', async () => {
+      ;(ctx.queries.getTaskById as any).mockReturnValue(undefined)
+
+      const res = await app.request('/tasks/nope/propose-subtasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subtasks: [{ title: 'X', prompt: 'Y' }] }),
+      })
+      expect(res.status).toBe(404)
+    })
+
+    it('auto-approves when config.auto_approve_subtasks is true', async () => {
+      ctx.config.auto_approve_subtasks = true
+      const task = makeTask({ status: 'in_progress' })
+      ;(ctx.queries.getTaskById as any).mockReturnValue(task)
+      ;(ctx.queries.createSubtaskProposals as any).mockReturnValue([
+        { id: 1, title: 'Fix auth', prompt: 'Fix it', priority: 'P2', status: 'pending' },
+      ])
+      ;(ctx.queries.createTask as any).mockReturnValue(
+        makeTask({ id: 'child-1', prompt: 'Fix it' }),
+      )
+
+      const res = await app.request('/tasks/task-1/propose-subtasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subtasks: [{ title: 'Fix auth', prompt: 'Fix it' }] }),
+      })
+      expect(res.status).toBe(200)
+
+      // Should create child task immediately
+      expect(ctx.queries.createTask).toHaveBeenCalled()
+      // Should set parent_task_id on child
+      expect(ctx.queries.updateTask).toHaveBeenCalledWith(
+        'child-1',
+        expect.objectContaining({ parent_task_id: 'task-1' }),
+      )
+      // Should mark proposal as approved
+      expect(ctx.queries.updateSubtaskProposal).toHaveBeenCalledWith(1, {
+        status: 'approved',
+        spawned_task_id: 'child-1',
+      })
+      // Should create auto-approved event (not subtasks_proposed)
+      expect(ctx.queries.createTaskEvent).toHaveBeenCalledWith(
+        'task-1',
+        'subtasks_auto_approved',
+        null,
+      )
+      // Should trigger dispatch
+      expect(ctx.dispatcher.tryDispatch).toHaveBeenCalled()
+    })
+  })
+
+  describe('GET /tasks/:id/proposals', () => {
+    it('returns proposals for a task', async () => {
+      const task = makeTask({ status: 'waiting_on_subtasks' })
+      ;(ctx.queries.getTaskById as any).mockReturnValue(task)
+      const proposals = [
+        { id: 1, task_id: 'task-1', title: 'Fix auth', prompt: 'Fix it', priority: 'P2', status: 'pending' },
+      ]
+      ;(ctx.queries.getSubtaskProposals as any).mockReturnValue(proposals)
+
+      const res = await app.request('/tasks/task-1/proposals')
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body).toEqual(proposals)
+    })
+
+    it('returns 404 for unknown task', async () => {
+      ;(ctx.queries.getTaskById as any).mockReturnValue(undefined)
+
+      const res = await app.request('/tasks/nope/proposals')
+      expect(res.status).toBe(404)
+    })
+  })
+
+  describe('POST /tasks/:id/resolve-proposals', () => {
+    it('creates tasks for approved proposals and dispatches', async () => {
+      const task = makeTask({ status: 'waiting_on_subtasks' })
+      ;(ctx.queries.getTaskById as any).mockReturnValue(task)
+      ;(ctx.queries.getSubtaskProposals as any).mockReturnValue([
+        { id: 1, task_id: 'task-1', title: 'Fix auth', prompt: 'Fix it', priority: 'P2', status: 'pending' },
+      ])
+      ;(ctx.queries.createTask as any).mockReturnValue(
+        makeTask({ id: 'child-1', prompt: 'Fix it' }),
+      )
+
+      const res = await app.request('/tasks/task-1/resolve-proposals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          approved: [{ id: 1 }],
+          dismissed: [],
+        }),
+      })
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.approved).toBe(1)
+      expect(body.dismissed).toBe(0)
+
+      expect(ctx.queries.createTask).toHaveBeenCalled()
+      expect(ctx.queries.updateSubtaskProposal).toHaveBeenCalledWith(1, {
+        status: 'approved',
+        spawned_task_id: 'child-1',
+      })
+      expect(ctx.dispatcher.tryDispatch).toHaveBeenCalled()
+    })
+
+    it('resumes parent immediately when all proposals dismissed', async () => {
+      const task = makeTask({ status: 'waiting_on_subtasks', prompt: 'original prompt' })
+      ;(ctx.queries.getTaskById as any).mockReturnValue(task)
+      ;(ctx.queries.getSubtaskProposals as any).mockReturnValue([
+        { id: 1, task_id: 'task-1', title: 'Fix auth', prompt: 'Fix it', priority: 'P2', status: 'dismissed', feedback: 'Not needed' },
+      ])
+
+      const res = await app.request('/tasks/task-1/resolve-proposals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          approved: [],
+          dismissed: [{ id: 1, feedback: 'Not needed' }],
+        }),
+      })
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.approved).toBe(0)
+
+      // Parent should have been re-queued
+      expect(ctx.queries.updateTask).toHaveBeenCalledWith(
+        'task-1',
+        expect.objectContaining({ status: 'queued' }),
+      )
+      expect(ctx.queries.createTaskEvent).toHaveBeenCalledWith(
+        'task-1',
+        'subtasks_all_dismissed',
+        null,
+      )
+    })
+
+    it('rejects if task is not waiting_on_subtasks', async () => {
+      const task = makeTask({ status: 'in_progress' })
+      ;(ctx.queries.getTaskById as any).mockReturnValue(task)
+
+      const res = await app.request('/tasks/task-1/resolve-proposals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ approved: [], dismissed: [] }),
+      })
+      expect(res.status).toBe(400)
+    })
+
+    it('handles mixed approval and dismissal in a single request', async () => {
+      const task = makeTask({ status: 'waiting_on_subtasks' })
+      ;(ctx.queries.getTaskById as any).mockReturnValue(task)
+      ;(ctx.queries.getSubtaskProposals as any).mockReturnValue([
+        { id: 1, task_id: 'task-1', title: 'Fix auth', prompt: 'Fix it', priority: 'P2', status: 'pending' },
+        { id: 2, task_id: 'task-1', title: 'Refactor', prompt: 'Clean up', priority: 'P3', status: 'pending' },
+      ])
+      ;(ctx.queries.createTask as any).mockReturnValue(
+        makeTask({ id: 'child-1', prompt: 'Fix it' }),
+      )
+
+      const res = await app.request('/tasks/task-1/resolve-proposals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          approved: [{ id: 1 }],
+          dismissed: [{ id: 2, feedback: 'Not worth it' }],
+        }),
+      })
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.approved).toBe(1)
+      expect(body.dismissed).toBe(1)
+
+      // Dismissed should store feedback
+      expect(ctx.queries.updateSubtaskProposal).toHaveBeenCalledWith(2, {
+        status: 'dismissed',
+        feedback: 'Not worth it',
+      })
+      // Approved should create task
+      expect(ctx.queries.createTask).toHaveBeenCalled()
+      // Parent stays in waiting_on_subtasks (some approved)
+      expect(ctx.queries.updateTask).not.toHaveBeenCalledWith(
+        'task-1',
+        expect.objectContaining({ status: 'queued' }),
+      )
+    })
+
+    it('applies user prompt and priority overrides on approved proposals', async () => {
+      const task = makeTask({ status: 'waiting_on_subtasks' })
+      ;(ctx.queries.getTaskById as any).mockReturnValue(task)
+      ;(ctx.queries.getSubtaskProposals as any).mockReturnValue([
+        { id: 1, task_id: 'task-1', title: 'Fix auth', prompt: 'Original prompt', priority: 'P2', status: 'pending' },
+      ])
+      ;(ctx.queries.createTask as any).mockReturnValue(
+        makeTask({ id: 'child-1', prompt: 'Revised prompt' }),
+      )
+
+      const res = await app.request('/tasks/task-1/resolve-proposals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          approved: [{ id: 1, prompt: 'Revised prompt', priority: 'P0' }],
+          dismissed: [],
+        }),
+      })
+      expect(res.status).toBe(200)
+
+      // Should use overridden prompt and priority
+      expect(ctx.queries.createTask).toHaveBeenCalledWith(
+        expect.objectContaining({
+          prompt: 'Revised prompt',
+          priority: 'P0',
+        }),
+      )
+    })
+
+    it('stores feedback on dismissed proposals', async () => {
+      const task = makeTask({ status: 'waiting_on_subtasks', prompt: 'original' })
+      ;(ctx.queries.getTaskById as any).mockReturnValue(task)
+      ;(ctx.queries.getSubtaskProposals as any).mockReturnValue([
+        { id: 1, task_id: 'task-1', title: 'Fix auth', prompt: 'Fix it', priority: 'P2', status: 'dismissed', feedback: 'Already fixed' },
+      ])
+
+      const res = await app.request('/tasks/task-1/resolve-proposals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          approved: [],
+          dismissed: [{ id: 1, feedback: 'Already fixed' }],
+        }),
+      })
+      expect(res.status).toBe(200)
+
+      expect(ctx.queries.updateSubtaskProposal).toHaveBeenCalledWith(1, {
+        status: 'dismissed',
+        feedback: 'Already fixed',
+      })
     })
   })
 })

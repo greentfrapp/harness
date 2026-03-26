@@ -66,6 +66,10 @@ const isPermission = computed(() => props.task.status === 'permission')
 
 const isHeld = computed(() => props.task.status === 'held')
 
+const isWaitingOnSubtasks = computed(
+  () => props.task.status === 'waiting_on_subtasks',
+)
+
 const hasNoChanges = computed(
   () =>
     props.task.status === 'ready' &&
@@ -109,6 +113,7 @@ const statusConfig: Record<
   ready: { color: 'bg-green-500', label: 'Ready' },
   held: { color: 'bg-amber-500', label: 'Plan Review' },
   error: { color: 'bg-red-500', label: 'Error' },
+  waiting_on_subtasks: { color: 'bg-purple-500', label: 'Subtasks', pulse: true },
   permission: { color: 'bg-red-500', label: 'Permission', pulse: true },
   approved: { color: 'bg-zinc-500', label: 'Approved' },
   rejected: { color: 'bg-red-600', label: 'Rejected' },
@@ -553,6 +558,24 @@ async function handleCollapsedReturn(e: Event) {
             }
           ">
           Reject
+        </button>
+      </div>
+
+      <!-- Review Subtasks button (visible in collapsed state for waiting_on_subtasks tasks) -->
+      <div
+        v-if="isWaitingOnSubtasks"
+        class="flex items-center gap-1 shrink-0"
+        @click.stop>
+        <span class="text-xs text-purple-400">Subtasks proposed</span>
+        <button
+          class="px-2 py-1 text-xs font-medium rounded bg-purple-900 hover:bg-purple-800 text-purple-300 transition-colors"
+          @click="
+            (e: Event) => {
+              e.stopPropagation()
+              expanded = true
+            }
+          ">
+          Review
         </button>
       </div>
 

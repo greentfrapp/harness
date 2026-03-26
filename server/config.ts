@@ -37,10 +37,6 @@ const DEFAULT_DISCUSS_PROMPT = `You are in research/plan mode. Your job is to an
 Rules:
 - Do NOT modify any files. Read and search only.
 - Structure your response as: (1) Problem statement, (2) Relevant code references, (3) Proposed approaches with tradeoffs.
-- If you identify concrete implementation tasks, propose them as subtasks using this JSON format:
-
-  {"subtasks": [{"title": "...", "prompt": "...", "priority": "P2", "depends_on": null}]}
-
 - Only propose subtasks when you have a clear, actionable recommendation. Not every discussion needs subtasks.
 
 Topic:
@@ -49,6 +45,7 @@ Topic:
 const DEFAULT_CONFIG: HarnessConfig = {
   worktree_limit: 3,
   conversation_limit: 5,
+  auto_approve_subtasks: false,
   task_types: {
     do: {
       prompt_template: DEFAULT_DO_PROMPT,
@@ -121,6 +118,8 @@ export function loadConfig(): HarnessConfig {
     worktree_limit: parsed.worktree_limit ?? DEFAULT_CONFIG.worktree_limit,
     conversation_limit:
       parsed.conversation_limit ?? DEFAULT_CONFIG.conversation_limit,
+    auto_approve_subtasks:
+      parsed.auto_approve_subtasks ?? DEFAULT_CONFIG.auto_approve_subtasks,
     agents: parsed.agents ?? undefined,
     task_types: {
       ...DEFAULT_CONFIG.task_types,
@@ -172,6 +171,8 @@ export function saveConfigRaw(
     worktree_limit: parsed.worktree_limit ?? DEFAULT_CONFIG.worktree_limit,
     conversation_limit:
       parsed.conversation_limit ?? DEFAULT_CONFIG.conversation_limit,
+    auto_approve_subtasks:
+      parsed.auto_approve_subtasks ?? DEFAULT_CONFIG.auto_approve_subtasks,
     agents: parsed.agents ?? undefined,
     task_types: {
       ...DEFAULT_CONFIG.task_types,

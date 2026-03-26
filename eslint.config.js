@@ -6,7 +6,7 @@ import vueParser from 'vue-eslint-parser'
 
 export default tseslint.config(
   {
-    ignores: ['node_modules', 'client/dist', 'dist', '.harness-worktrees'],
+    ignores: ['node_modules', 'client/dist', 'dist', '.harness-worktrees', 'cli'],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,

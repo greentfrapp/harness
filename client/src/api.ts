@@ -2,8 +2,10 @@ import type {
   CheckoutInfo,
   CreateTaskInput,
   LogEntry,
+  Priority,
   Project,
   RepoStatus,
+  SubtaskProposal,
   TagConfig,
   Task,
   TaskEvent,
@@ -143,6 +145,19 @@ export const api = {
       ),
     return_: (id: string) =>
       request<{ ok: boolean }>(`/api/tasks/${id}/return`, { method: 'POST' }),
+    getProposals: (id: string) =>
+      request<SubtaskProposal[]>(`/api/tasks/${id}/proposals`),
+    resolveProposals: (
+      id: string,
+      body: {
+        approved: Array<{ id: number; prompt?: string; priority?: Priority }>
+        dismissed: Array<{ id: number; feedback?: string }>
+      },
+    ) =>
+      request<{ ok: boolean; approved: number; dismissed: number }>(
+        `/api/tasks/${id}/resolve-proposals`,
+        json(body),
+      ),
   },
   checkouts: {
     list: () => request<CheckoutInfo[]>('/api/checkouts'),

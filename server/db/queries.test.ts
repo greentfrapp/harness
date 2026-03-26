@@ -3,14 +3,18 @@ import type { HarnessConfig } from '../../shared/types'
 import { initTestDatabase } from './index'
 import {
   clearParentReferences,
+  createSubtaskProposals,
   createTask,
   createTaskEvent,
   deleteTasksByIds,
   getAllProjects,
+  getChildTasks,
+  getSubtaskProposals,
   getTaskById,
   getTaskEvents,
   getTasksByStatus,
   seedProjects,
+  updateSubtaskProposal,
   updateTask,
 } from './queries'
 
@@ -206,6 +210,166 @@ describe('DB Queries', () => {
 
       // Child should have depends_on nulled out
       expect(getTaskById(child.id)!.depends_on).toBeNull()
+    })
+  })
+
+  describe('createSubtaskProposals', () => {
+    it('bulk inserts proposals with defaults', () => {
+      const projectId = getAllProjects()[0].id
+      const task = createTask({
+        project_id: projectId,
+        type: 'do',
+        prompt: 'parent task',
+      })
+
+      const proposals = createSubtaskProposals(task.id, [
+        { title: 'Fix auth', prompt: 'Fix the auth bug' },
+        { title: 'Add tests', prompt: 'Add unit tests', priority: 'P0' },
+      ])
+
+      expect(proposals).toHaveLength(2)
+      expect(proposals[0].title).toBe('Fix auth')
+      expect(proposals[0].prompt).toBe('Fix the auth bug')
+      expect(proposals[0].priority).toBe('P2') // default
+      expect(proposals[0].status).toBe('pending')
+      expect(proposals[0].task_id).toBe(task.id)
+      expect(proposals[0].id).toBeDefined()
+
+      expect(proposals[1].priority).toBe('P0') // explicit
+    })
+
+    it('returns correct shape with all fields', () => {
+      const projectId = getAllProjects()[0].id
+      const task = createTask({
+        project_id: projectId,
+        type: 'do',
+        prompt: 'parent',
+      })
+
+      const [proposal] = createSubtaskProposals(task.id, [
+        { title: 'Test', prompt: 'Do it' },
+      ])
+
+      expect(proposal).toHaveProperty('id')
+      expect(proposal).toHaveProperty('task_id')
+      expect(proposal).toHaveProperty('title')
+      expect(proposal).toHaveProperty('prompt')
+      expect(proposal).toHaveProperty('priority')
+      expect(proposal).toHaveProperty('status')
+      expect(proposal).toHaveProperty('created_at')
+      expect(proposal.spawned_task_id).toBeNull()
+    })
+  })
+
+  describe('getSubtaskProposals', () => {
+    it('retrieves proposals by task ID', () => {
+      const projectId = getAllProjects()[0].id
+      const task = createTask({
+        project_id: projectId,
+        type: 'do',
+        prompt: 'parent',
+      })
+      createSubtaskProposals(task.id, [
+        { title: 'A', prompt: 'Do A' },
+        { title: 'B', prompt: 'Do B' },
+      ])
+
+      const results = getSubtaskProposals(task.id)
+      expect(results).toHaveLength(2)
+      expect(results.map((r) => r.title)).toEqual(['A', 'B'])
+    })
+
+    it('returns empty array for nonexistent task', () => {
+      expect(getSubtaskProposals('nonexistent-id')).toEqual([])
+    })
+  })
+
+  describe('updateSubtaskProposal', () => {
+    it('updates status, feedback, and spawned_task_id', () => {
+      const projectId = getAllProjects()[0].id
+      const task = createTask({
+        project_id: projectId,
+        type: 'do',
+        prompt: 'parent',
+      })
+      const [proposal] = createSubtaskProposals(task.id, [
+        { title: 'Test', prompt: 'Do it' },
+      ])
+
+      updateSubtaskProposal(proposal.id, {
+        status: 'dismissed',
+        feedback: 'Not needed',
+      })
+
+      const [updated] = getSubtaskProposals(task.id)
+      expect(updated.status).toBe('dismissed')
+      expect(updated.feedback).toBe('Not needed')
+    })
+
+    it('updates spawned_task_id on approval', () => {
+      const projectId = getAllProjects()[0].id
+      const parent = createTask({
+        project_id: projectId,
+        type: 'do',
+        prompt: 'parent',
+      })
+      const child = createTask({
+        project_id: projectId,
+        type: 'do',
+        prompt: 'child',
+      })
+      const [proposal] = createSubtaskProposals(parent.id, [
+        { title: 'Test', prompt: 'Do it' },
+      ])
+
+      updateSubtaskProposal(proposal.id, {
+        status: 'approved',
+        spawned_task_id: child.id,
+      })
+
+      const [updated] = getSubtaskProposals(parent.id)
+      expect(updated.status).toBe('approved')
+      expect(updated.spawned_task_id).toBe(child.id)
+    })
+  })
+
+  describe('getChildTasks', () => {
+    it('returns tasks with matching parent_task_id', () => {
+      const projectId = getAllProjects()[0].id
+      const parent = createTask({
+        project_id: projectId,
+        type: 'do',
+        prompt: 'parent',
+      })
+      const child1 = createTask({
+        project_id: projectId,
+        type: 'do',
+        prompt: 'child 1',
+      })
+      const child2 = createTask({
+        project_id: projectId,
+        type: 'do',
+        prompt: 'child 2',
+      })
+      updateTask(child1.id, { parent_task_id: parent.id })
+      updateTask(child2.id, { parent_task_id: parent.id })
+
+      const children = getChildTasks(parent.id)
+      expect(children).toHaveLength(2)
+      expect(children.map((c) => c.id).sort()).toEqual(
+        [child1.id, child2.id].sort(),
+      )
+    })
+
+    it('returns empty array when no children exist', () => {
+      const projectId = getAllProjects()[0].id
+      const task = createTask({
+        project_id: projectId,
+        type: 'do',
+        prompt: 'lonely task',
+      })
+
+      expect(getChildTasks(task.id)).toEqual([])
     })
   })
 
