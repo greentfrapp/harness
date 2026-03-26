@@ -9,6 +9,7 @@ const ALL_STATUSES: TaskStatus[] = [
   'in_progress',
   'retrying',
   'waiting_on_subtasks',
+  'subtasks_proposed',
   'ready',
   'held',
   'error',

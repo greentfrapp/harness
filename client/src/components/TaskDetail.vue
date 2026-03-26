@@ -104,7 +104,7 @@ async function handleApprovePlan() {
 }
 
 async function fetchProposals() {
-  if (props.task.status !== 'waiting_on_subtasks') return
+  if (props.task.status !== 'subtasks_proposed') return
   loadingProposals.value = true
   try {
     proposals.value = await api.tasks.getProposals(props.task.id)
@@ -454,7 +454,7 @@ function formatTime(ts: number): string {
 
     <!-- Subtask proposals review -->
     <div
-      v-if="task.status === 'waiting_on_subtasks'"
+      v-if="task.status === 'subtasks_proposed'"
       class="rounded bg-purple-950 border border-purple-900 p-3 space-y-3">
       <h4 class="text-xs font-medium text-purple-400 uppercase">
         Subtask Proposals
@@ -692,6 +692,19 @@ function formatTime(ts: number): string {
     <!-- Actions -->
     <div class="flex gap-2 pt-2 border-t border-zinc-800">
       <template v-if="OUTBOX_STATUSES.includes(task.status)">
+        <button
+          class="px-3 py-1.5 text-xs font-medium rounded bg-red-900 hover:bg-red-800 text-red-300 transition-colors"
+          @click="emit('cancel', task.id)">
+          Cancel
+        </button>
+      </template>
+      <template v-if="task.status === 'subtasks_proposed'">
+        <button
+          class="px-3 py-1.5 text-xs font-medium rounded bg-red-900 hover:bg-red-800 text-red-300 transition-colors disabled:opacity-50"
+          :disabled="rejecting"
+          @click="handleReject">
+          {{ rejecting ? 'Rejecting...' : 'Reject' }}
+        </button>
         <button
           class="px-3 py-1.5 text-xs font-medium rounded bg-red-900 hover:bg-red-800 text-red-300 transition-colors"
           @click="emit('cancel', task.id)">

@@ -19,12 +19,15 @@ export type TransitionAction =
   | 'plan_approval_request'
   | 'permission_request'
   | 'propose_subtasks'
+  | 'auto_approve_subtasks'
   | 'fail'
   | 'max_retries'
   // Dispatcher-driven
   | 'dispatch'
   | 'dispatch_error'
   // Subtask-driven
+  | 'approve_subtasks'
+  | 'dismiss_all_subtasks'
   | 'subtasks_completed'
   // Recovery-driven
   | 'recover_requeue'
@@ -45,18 +48,19 @@ export const TRANSITION_MAP: Readonly<Record<TransitionAction, TransitionRule>> 
     // --- Route-driven (user actions) ---
     send: { from: ['draft'], to: 'queued' },
     approve: { from: ['ready', 'error'], to: 'approved' },
-    reject: { from: ['ready', 'error', 'held'], to: 'rejected' },
+    reject: { from: ['ready', 'error', 'held', 'subtasks_proposed'], to: 'rejected' },
     fix: { from: ['ready', 'error'], to: 'queued' },
     approve_plan: { from: ['held'], to: 'queued' },
     grant_permission: { from: ['permission'], to: 'queued' },
     retry: { from: ['error'], to: 'queued' },
-    revise: { from: ['ready', 'error', 'held'], to: 'queued' },
+    revise: { from: ['ready', 'error', 'held', 'subtasks_proposed'], to: 'queued' },
     cancel: {
       from: [
         'queued',
         'in_progress',
         'retrying',
         'waiting_on_subtasks',
+        'subtasks_proposed',
         'ready',
         'held',
         'error',
@@ -69,7 +73,8 @@ export const TRANSITION_MAP: Readonly<Record<TransitionAction, TransitionRule>> 
     complete: { from: ['in_progress'], to: 'ready' },
     plan_approval_request: { from: ['in_progress'], to: 'held' },
     permission_request: { from: ['in_progress'], to: 'permission' },
-    propose_subtasks: { from: ['in_progress'], to: 'waiting_on_subtasks' },
+    propose_subtasks: { from: ['in_progress'], to: 'subtasks_proposed' },
+    auto_approve_subtasks: { from: ['in_progress'], to: 'waiting_on_subtasks' },
     fail: { from: ['in_progress'], to: 'retrying' },
     max_retries: { from: ['in_progress', 'retrying'], to: 'error' },
 
@@ -81,6 +86,8 @@ export const TRANSITION_MAP: Readonly<Record<TransitionAction, TransitionRule>> 
     },
 
     // --- Subtask-driven ---
+    approve_subtasks: { from: ['subtasks_proposed'], to: 'waiting_on_subtasks' },
+    dismiss_all_subtasks: { from: ['subtasks_proposed'], to: 'queued' },
     subtasks_completed: { from: ['waiting_on_subtasks'], to: 'queued' },
 
     // --- Recovery-driven ---

@@ -1171,7 +1171,7 @@ describe('Task Routes', () => {
   })
 
   describe('POST /tasks/:id/propose-subtasks', () => {
-    it('stores proposals and transitions to waiting_on_subtasks', async () => {
+    it('stores proposals and transitions to subtasks_proposed', async () => {
       const task = makeTask({ status: 'in_progress' })
       ;(ctx.queries.getTaskById as any).mockReturnValue(task)
       ;(ctx.queries.createSubtaskProposals as any).mockReturnValue([
@@ -1198,7 +1198,7 @@ describe('Task Routes', () => {
         { title: 'Fix auth', prompt: 'Fix the auth bug' },
         { title: 'Add tests', prompt: 'Add unit tests' },
       ])
-      expect(ctx.queries.updateTask).toHaveBeenCalledWith('task-1', { status: 'waiting_on_subtasks' })
+      expect(ctx.queries.updateTask).toHaveBeenCalledWith('task-1', { status: 'subtasks_proposed' })
       expect(ctx.pool.killAgent).toHaveBeenCalledWith('task-1')
       expect(ctx.queries.createTaskEvent).toHaveBeenCalledWith('task-1', 'subtasks_proposed', null)
     })
@@ -1293,7 +1293,7 @@ describe('Task Routes', () => {
 
   describe('GET /tasks/:id/proposals', () => {
     it('returns proposals for a task', async () => {
-      const task = makeTask({ status: 'waiting_on_subtasks' })
+      const task = makeTask({ status: 'subtasks_proposed' })
       ;(ctx.queries.getTaskById as any).mockReturnValue(task)
       const proposals = [
         { id: 1, task_id: 'task-1', title: 'Fix auth', prompt: 'Fix it', priority: 'P2', status: 'pending' },
@@ -1316,7 +1316,7 @@ describe('Task Routes', () => {
 
   describe('POST /tasks/:id/resolve-proposals', () => {
     it('creates tasks for approved proposals and dispatches', async () => {
-      const task = makeTask({ status: 'waiting_on_subtasks' })
+      const task = makeTask({ status: 'subtasks_proposed' })
       ;(ctx.queries.getTaskById as any).mockReturnValue(task)
       ;(ctx.queries.getSubtaskProposals as any).mockReturnValue([
         { id: 1, task_id: 'task-1', title: 'Fix auth', prompt: 'Fix it', priority: 'P2', status: 'pending' },
@@ -1347,7 +1347,7 @@ describe('Task Routes', () => {
     })
 
     it('resumes parent immediately when all proposals dismissed', async () => {
-      const task = makeTask({ status: 'waiting_on_subtasks', prompt: 'original prompt' })
+      const task = makeTask({ status: 'subtasks_proposed', prompt: 'original prompt' })
       ;(ctx.queries.getTaskById as any).mockReturnValue(task)
       ;(ctx.queries.getSubtaskProposals as any).mockReturnValue([
         { id: 1, task_id: 'task-1', title: 'Fix auth', prompt: 'Fix it', priority: 'P2', status: 'dismissed', feedback: 'Not needed' },
@@ -1377,7 +1377,7 @@ describe('Task Routes', () => {
       )
     })
 
-    it('rejects if task is not waiting_on_subtasks', async () => {
+    it('rejects if task is not subtasks_proposed', async () => {
       const task = makeTask({ status: 'in_progress' })
       ;(ctx.queries.getTaskById as any).mockReturnValue(task)
 
@@ -1390,7 +1390,7 @@ describe('Task Routes', () => {
     })
 
     it('handles mixed approval and dismissal in a single request', async () => {
-      const task = makeTask({ status: 'waiting_on_subtasks' })
+      const task = makeTask({ status: 'subtasks_proposed' })
       ;(ctx.queries.getTaskById as any).mockReturnValue(task)
       ;(ctx.queries.getSubtaskProposals as any).mockReturnValue([
         { id: 1, task_id: 'task-1', title: 'Fix auth', prompt: 'Fix it', priority: 'P2', status: 'pending' },
@@ -1420,15 +1420,15 @@ describe('Task Routes', () => {
       })
       // Approved should create task
       expect(ctx.queries.createTask).toHaveBeenCalled()
-      // Parent stays in waiting_on_subtasks (some approved)
-      expect(ctx.queries.updateTask).not.toHaveBeenCalledWith(
+      // Parent transitions to waiting_on_subtasks (some approved)
+      expect(ctx.queries.updateTask).toHaveBeenCalledWith(
         'task-1',
-        expect.objectContaining({ status: 'queued' }),
+        expect.objectContaining({ status: 'waiting_on_subtasks' }),
       )
     })
 
     it('applies user prompt and priority overrides on approved proposals', async () => {
-      const task = makeTask({ status: 'waiting_on_subtasks' })
+      const task = makeTask({ status: 'subtasks_proposed' })
       ;(ctx.queries.getTaskById as any).mockReturnValue(task)
       ;(ctx.queries.getSubtaskProposals as any).mockReturnValue([
         { id: 1, task_id: 'task-1', title: 'Fix auth', prompt: 'Original prompt', priority: 'P2', status: 'pending' },
@@ -1457,7 +1457,7 @@ describe('Task Routes', () => {
     })
 
     it('stores feedback on dismissed proposals', async () => {
-      const task = makeTask({ status: 'waiting_on_subtasks', prompt: 'original' })
+      const task = makeTask({ status: 'subtasks_proposed', prompt: 'original' })
       ;(ctx.queries.getTaskById as any).mockReturnValue(task)
       ;(ctx.queries.getSubtaskProposals as any).mockReturnValue([
         { id: 1, task_id: 'task-1', title: 'Fix auth', prompt: 'Fix it', priority: 'P2', status: 'dismissed', feedback: 'Already fixed' },
