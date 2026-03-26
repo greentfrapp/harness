@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { html as diff2html } from 'diff2html'
 import 'diff2html/bundles/css/diff2html.min.css'
-import { computed, nextTick, onMounted, ref, watch } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { api } from '../api'
 
 const props = defineProps<{

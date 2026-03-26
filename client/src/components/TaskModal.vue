@@ -6,7 +6,7 @@ import TaskDetail from './TaskDetail.vue'
 
 const checkoutsStore = useCheckouts()
 
-const props = defineProps<{
+defineProps<{
   task: Task
   context: 'outbox' | 'inbox'
 }>()

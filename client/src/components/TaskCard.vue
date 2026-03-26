@@ -147,11 +147,6 @@ const elapsed = computed(() => {
   return `${hours}h ${minutes % 60}m`
 })
 
-const FIX_TAGS = ['merge-conflict', 'checkout-failed', 'needs-commit']
-const isFix = computed(() =>
-  props.task.tags.some((tag) => FIX_TAGS.includes(tag)),
-)
-
 function getTagClasses(tag: string): string {
   const config = props.tagConfigs?.[tag]
   const colorName = config?.color ?? 'gray'
