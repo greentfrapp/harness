@@ -1,5 +1,15 @@
 {
+  "arrowParens": "always",
+  "bracketSameLine": true,
+  "bracketSpacing": true,
+  "endOfLine": "lf",
+  "importOrder": ["^[./]", "^@/(.*)$"],
+  "importOrderSeparation": false,
+  "importOrderSortSpecifiers": true,
+  "plugins": ["@trivago/prettier-plugin-sort-imports"],
+  "semi": false,
+  "singleAttributePerLine": false,
   "singleQuote": true,
-  "semi": true,
-  "trailingComma": "all"
+  "trailingComma": "all",
+  "vueIndentScriptAndStyle": false
 }
