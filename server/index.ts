@@ -165,7 +165,8 @@ function checkWaitingParent(completedTaskId: string): void {
     resumePrompt += '## Completed Subtasks\n'
     for (const child of completedSubtasks) {
       const summary = child.agent_summary || '(no summary)'
-      resumePrompt += `- "${child.prompt.slice(0, 80)}": ${summary} (${child.status})\n`
+      const label = (child.title ?? child.prompt ?? '').slice(0, 80)
+      resumePrompt += `- "${label}": ${summary} (${child.status})\n`
     }
     resumePrompt += '\n'
   }

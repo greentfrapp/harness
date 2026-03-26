@@ -21,7 +21,7 @@ export const tasks = sqliteTable('tasks', {
   type: text('type').notNull(),
   status: text('status').notNull(),
   title: text('title'),
-  prompt: text('prompt').notNull(),
+  prompt: text('prompt'),
   priority: text('priority').notNull().default('P2'),
   depends_on: text('depends_on').references(() => tasks.id),
   parent_task_id: text('parent_task_id'),

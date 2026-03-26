@@ -807,6 +807,137 @@ describe('AgentPool progress broadcasting', () => {
     expect(spawnOpts.env.HARNESS_CLI).toMatch(/cli\/harness\.mjs$/)
   })
 
+  it('includes title in system prompt when task has both title and prompt', async () => {
+    const spyAdapter: AgentAdapter = {
+      ...fakeAdapter,
+      buildArgs: vi.fn(() => ['--output-format', 'stream-json', '-p', 'test']),
+    }
+    const spyRegistry: AgentRegistry = {
+      register: vi.fn(),
+      getOrDefault: () => spyAdapter,
+    } as any
+
+    const config: HarnessConfig = {
+      projects: [],
+      task_types: {
+        do: {
+          prompt_template: 'Task:\n{user_prompt}',
+          needs_worktree: true,
+          default_priority: 'P2',
+        },
+      },
+      tags: {},
+    } as any
+
+    const titlePool = new AgentPool({
+      config,
+      agentRegistry: spyRegistry,
+      getProjectById: () => makeProject(),
+      updateTask: vi.fn(() => makeTask()),
+      createTaskEvent: vi.fn(),
+      broadcast: vi.fn(),
+      getTaskById: () => makeTask(),
+      onTaskCompleted: vi.fn(),
+    })
+
+    const task = makeTask({ title: 'Fix auth bug', prompt: 'The login page returns 500' })
+    await titlePool.dispatchDoTask(task, makeProject())
+
+    expect(spyAdapter.buildArgs).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: 'Fix auth bug\n\nThe login page returns 500',
+        systemPrompt: expect.stringContaining('Fix auth bug\n\nThe login page returns 500'),
+      }),
+    )
+  })
+
+  it('uses title alone as prompt when task has no prompt', async () => {
+    const spyAdapter: AgentAdapter = {
+      ...fakeAdapter,
+      buildArgs: vi.fn(() => ['--output-format', 'stream-json', '-p', 'test']),
+    }
+    const spyRegistry: AgentRegistry = {
+      register: vi.fn(),
+      getOrDefault: () => spyAdapter,
+    } as any
+
+    const config: HarnessConfig = {
+      projects: [],
+      task_types: {
+        do: {
+          prompt_template: 'Task:\n{user_prompt}',
+          needs_worktree: true,
+          default_priority: 'P2',
+        },
+      },
+      tags: {},
+    } as any
+
+    const titlePool = new AgentPool({
+      config,
+      agentRegistry: spyRegistry,
+      getProjectById: () => makeProject(),
+      updateTask: vi.fn(() => makeTask()),
+      createTaskEvent: vi.fn(),
+      broadcast: vi.fn(),
+      getTaskById: () => makeTask(),
+      onTaskCompleted: vi.fn(),
+    })
+
+    const task = makeTask({ title: 'Fix auth bug', prompt: null })
+    await titlePool.dispatchDoTask(task, makeProject())
+
+    expect(spyAdapter.buildArgs).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: 'Fix auth bug',
+        systemPrompt: expect.stringContaining('Fix auth bug'),
+      }),
+    )
+  })
+
+  it('supports {title} placeholder in prompt template', async () => {
+    const spyAdapter: AgentAdapter = {
+      ...fakeAdapter,
+      buildArgs: vi.fn(() => ['--output-format', 'stream-json', '-p', 'test']),
+    }
+    const spyRegistry: AgentRegistry = {
+      register: vi.fn(),
+      getOrDefault: () => spyAdapter,
+    } as any
+
+    const config: HarnessConfig = {
+      projects: [],
+      task_types: {
+        do: {
+          prompt_template: '# {title}\n\n{user_prompt}',
+          needs_worktree: true,
+          default_priority: 'P2',
+        },
+      },
+      tags: {},
+    } as any
+
+    const titlePool = new AgentPool({
+      config,
+      agentRegistry: spyRegistry,
+      getProjectById: () => makeProject(),
+      updateTask: vi.fn(() => makeTask()),
+      createTaskEvent: vi.fn(),
+      broadcast: vi.fn(),
+      getTaskById: () => makeTask(),
+      onTaskCompleted: vi.fn(),
+    })
+
+    const task = makeTask({ title: 'Fix auth bug', prompt: 'Details here' })
+    await titlePool.dispatchDoTask(task, makeProject())
+
+    expect(spyAdapter.buildArgs).toHaveBeenCalledWith(
+      expect.objectContaining({
+        systemPrompt: expect.stringContaining('# Fix auth bug\n\nFix auth bug\n\nDetails here'),
+      }),
+    )
+  })
+
   it('falls back to last assistant text when result has no summary', async () => {
     const updateTask = vi.fn(() => makeTask())
     const createTaskEvent = vi.fn()

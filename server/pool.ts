@@ -64,16 +64,22 @@ interface PoolDeps {
   onTaskCompleted: (taskId: string) => void
 }
 
+/** Combine a task's title and prompt into a single string for the agent. */
+function buildTaskPrompt(task: Task): string {
+  if (task.title && task.prompt) return `${task.title}\n\n${task.prompt}`
+  return task.title ?? task.prompt ?? ''
+}
+
 /**
  * Build a fix-specific resume prompt based on task tags.
- * Returns null if no fix tags are present (use the normal task.prompt).
+ * Returns null if no fix tags are present (use the normal task prompt).
  */
 function buildFixPrompt(task: Task, project: Project): string | null {
   if (task.tags.includes('merge-conflict')) {
-    return `Your branch failed to merge into ${project.target_branch} due to conflicts. Merge ${project.target_branch} into your branch and resolve all conflicts, then verify the code still works.\n\nOriginal task:\n${task.prompt}`
+    return `Your branch failed to merge into ${project.target_branch} due to conflicts. Merge ${project.target_branch} into your branch and resolve all conflicts, then verify the code still works.\n\nOriginal task:\n${buildTaskPrompt(task)}`
   }
   if (task.tags.includes('checkout-failed')) {
-    return `The checkout of your branch failed. Please investigate and fix any issues with your branch so it can be checked out cleanly.\n\nOriginal task:\n${task.prompt}`
+    return `The checkout of your branch failed. Please investigate and fix any issues with your branch so it can be checked out cleanly.\n\nOriginal task:\n${buildTaskPrompt(task)}`
   }
   if (task.tags.includes('needs-commit')) {
     return 'Please commit all your changes.'
@@ -118,7 +124,7 @@ export class AgentPool {
       wtPath = task.worktree_path
     } else {
       // New task: create fresh worktree from target branch
-      const branchName = git.makeBranchName(task.id, task.prompt)
+      const branchName = git.makeBranchName(task.id, task.title ?? task.prompt ?? '')
       wtPath = git.worktreePath(project.repo_path, branchName)
 
       git.createWorktree(
@@ -164,9 +170,12 @@ export class AgentPool {
     }
 
     // Build system prompt from config template
+    const taskPrompt = buildTaskPrompt(task)
     const systemPrompt = taskTypeConfig
-      ? taskTypeConfig.prompt_template.replace('{user_prompt}', task.prompt)
-      : task.prompt
+      ? taskTypeConfig.prompt_template
+          .replace('{user_prompt}', taskPrompt)
+          .replace('{title}', task.title ?? '')
+      : taskPrompt
 
     // Spawn agent
     this.spawnAgent(task, project, {
@@ -186,9 +195,12 @@ export class AgentPool {
       this.deps.config.task_types['discuss']
     const permissionMode = taskTypeConfig?.permission_mode
     const sessionData = getSessionData(task)
+    const discussPrompt = buildTaskPrompt(task)
     const systemPrompt = taskTypeConfig
-      ? taskTypeConfig.prompt_template.replace('{user_prompt}', task.prompt)
-      : task.prompt
+      ? taskTypeConfig.prompt_template
+          .replace('{user_prompt}', discussPrompt)
+          .replace('{title}', task.title ?? '')
+      : discussPrompt
 
     this.spawnAgent(task, project, {
       cwd: project.repo_path,
@@ -289,7 +301,7 @@ Only propose subtasks when you have clear, actionable sub-pieces. Not every task
       ? opts.systemPrompt + harnessInstructions
       : null
 
-    const agentPrompt = opts.resumePromptOverride ?? task.prompt
+    const agentPrompt = opts.resumePromptOverride ?? buildTaskPrompt(task)
     const args = opts.resumeSessionId
       ? adapter.buildResumeArgs({
           prompt: agentPrompt,

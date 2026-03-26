@@ -309,13 +309,34 @@ describe('Task Routes', () => {
       expect(ctx.dispatcher.tryDispatch).toHaveBeenCalled()
     })
 
-    it('returns 400 when prompt is missing', async () => {
+    it('returns 400 when both title and prompt are missing', async () => {
       const res = await app.request('/tasks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ project_id: 'proj-1', type: 'do' }),
       })
       expect(res.status).toBe(400)
+    })
+
+    it('creates a task with title only (no prompt)', async () => {
+      const created = makeTask({ id: 'new-1', title: 'Fix auth', prompt: null })
+      ;(ctx.queries.createTask as any).mockReturnValue(created)
+      ;(ctx.queries.getTaskById as any).mockReturnValue(created)
+
+      const res = await app.request('/tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          project_id: 'proj-1',
+          type: 'do',
+          title: 'Fix auth',
+        }),
+      })
+
+      expect(res.status).toBe(201)
+      expect(ctx.queries.createTask).toHaveBeenCalledWith(
+        expect.objectContaining({ title: 'Fix auth' }),
+      )
     })
   })
 

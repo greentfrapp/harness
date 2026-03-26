@@ -176,7 +176,7 @@ export interface Task {
   type: TaskType
   status: TaskStatus
   title: string | null
-  prompt: string
+  prompt: string | null
   priority: Priority
   tags: string[]
   depends_on: string | null
@@ -221,7 +221,7 @@ export interface CreateTaskInput {
   project_id: string
   type: TaskType
   title?: string
-  prompt: string
+  prompt?: string
   priority?: Priority
   tags?: string[]
   depends_on?: string | null

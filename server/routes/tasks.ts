@@ -195,8 +195,11 @@ export function createTaskRoutes(ctx: AppContext) {
   app.post('/tasks', async (c) => {
     const body = await c.req.json<CreateTaskInput>()
 
-    if (!body.project_id || !body.type || !body.prompt) {
-      return c.json({ error: 'project_id, type, and prompt are required' }, 400)
+    if (!body.project_id || !body.type || (!body.prompt && !body.title)) {
+      return c.json(
+        { error: 'project_id, type, and either title or prompt are required' },
+        400,
+      )
     }
 
     // Resolve agent_type from task type config if not explicitly provided
