@@ -214,9 +214,7 @@ async function handleMaximizeAction(
           </button>
         </template>
       </div>
-      <div
-        v-if="nonDraftTasks.length"
-        class="flex items-center gap-2 text-xs">
+      <div v-if="nonDraftTasks.length" class="flex items-center gap-2 text-xs">
         <template v-if="hasSelection">
           <button
             class="text-zinc-400 hover:text-zinc-200 transition-colors"
@@ -232,7 +230,9 @@ async function handleMaximizeAction(
         </template>
         <template v-else>
           <template v-if="confirming">
-            <span class="text-zinc-400">Clear all?</span>
+            <span class="text-zinc-400">
+              Delete all tasks? This is irreversible.
+            </span>
             <button
               class="text-red-400 hover:text-red-300 font-medium"
               @click="handleClear()">
@@ -248,7 +248,7 @@ async function handleMaximizeAction(
             v-else
             class="text-zinc-500 hover:text-zinc-300 transition-colors"
             @click="confirming = true">
-            Clear
+            Delete all
           </button>
         </template>
       </div>
