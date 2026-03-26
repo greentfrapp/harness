@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { TagConfig, Task } from '@shared/types'
 import { getTaskContext, OUTBOX_STATUSES, TERMINAL_STATUSES } from '@shared/types'
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { api } from '../api'
 import { useCheckouts } from '../stores/useCheckouts'
 import TaskDetail from './TaskDetail.vue'
@@ -57,6 +57,13 @@ const collapsedReturning = ref(false)
 const FIX_TAGS = ['merge-conflict', 'checkout-failed', 'needs-commit']
 
 const isTerminal = computed(() => TERMINAL_STATUSES.includes(props.task.status))
+
+// Auto-collapse when task reaches a terminal state (approved/rejected/cancelled)
+watch(isTerminal, (terminal) => {
+  if (terminal && expanded.value) {
+    expanded.value = false
+  }
+})
 
 const needsInput = computed(() => props.task.status === 'ready')
 
