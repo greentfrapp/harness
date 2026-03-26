@@ -14,6 +14,8 @@ import {
   returnCheckout,
 } from './git'
 import { serverLog } from './log'
+import { TERMINAL_STATUSES } from '../shared/types'
+import { transition } from '../shared/transitions'
 import { AgentPool } from './pool'
 import { TaskQueue } from './queue'
 import { recoverStaleTasks } from './recovery'
@@ -84,9 +86,10 @@ const pool = new AgentPool({
   createTaskEvent: queries.createTaskEvent,
   broadcast: (event, data) => sseManager.broadcast(event, data),
   getTaskById: queries.getTaskById,
-  onTaskCompleted: () => {
+  onTaskCompleted: (taskId: string) => {
     // Re-check queue when an agent finishes (slot freed)
     dispatcher?.tryDispatch()
+    checkWaitingParent(taskId)
   },
 })
 
@@ -137,6 +140,61 @@ for (const project of queries.getAllProjects()) {
     // Not on a checkout branch — clean up any stale checkout branches
     cleanupCheckoutBranches(project.repo_path)
   }
+}
+
+/** Check if a completed task's parent should resume (all subtasks done and acted on). */
+function checkWaitingParent(completedTaskId: string): void {
+  const completedTask = queries.getTaskById(completedTaskId)
+  if (!completedTask?.parent_task_id) return
+
+  const parent = queries.getTaskById(completedTask.parent_task_id)
+  if (!parent || parent.status !== 'waiting_on_subtasks') return
+
+  const children = queries.getChildTasks(parent.id)
+  const allTerminal = children.every((child) =>
+    TERMINAL_STATUSES.includes(child.status),
+  )
+  if (!allTerminal) return
+
+  // Build resume prompt with subtask results
+  const proposals = queries.getSubtaskProposals(parent.id)
+  let resumePrompt = 'Your subtasks have been completed. Here are the results:\n\n'
+
+  const completedSubtasks = children.filter((c) => c.status !== 'cancelled')
+  if (completedSubtasks.length > 0) {
+    resumePrompt += '## Completed Subtasks\n'
+    for (const child of completedSubtasks) {
+      const summary = child.agent_summary || '(no summary)'
+      resumePrompt += `- "${child.prompt.slice(0, 80)}": ${summary} (${child.status})\n`
+    }
+    resumePrompt += '\n'
+  }
+
+  const dismissed = proposals.filter((p) => p.status === 'dismissed')
+  if (dismissed.length > 0) {
+    resumePrompt += '## Dismissed Proposals\n'
+    for (const d of dismissed) {
+      const fb = d.feedback ? `User feedback: "${d.feedback}"` : '(no feedback)'
+      resumePrompt += `- "${d.title}": ${fb}\n`
+    }
+    resumePrompt += '\n'
+  }
+
+  resumePrompt += `Continue with your original task, incorporating the completed work.\n\nOriginal task:\n${parent.prompt}`
+
+  const newStatus = transition(parent.status, 'subtasks_completed')
+  queries.updateTask(parent.id, {
+    status: newStatus,
+    prompt: resumePrompt,
+    error_message: null,
+  })
+  queries.createTaskEvent(parent.id, 'subtasks_completed', null)
+  serverLog.info(`All subtasks complete, parent re-queued`, parent.id)
+
+  taskQueue.recomputePositions(parent.project_id)
+  const updated = queries.getTaskById(parent.id)
+  sseManager.broadcast('task:updated', updated)
+  dispatcher.tryDispatch()
 }
 
 const appContext: AppContext = {

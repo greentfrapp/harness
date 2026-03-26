@@ -1,4 +1,6 @@
 import { type ChildProcess, spawn } from 'node:child_process'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import type {
   HarnessConfig,
   Project,
@@ -297,10 +299,16 @@ export class AgentPool {
       task.id,
     )
 
+    const __dirname = path.dirname(fileURLToPath(import.meta.url))
     const proc = spawn(adapter.executable, args, {
       cwd: opts.cwd,
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env },
+      env: {
+        ...process.env,
+        HARNESS_TASK_ID: task.id,
+        HARNESS_API_URL: `http://localhost:${process.env.PORT ?? '3001'}`,
+        HARNESS_CLI: path.resolve(__dirname, '../cli/harness.mjs'),
+      },
     })
 
     const agent: ActiveAgent = {
@@ -422,7 +430,8 @@ export class AgentPool {
         !currentTask ||
         currentTask.status === 'cancelled' ||
         currentTask.status === 'permission' ||
-        currentTask.status === 'held'
+        currentTask.status === 'held' ||
+        currentTask.status === 'waiting_on_subtasks'
       )
         return
 

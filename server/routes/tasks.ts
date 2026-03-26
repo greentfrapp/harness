@@ -2,7 +2,9 @@ import { Hono } from 'hono'
 import type { Context } from 'hono'
 import type {
   CreateTaskInput,
+  Priority,
   Project,
+  SubtaskProposalInput,
   Task,
   UpdateTaskInput,
 } from '../../shared/types'
@@ -1002,6 +1004,176 @@ export function createTaskRoutes(ctx: AppContext) {
     }
 
     return c.json({ diff, stats, uncommitted })
+  })
+
+  // --- Subtask Proposals ---
+
+  /** Propose subtasks: agent posts proposals, parent gets paused. */
+  app.post('/tasks/:id/propose-subtasks', async (c) => {
+    const id = c.req.param('id')
+    const result = getTaskOr404(c, id)
+    if (result instanceof Response) return result
+    const task = result
+
+    if (task.status !== 'in_progress') {
+      return c.json(
+        { error: `Task must be in_progress to propose subtasks, got '${task.status}'` },
+        400,
+      )
+    }
+
+    const body = await c.req.json<{ subtasks: SubtaskProposalInput[] }>()
+    if (!Array.isArray(body.subtasks) || body.subtasks.length === 0) {
+      return c.json({ error: 'subtasks array is required and must not be empty' }, 400)
+    }
+
+    // Validate each proposal
+    for (const s of body.subtasks) {
+      if (!s.title?.trim() || !s.prompt?.trim()) {
+        return c.json({ error: 'Each subtask must have a title and prompt' }, 400)
+      }
+    }
+
+    // Store proposals
+    const proposals = queries.createSubtaskProposals(id, body.subtasks)
+
+    // Transition to waiting_on_subtasks BEFORE killing (so exit handler early-returns)
+    const newStatus = guardTransition(c, task.status, 'propose_subtasks')
+    if (newStatus instanceof Response) return newStatus
+
+    queries.updateTask(id, { status: newStatus })
+
+    // Kill the agent
+    pool.killAgent(id)
+
+    if (config.auto_approve_subtasks) {
+      // Auto-approve: create tasks immediately
+      for (const proposal of proposals) {
+        const newTask = queries.createTask({
+          project_id: task.project_id,
+          type: task.type,
+          prompt: proposal.prompt,
+          priority: proposal.priority as Priority,
+        })
+        queries.updateTask(newTask.id, { parent_task_id: id })
+        queries.updateSubtaskProposal(proposal.id, {
+          status: 'approved',
+          spawned_task_id: newTask.id,
+        })
+        sseManager.broadcast('task:created', queries.getTaskById(newTask.id))
+      }
+      queries.createTaskEvent(id, 'subtasks_auto_approved', null)
+      const updated = queries.getTaskById(id)
+      sseManager.broadcast('task:updated', updated)
+      dispatcher.tryDispatch()
+    } else {
+      queries.createTaskEvent(id, 'subtasks_proposed', null)
+      const updated = queries.getTaskById(id)
+      sseManager.broadcast('task:updated', updated)
+    }
+
+    return c.json({ ok: true, proposal_count: proposals.length })
+  })
+
+  /** Get proposals for a task. */
+  app.get('/tasks/:id/proposals', (c) => {
+    const id = c.req.param('id')
+    const result = getTaskOr404(c, id)
+    if (result instanceof Response) return result
+
+    return c.json(queries.getSubtaskProposals(id))
+  })
+
+  /** Resolve proposals: approve some, dismiss others. */
+  app.post('/tasks/:id/resolve-proposals', async (c) => {
+    const id = c.req.param('id')
+    const result = getTaskOr404(c, id)
+    if (result instanceof Response) return result
+    const task = result
+
+    if (task.status !== 'waiting_on_subtasks') {
+      return c.json(
+        { error: `Task must be waiting_on_subtasks, got '${task.status}'` },
+        400,
+      )
+    }
+
+    const body = await c.req.json<{
+      approved: Array<{ id: number; prompt?: string; priority?: Priority }>
+      dismissed: Array<{ id: number; feedback?: string }>
+    }>()
+
+    // Process dismissed proposals
+    for (const d of body.dismissed ?? []) {
+      queries.updateSubtaskProposal(d.id, {
+        status: 'dismissed',
+        feedback: d.feedback ?? null,
+      })
+    }
+
+    // Process approved proposals
+    for (const a of body.approved ?? []) {
+      // Get the original proposal for defaults
+      const proposals = queries.getSubtaskProposals(id)
+      const proposal = proposals.find((p) => p.id === a.id)
+      if (!proposal) continue
+
+      const newTask = queries.createTask({
+        project_id: task.project_id,
+        type: task.type,
+        prompt: a.prompt ?? proposal.prompt,
+        priority: a.priority ?? (proposal.priority as Priority),
+      })
+      queries.updateTask(newTask.id, { parent_task_id: id })
+      queries.updateSubtaskProposal(a.id, {
+        status: 'approved',
+        spawned_task_id: newTask.id,
+      })
+      sseManager.broadcast('task:created', queries.getTaskById(newTask.id))
+    }
+
+    const approvedCount = (body.approved ?? []).length
+
+    if (approvedCount === 0) {
+      // No subtasks approved — resume parent immediately with dismissal feedback
+      const proposals = queries.getSubtaskProposals(id)
+      const dismissed = proposals.filter((p) => p.status === 'dismissed')
+      let resumePrompt =
+        'All proposed subtasks were dismissed by the user.\n\n'
+      if (dismissed.length > 0) {
+        resumePrompt += '## Dismissed Proposals\n'
+        for (const d of dismissed) {
+          const fb = d.feedback
+            ? `User feedback: "${d.feedback}"`
+            : '(no feedback)'
+          resumePrompt += `- "${d.title}": ${fb}\n`
+        }
+        resumePrompt += '\n'
+      }
+      resumePrompt += `Continue with your original task.\n\nOriginal task:\n${task.prompt}`
+
+      const newStatus = transition(task.status, 'subtasks_completed')
+      queries.updateTask(id, {
+        status: newStatus,
+        prompt: resumePrompt,
+        error_message: null,
+      })
+      queries.createTaskEvent(id, 'subtasks_all_dismissed', null)
+      serverLog.info(`All proposals dismissed, parent re-queued`, id)
+
+      taskQueue.recomputePositions(task.project_id)
+      const updated = queries.getTaskById(id)
+      sseManager.broadcast('task:updated', updated)
+      dispatcher.tryDispatch()
+    } else {
+      // Leave parent in waiting_on_subtasks, dispatch new tasks
+      const updated = queries.getTaskById(id)
+      sseManager.broadcast('task:updated', updated)
+      taskQueue.recomputePositions(task.project_id)
+      dispatcher.tryDispatch()
+    }
+
+    return c.json({ ok: true, approved: approvedCount, dismissed: (body.dismissed ?? []).length })
   })
 
   app.get('/tasks/:id/events', (c) => {

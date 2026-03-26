@@ -8,6 +8,7 @@ export type TaskStatus =
   | 'ready'
   | 'held'
   | 'error'
+  | 'waiting_on_subtasks'
   | 'permission'
   | 'approved'
   | 'rejected'
@@ -23,6 +24,7 @@ export const OUTBOX_STATUSES: TaskStatus[] = [
   'queued',
   'in_progress',
   'retrying',
+  'waiting_on_subtasks',
 ]
 
 // Statuses that appear in the inbox
@@ -56,6 +58,7 @@ export const ACTIVE_STATUSES: TaskStatus[] = [
   'queued',
   'in_progress',
   'retrying',
+  'waiting_on_subtasks',
   'ready',
   'held',
 ]
@@ -79,7 +82,7 @@ export const DEFAULT_VIEWS: ViewConfig[] = [
     id: 'outbox',
     name: 'Outbox',
     filter: {
-      statuses: ['draft', 'queued', 'in_progress', 'retrying'],
+      statuses: ['draft', 'queued', 'in_progress', 'retrying', 'waiting_on_subtasks'],
     },
   },
   {
@@ -138,10 +141,17 @@ export interface ProjectConfig {
 export interface HarnessConfig {
   worktree_limit: number
   conversation_limit: number
+  auto_approve_subtasks?: boolean
   agents?: Record<string, AgentConfig>
   task_types: Record<string, TaskTypeConfig>
   tags: Record<string, TagConfig>
   projects: ProjectConfig[]
+}
+
+export interface SubtaskProposalInput {
+  title: string
+  prompt: string
+  priority?: Priority
 }
 
 // Data model types
@@ -196,6 +206,7 @@ export interface SubtaskProposal {
   priority: Priority
   depends_on_title: string | null
   status: SubtaskProposalStatus
+  feedback: string | null
   spawned_task_id: string | null
   created_at: number
 }

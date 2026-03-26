@@ -13,6 +13,7 @@ const ALL_STATUSES: TaskStatus[] = [
   'queued',
   'in_progress',
   'retrying',
+  'waiting_on_subtasks',
   'ready',
   'held',
   'error',
@@ -102,6 +103,7 @@ describe('transition()', () => {
     ['in_progress', 'complete', 'ready'],
     ['in_progress', 'plan_approval_request', 'held'],
     ['in_progress', 'permission_request', 'permission'],
+    ['in_progress', 'propose_subtasks', 'waiting_on_subtasks'],
     ['in_progress', 'fail', 'retrying'],
     ['in_progress', 'max_retries', 'error'],
     ['retrying', 'max_retries', 'error'],
@@ -110,11 +112,16 @@ describe('transition()', () => {
     ['queued', 'dispatch_error', 'error'],
     ['in_progress', 'dispatch_error', 'error'],
     ['retrying', 'dispatch_error', 'error'],
+    // Subtask-driven
+    ['waiting_on_subtasks', 'subtasks_completed', 'queued'],
+    ['waiting_on_subtasks', 'cancel', 'cancelled'],
     // Recovery-driven
     ['in_progress', 'recover_requeue', 'queued'],
     ['retrying', 'recover_requeue', 'queued'],
+    ['waiting_on_subtasks', 'recover_requeue', 'queued'],
     ['in_progress', 'recover_error', 'error'],
     ['retrying', 'recover_error', 'error'],
+    ['waiting_on_subtasks', 'recover_error', 'error'],
   ]
 
   for (const [from, action, expected] of legalCases) {

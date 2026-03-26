@@ -18,11 +18,14 @@ export type TransitionAction =
   | 'complete'
   | 'plan_approval_request'
   | 'permission_request'
+  | 'propose_subtasks'
   | 'fail'
   | 'max_retries'
   // Dispatcher-driven
   | 'dispatch'
   | 'dispatch_error'
+  // Subtask-driven
+  | 'subtasks_completed'
   // Recovery-driven
   | 'recover_requeue'
   | 'recover_error'
@@ -53,6 +56,7 @@ export const TRANSITION_MAP: Readonly<Record<TransitionAction, TransitionRule>> 
         'queued',
         'in_progress',
         'retrying',
+        'waiting_on_subtasks',
         'ready',
         'held',
         'error',
@@ -65,6 +69,7 @@ export const TRANSITION_MAP: Readonly<Record<TransitionAction, TransitionRule>> 
     complete: { from: ['in_progress'], to: 'ready' },
     plan_approval_request: { from: ['in_progress'], to: 'held' },
     permission_request: { from: ['in_progress'], to: 'permission' },
+    propose_subtasks: { from: ['in_progress'], to: 'waiting_on_subtasks' },
     fail: { from: ['in_progress'], to: 'retrying' },
     max_retries: { from: ['in_progress', 'retrying'], to: 'error' },
 
@@ -75,9 +80,12 @@ export const TRANSITION_MAP: Readonly<Record<TransitionAction, TransitionRule>> 
       to: 'error',
     },
 
+    // --- Subtask-driven ---
+    subtasks_completed: { from: ['waiting_on_subtasks'], to: 'queued' },
+
     // --- Recovery-driven ---
-    recover_requeue: { from: ['in_progress', 'retrying'], to: 'queued' },
-    recover_error: { from: ['in_progress', 'retrying'], to: 'error' },
+    recover_requeue: { from: ['in_progress', 'retrying', 'waiting_on_subtasks'], to: 'queued' },
+    recover_error: { from: ['in_progress', 'retrying', 'waiting_on_subtasks'], to: 'error' },
   }
 
 /**
