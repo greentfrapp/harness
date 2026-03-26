@@ -36,6 +36,56 @@ Harness stores its config and database in `~/.harness/`. On first run it creates
 
 Add your repositories to the `projects` array. Each project must point to a valid git repo with the specified target branch.
 
+## Agent Configuration
+
+Agents are spawned as child processes of the harness server, so they inherit your global Claude Code settings (e.g. `~/.claude/settings.json`). However, the harness explicitly sets permission flags on the CLI command:
+
+- **`do` tasks** default to `--permission-mode bypassPermissions` (full tool access in the isolated worktree)
+- **`discuss` tasks** default to `--allowedTools Read,Glob,Grep,WebSearch,WebFetch` (read-only)
+
+### Customizing with `extra_args`
+
+Use the `agents` config block to append extra CLI flags to every agent invocation:
+
+```jsonc
+{
+  "agents": {
+    "claude-code": {
+      "adapter": "claude-code",
+      "extra_args": ["--allowedTools", "Bash(npm test),Bash(npm run lint)"]
+    }
+  }
+}
+```
+
+`extra_args` are appended after the built-in flags. For `--allowedTools`, the CLI merges multiple flags additively, so this extends the default set rather than replacing it. For `do` tasks this is a no-op since `bypassPermissions` already allows everything.
+
+Other useful `extra_args` examples:
+
+```jsonc
+"extra_args": ["--model", "sonnet"]           // use a different model
+"extra_args": ["--max-turns", "50"]           // limit agent turns
+```
+
+### Overriding permission mode per task type
+
+You can also set `permission_mode` on individual task types:
+
+```jsonc
+{
+  "task_types": {
+    "do": {
+      "prompt_template": "...",
+      "needs_worktree": true,
+      "default_priority": "P2",
+      "permission_mode": "plan"
+    }
+  }
+}
+```
+
+This overrides the adapter's default permission mode for that task type.
+
 ## Scripts
 
 | Command | Description |
