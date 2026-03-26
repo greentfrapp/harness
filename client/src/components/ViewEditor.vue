@@ -8,12 +8,14 @@ const ALL_STATUSES: TaskStatus[] = [
   'queued',
   'in_progress',
   'retrying',
+  'waiting_on_subtasks',
   'ready',
   'held',
   'error',
   'permission',
   'approved',
   'rejected',
+  'cancelled',
 ]
 
 const ALL_PRIORITIES: Priority[] = ['P0', 'P1', 'P2', 'P3']

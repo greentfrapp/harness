@@ -16,7 +16,7 @@ const DEFAULT_VIEWS_TEMPLATE = `{
       "id": "outbox",
       "name": "Outbox",
       "filter": {
-        "statuses": ["draft", "queued", "in_progress", "retrying"]
+        "statuses": ["draft", "queued", "in_progress", "retrying", "waiting_on_subtasks"]
       }
     },
     {
@@ -44,6 +44,18 @@ export function loadViews(): ViewConfig[] {
   const parsed = parseJsonc(raw)
   if (!parsed || !Array.isArray(parsed.views)) {
     return [...DEFAULT_VIEWS]
+  }
+  // Migration: ensure waiting_on_subtasks is in views that track in_progress
+  for (const view of parsed.views) {
+    const statuses: string[] | undefined = view.filter?.statuses
+    if (
+      statuses &&
+      statuses.includes('in_progress') &&
+      !statuses.includes('waiting_on_subtasks')
+    ) {
+      const idx = statuses.indexOf('retrying')
+      statuses.splice(idx !== -1 ? idx + 1 : statuses.length, 0, 'waiting_on_subtasks')
+    }
   }
   return parsed.views
 }
