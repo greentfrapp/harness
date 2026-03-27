@@ -1,8 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
   ALL_STATUS_PAIRS,
-  RUNNING_PAIRS,
-  TERMINAL_PAIRS,
   VALID_SUBSTATUSES,
   comparePriority,
   isRunning,

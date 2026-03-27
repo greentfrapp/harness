@@ -6,7 +6,6 @@ import type {
   SubtaskProposalInput,
   Task,
   TaskStatus,
-  TaskSubstatus,
   UpdateTaskInput,
 } from '../../shared/types'
 import { getErrorMessage, isRunning, isTerminal } from '../../shared/types'
