@@ -72,7 +72,7 @@ Views are persisted in `~/.harness/views.jsonc` and managed via `GET/PUT /api/vi
 - For an in-progress task: streams the live Claude Code session output
 - For a completed Do task: shows the diff viewer and historical session stream
 - For approved/rejected tasks: shows read-only diff viewer and historical session stream (persisted to disk)
-- For any task in conversation mode: shows a chat UI (see "Conversational Mode" below)
+- For any task: shows a chat input for inline Q&A (see "Chat" below)
 
 Task context (outbox vs. inbox behavior) is **derived from task status** via the `getTaskContext()` helper, not passed explicitly. This enables mixed-status views where a single column can contain tasks from different lifecycle phases.
 
@@ -117,20 +117,17 @@ There are two functional task types in v1, each driving genuinely different syst
 | **Do**      | Dispatch to agent pool. Agent executes the task in a worktree and returns a diff. Covers all actionable work — features, fixes, refactors, tests.                                                                                     |
 | **Discuss** | Agent researches the topic using Claude Code's **plan mode** (read-only — no file writes, no code execution). Presents structured analysis in a chat interface. May suggest subtasks that the user can approve and spawn as Do tasks. |
 
-### Conversational Mode
+### Chat
 
-Any task — not just Discuss — can transition into a conversation. When reviewing a completed Do task in the inbox, the user may want to ask quick questions about the changes ("why did you use this approach?" / "what about edge case X?") without formally revising. Clicking into the task opens a chat UI backed by the same Claude Code session (via `--resume`). This keeps the interaction lightweight — the user can ask, get an answer, and still approve/reject without re-entering the outbox flow.
+Any task — regardless of type — has a chat input in its detail view. The user can ask questions about the task's output ("why did you use this approach?" / "what about edge case X?") and get a streamed response without the task leaving the inbox. Under the hood, each message is a `--resume` call with read-only tools. The task's status does not change — it stays `ready` (or whatever inbox status it's in) throughout.
 
-Conversations don't consume worktree slots but are capped at **5 concurrent sessions** (configurable) to bound API cost. Each conversation is a full `--resume` call replaying the prior conversation history to the model.
+Chat is also the entry point for new discussions. Opening a "new chat" creates a discuss task and immediately focuses it. The user types their question, the agent responds inline, and the conversation continues turn-by-turn. This is the same discuss task type — the only difference is the UI keeps it in focus with a conversational layout rather than dispatching it to the background.
 
-**Chat vs. Revise boundary**: Conversational mode on Do tasks uses **plan mode** (read-only), even though the worktree still exists. The agent can explain its reasoning, reference code, and answer questions, but cannot modify files. This creates a clean rule:
+**Chat vs. Revise**: Two distinct UI affordances, no ambiguity. The chat input sends read-only `--resume` calls — the task stays in place. The Revise button re-dispatches with full permissions — the task moves to the outbox. Chat is for understanding; Revise is for requesting changes.
 
-- **Chat** = plan mode, read-only, stays in inbox. Quick Q&A about the work.
-- **Revise** = full mode, resumes in worktree, moves to outbox. New work happens.
+**Chat → task dispatch**: During a chat, the user may decide they want the agent to act on what was discussed. A "Dispatch task" action creates a follow-up Do task with the chat's session context (via `parent_task_id` and inherited `session_id`). The agent already has the full conversation, so the dispatch prompt can be minimal.
 
-If the user asks for changes during chat, the agent explains what it _would_ do and the UI prompts a formal **Revise**. Chat never changes code; revise always does.
-
-Discuss tasks start in conversational mode by design. Do tasks enter it on demand.
+**Resource model**: A conversation slot is consumed only while the agent is actively responding to a chat message — not for the duration of the chat session. Once the response finishes streaming, the slot is released. This means many chats can be "open" (the user has the detail view expanded) without consuming slots.
 
 ### Why not more types?
 
@@ -374,9 +371,9 @@ Topic:
 
 Note: The `AgentPool` additionally injects Harness CLI instructions into the system prompt at dispatch time, teaching the agent the `$HARNESS_CLI propose-subtasks` command. These instructions are not part of the config template — they are appended automatically.
 
-### Conversational mode
+### Chat
 
-Uses `--resume` with no additional system prompt — the prior session context is sufficient. The user's follow-up message is passed as the new prompt.
+Uses `--resume` with read-only tools (`Read,Glob,Grep,WebSearch,WebFetch`) and no additional system prompt — the prior session context is sufficient. The user's message is passed as the new prompt. Works on any task type; the read-only constraint ensures chat never modifies code regardless of the original task's permissions.
 
 ### Custom task types
 
@@ -762,25 +759,18 @@ harness/
 
 **Verification**: Submit a Do task, watch it dispatch to CC, see live session stream in accordion. Task completes, diff appears in inbox. Approve merges to target branch. Reject discards. Cancel kills process. Server restart recovers stale tasks.
 
-### Phase 3: Conversation + Interactive Review
+### Phase 3: Chat + Interactive Review
 
-**Conversational mode**
+**Chat**
 
-- [ ] `ChatUI.vue`: chat interface component — message list, input field, send button
-- [ ] Chat action on inbox Do tasks: `--resume` with stored session ID in plan mode (read-only)
-- [ ] Chat consumes a conversation slot (not worktree slot), queues if limit reached
-- [ ] Display plan-mode indicator in chat UI ("read-only — use Revise for changes")
-- [ ] If agent detects change request in chat, suggest Revise via UI prompt
-
-**Discussion flow**
-
-- [ ] Discuss task dispatch: CC in plan mode with Discuss system prompt
-- [ ] Research phase: agent runs autonomously, streams progress (consumes conversation slot)
-- [ ] On research completion: transition task from outbox to inbox with chat UI
-- [ ] Define Discuss task status transitions: `queued` → `in_progress` (research) → `ready` (in inbox, chat open)
-- [ ] Ongoing conversation: user messages sent via `--resume`, agent responds in plan mode
-- [ ] Close discussion: user closes chat, task status → `closed`, conversation slot freed
-- [ ] Add `closed` to TaskStatus enum for non-diff-producing tasks
+- [ ] `ChatInput.vue`: message input component embedded in task detail — text field + send button
+- [ ] `ChatHistory.vue`: renders chat turns (user messages + agent responses) in a conversational layout, distinct from the raw session stream
+- [ ] `POST /api/tasks/:id/chat`: streaming endpoint — `--resume` with task's session ID, read-only tools, streams response back via SSE
+- [ ] Conversation slot acquired on chat send, released when streaming completes (not held for duration of open chat)
+- [ ] Persist chat turns as part of the task's session stream (appended to `~/.harness/sessions/<task_id>.json`)
+- [ ] "New chat" action: creates a discuss task, immediately focuses it in chat-friendly layout, first message triggers initial agent spawn (not `--resume`)
+- [ ] "Dispatch task" action from chat: creates a follow-up Do task with `parent_task_id` and inherited `session_id`
+- [ ] Chat available on any task in any inbox status (`ready`, `error`, `held`, `approved`, `rejected`)
 
 **Subtask proposals** — _mechanism changed from JSON parsing to Harness CLI approach_
 
@@ -813,7 +803,7 @@ harness/
 - [x] Auto-return checkout on revise — _`autoReturnIfCheckedOut(id)` called at start of revise endpoint, matching approve/reject pattern_
 - [x] Log `task_event` with `event_type = 'revised'` and feedback in `data`
 
-**Verification**: Open chat on a completed Do task — verify plan mode (read-only, no file changes). Create a Discuss task — verify research runs, chat opens in inbox, subtask proposals render. Approve a subtask — verify Do task appears in outbox. Checkout a Do task — verify branch is loaded in main repo, banner shows, other checkouts blocked. Return — verify main repo reverts to target branch. Revise a Do task — verify it returns to outbox with feedback.
+**Verification**: Open a completed Do task, send a chat message — verify streamed response appears inline, task stays `ready`, no file changes. Start a new chat — verify discuss task is created, first message spawns agent, response streams back. Send follow-up messages — verify `--resume` continuity, conversation slot released between turns. Dispatch a Do task from chat — verify follow-up task inherits session context. Create a Discuss task via standard dispatch — verify it runs in background and lands in inbox. Approve a subtask — verify Do task appears in outbox. Checkout a Do task — verify branch is loaded in main repo, banner shows, other checkouts blocked. Return — verify main repo reverts to target branch. Revise a Do task — verify it returns to outbox with feedback.
 
 ### Phase 4: Batching + Merging + Advanced Operations
 
@@ -894,9 +884,9 @@ These features were implemented during development but weren't tracked in the or
 - **UI layout**: ~~Two-column (Outbox + Inbox) always visible~~ → Configurable N-column grid driven by `ViewConfig[]` in `~/.harness/views.jsonc`. Default views provide Outbox + Inbox; users can add custom views filtered by status, priority, tags, and project. New Task opens as a modal. Task Detail uses accordion inline with expand-to-modal for full-screen viewing.
 - **Notification badge**: Inbox count badge turns red for permission requests. Permissions are prioritized above all other inbox items.
 - **Batcher algorithm**: Directory-level grouping based on actual diff data, no transitive closure. Simple and predictable.
-- **Discussion UX**: Chat interface within the task detail, not the diff-review interface. Discussions don't produce diffs — they produce conversation and may suggest subtasks.
+- **Discussion UX**: Chat input embedded in task detail. Discussions don't produce diffs — they produce conversation and may suggest subtasks. The same chat input is available on Do tasks for Q&A about results.
 - **Discuss task isolation**: Uses Claude Code plan mode (read-only) in main repo directory. Safe for concurrent execution since no writes occur. General read-only enforcement for non-CC agents is future work.
-- **Conversational mode**: Any task (not just Discuss) can transition into a conversation via `--resume`. Capped at 5 concurrent sessions to bound API cost. Allows quick Q&A on Do task results without formal revision.
+- **Chat model**: Any task has an inline chat input for `--resume`-based Q&A with read-only tools. Conversation slots are held only during active streaming, not for the duration of an open chat. This replaces the earlier "conversational mode" concept — there is no separate mode or status, just a chat affordance available on every task. New discussions can start as chats (creating a discuss task inline) or as standard dispatches (background execution, results in inbox).
 - **Error handling**: Retry via `--resume` with history preservation, max 3 retries, then push to inbox with error for user decision.
 - **Worktree lifecycle**: Fresh worktrees created per Do task, destroyed after approval/rejection/cancellation. Worktrees are reused on revision and merge-conflict fix (preserving original commits); fresh creation only for new tasks. Discuss tasks don't use worktrees.
 - **Revise behavior**: Two mechanisms depending on task state. **Pre-approval** (Revise): `POST /tasks/:id/revise` returns the same task to the outbox with `queued` status, preserving worktree, branch, and session data. The agent resumes via `--resume` in the same worktree. **Post-approval** (Follow-up): `POST /tasks/:id/follow-up` creates a new task with the parent's session ID and a `parent_task_id` link, dispatching immediately with a fresh worktree from the updated target branch. Only one active follow-up per parent task is allowed.
@@ -916,7 +906,7 @@ These features were implemented during development but weren't tracked in the or
 - **Agent prompting**: System prompts are stored as configurable templates in `config.jsonc`, passed via `--systemPrompt`. Templates support `{user_prompt}` (combined title + prompt) and `{title}` (title only) placeholders. Do tasks get worktree-aware instructions; Discuss tasks get read-only research instructions. The `AgentPool` also injects Harness CLI instructions for subtask proposal into the system prompt.
 - **Data model**: Mutable `tasks` table for current state + append-only `task_events` for audit trail. Agent-specific session data stored as a JSON blob (`agent_session_data`) with an `agent_type` field, keeping the schema adaptable for future agents. Agent progress streams are persisted to disk (`~/.harness/sessions/`) for post-completion viewing.
 - **Server crash recovery**: On startup, detect stale tasks via SQLite, kill orphaned processes via stored PIDs, reconcile worktrees with filesystem, and transition tasks to `error` (partial work reviewable) or `queued` (re-dispatch). Runs synchronously before accepting connections.
-- **Chat vs. Revise boundary**: Conversational mode on Do tasks uses plan mode (read-only). Chat never changes code; revise always does. If the user requests changes during chat, the agent explains what it would do and the UI prompts a formal Revise.
+- **Chat vs. Revise boundary**: Chat input sends read-only `--resume` calls — the task stays in place. The Revise button re-dispatches with full permissions — the task moves to the outbox. Two distinct UI affordances with no ambiguity or agent-side detection needed.
 - **External repo changes**: Out of scope for v1. Future work will add periodic sync/re-validation.
 - **Agent-agnostic abstraction**: Deferred to future work, but v1 implementation should use a clean agent manager interface so Claude Code integration is swappable.
 - **Draft tasks**: Tasks can be created as drafts, edited freely, then sent to the queue. This avoids accidental dispatch of incomplete tasks. The `draft` status is separate from the outbox/inbox status groups.
