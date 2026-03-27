@@ -12,31 +12,42 @@ The developer assigns tasks with clear intent and constraints, checks on progres
 
 The atomic unit in Harness is the Task, which is essentially an assignment from the developer to the agent.
 
+The interface is flat (no nested objects) since the DB columns are flat and nesting would add serialization overhead. Fields are grouped by section comments.
+
 ```
 Task
-- id: uuid
-- title: string
-- description: string
-- result: string
-- status: TaskStatus
-- substatus: TaskSubstatus
-- type: TaskType
-- metadata: TaskMetadata
-    - project_id: string
-    - priority: P0 to P3
-    - tags: string[]
-    - created_at
-    - updated_at
-    - started_at
-    - completed_at
-- relations: TaskRelations
-    - parent_id: uuid (subtask of, or follow-up of)
-    - depends_on: uuid (only start when this task is approved)
-    - references: uuid[] (informational links for context)
-- artifacts: Artifact[]
-- branch_name: string
-- worktree_path: string
-- session_id: string
+  // Core
+  id: uuid
+  project_id: string
+  type: TaskType
+  status: TaskStatus
+  substatus: TaskSubstatus
+  title: string
+  prompt: string
+  result: string
+
+  // Metadata
+  priority: P0 to P3
+  tags: string[]
+  created_at, updated_at, started_at, completed_at
+
+  // Relations
+  parent_id: uuid (subtask of, or follow-up of)
+  depends_on: uuid (only start when this task is approved)
+  references: uuid[] (informational links for context)
+
+  // Agent
+  agent_type: string
+  agent_session_data: string
+  session_id: string
+
+  // Worktree
+  worktree_path: string
+  branch_name: string
+
+  // Queue
+  retry_count: number
+  queue_position: number
 ```
 
 ### Task Type
@@ -81,7 +92,9 @@ Statuses: `draft`, `queued`, `in_progress`, `pending`, `done`, `cancelled`.
 Substatuses by status:
 - `in_progress` → `running`, `retrying`, `waiting_on_subtasks`
 - `pending` → `review`, `permission`, `subtask_approval`
-- `done` → `accepted`, `rejected`
+- `done` → (none), `accepted`, `rejected`
+
+`done` with no substatus is for read-only tasks (`discuss`, `plan`) that complete without needing accept/reject review. `do` tasks always go through `pending:review` first and end as `done:accepted` or `done:rejected`.
 
 ### Task Lifecycle Flows
 
@@ -160,23 +173,24 @@ The main idea is to re-implement the current version of Harness but with the abo
 - Artifacts will not be implemented for now
 - Write Other Tasks CLI command (deferred)
 
-### Phase 0: Shared Foundation
+### Phase 0: Shared Foundation ✓
 
-The shared layer defines the contract between server, client, and CLI. Everything else depends on it.
+Implemented in `v2/shared/`. The shared layer defines the contract between server, client, and CLI.
 
-- [ ] **New status/substatus types** — Replace the current flat `TaskStatus` (12 values) with `TaskStatus` (`draft`, `queued`, `in_progress`, `pending`, `done`, `cancelled`) + `TaskSubstatus` (`running`, `retrying`, `waiting_on_subtasks`, `review`, `permission`, `subtask_approval`, `accepted`, `rejected`). Update status group constants (`OUTBOX_STATUSES`, `INBOX_STATUSES`, `TERMINAL_STATUSES`, etc.) to use status+substatus pairs.
-- [ ] **Updated Task type** — Restructure `Task` interface: add `substatus`, `result`, `metadata` (with `created_at`, `updated_at`, `started_at`, `completed_at`), `relations` (`parent_id`, `depends_on`, `references`). Remove `original_prompt`, `diff_summary`, `diff_full`, `agent_summary`, `error_message` as separate top-level fields (fold into `result` or `metadata` as appropriate).
-- [ ] **New transition state machine** — Rewrite `transitions.ts` with transitions keyed on `(status, substatus)` pairs. All existing `TransitionAction` values need remapping (e.g. `complete` → `in_progress:running` to `pending:review`, `fail` → `in_progress:running` to `in_progress:retrying`). Add mode-escalation transitions (`request_transition`).
-- [ ] **ViewFilter update** — Update `ViewFilter` and `DEFAULT_VIEWS` to filter on status+substatus pairs instead of flat status.
-- [ ] **Utility updates** — Update `getTaskContext()`, `comparePriority()`, status group helpers.
-- [ ] **Tests** — Port `transitions.test.ts` to the new state machine. Cover every edge: illegal transitions, substatus-aware transitions, mode escalation boundaries.
+- [x] **New status/substatus types** — 6 statuses + substatuses. Status group constants use `StatusPair[]`. Helper functions: `isTerminal()`, `isRunning()`, `isOutbox()`, `isInbox()`.
+- [x] **Updated Task type** — Flat interface (no nested metadata/relations objects) with section comments. Added `substatus`, `result`, `references`, `session_id`, `started_at`, `completed_at`. Removed `original_prompt`, `diff_summary`, `diff_full`, `agent_summary`, `error_message`.
+- [x] **New transition state machine** — Keyed on `(status, substatus)` pairs with O(1) lookup map. Includes `complete_readonly` (discuss/plan → `done:null`), `request_transition`/`approve_transition` for mode escalation, `dispatch_retry` for retrying dispatch.
+- [x] **ViewFilter update** — Filters on `statuses` + `substatuses` arrays.
+- [x] **Utility updates** — `getTaskContext()`, `comparePriority()`, status group helpers all updated.
+- [x] **Tests** — 53 transition test cases, 37 query test cases. All passing.
 
-### Phase 1: Database & Schema
+### Phase 1: Database & Schema ✓
 
-- [ ] **New schema** — Rewrite `server/db/schema.ts`: add `substatus` column, `result` column, restructure metadata/relations columns. Add `task_transitions` table for mode-escalation links (source_task_id → spawned_task_id, transition_type).
-- [ ] **Migration** — Write a migration from the v1 schema. Map old statuses to new status+substatus pairs (e.g. `ready` → `pending:review`, `held` → `pending:subtask_approval`, `error` → `pending:review` with error in result, etc.).
-- [ ] **Updated queries** — Rewrite `server/db/queries.ts` to use new schema. All queries that filter by status must also handle substatus.
-- [ ] **Tests** — Port `queries.test.ts`.
+Implemented in `v2/server/db/`. Fresh schema with no v1 migration baggage.
+
+- [x] **New schema** — `substatus`, `result`, `references` (JSON text), `session_id`, `started_at`, `completed_at` columns. New `task_transitions` table for mode-escalation links. Compound index on `(status, substatus)`.
+- [x] **Updated queries** — `deserializeTask()` parses both `tags` and `references` JSON. `getTasksByStatus()` accepts optional substatus filter. New `createTaskTransition()`, `getTaskTransitions()`, `getTransitionChain()`.
+- [x] **Tests** — Full coverage including substatus filtering, references round-trip, transition chain traversal.
 
 ### Phase 2: Server Core
 
