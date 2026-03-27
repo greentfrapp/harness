@@ -72,6 +72,9 @@ function buildTaskPrompt(task: Task): string {
   return task.title ?? task.prompt ?? ''
 }
 
+/** Tags added by the fix flow — stripped after successful completion. */
+const FIX_TAGS = ['merge-conflict', 'checkout-failed', 'needs-commit']
+
 /**
  * Build a fix-specific resume prompt based on task tags.
  * Returns null if no fix tags are present (use the normal task prompt).
@@ -824,6 +827,9 @@ Only propose subtasks when you have clear, actionable sub-pieces. Not every task
       }
     }
 
+    // Strip fix tags on successful completion — they're operational, not descriptive
+    const cleanedTags = task.tags.filter((t) => !FIX_TAGS.includes(t))
+
     // v2: Do tasks → pending:review, discuss/plan → done:null
     const isReadOnly = task.type === 'discuss' || task.type === 'plan'
     const action = isReadOnly ? 'complete_readonly' : 'complete'
@@ -834,6 +840,7 @@ Only propose subtasks when you have clear, actionable sub-pieces. Not every task
       substatus: target.substatus,
       result: resultText,
       completed_at: Date.now(),
+      ...(cleanedTags.length !== task.tags.length ? { tags: cleanedTags } : {}),
     })
     this.deps.createTaskEvent(taskId, 'completed', null)
     const updated = this.deps.getTaskById(taskId)

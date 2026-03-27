@@ -606,6 +606,97 @@ describe('AgentPool task completion', () => {
       }),
     )
   })
+
+  it('strips fix tags on successful completion', async () => {
+    const updateTask = vi.fn(() => makeTask())
+    const onTaskCompleted = vi.fn()
+
+    const taskWithFixTag = makeTask({
+      status: 'in_progress',
+      substatus: 'running',
+      branch_name: 'harness/test-branch',
+      tags: ['feature', 'merge-conflict'],
+    })
+
+    const pool = new AgentPool({
+      config: defaultConfig,
+      agentRegistry: fakeRegistry,
+      getProjectById: () => makeProject(),
+      updateTask,
+      createTaskEvent: vi.fn(),
+      broadcast: vi.fn(),
+      getTaskById: () => taskWithFixTag,
+      getSubtaskProposals: vi.fn(() => []),
+      onTaskCompleted,
+    })
+
+    await pool.dispatchDoTask(taskWithFixTag, makeProject())
+
+    const resultMsg = {
+      type: 'result',
+      result: 'Resolved merge conflict.',
+      session_id: 'sess-1',
+    }
+    spawnedProc.stdout.emit(
+      'data',
+      Buffer.from(JSON.stringify(resultMsg) + '\n'),
+    )
+
+    updateTask.mockClear()
+    spawnedProc.emit('close', 0)
+
+    // Should strip merge-conflict tag but keep feature tag
+    expect(updateTask).toHaveBeenCalledWith(
+      'task-1',
+      expect.objectContaining({
+        status: 'pending',
+        substatus: 'review',
+        tags: ['feature'],
+      }),
+    )
+  })
+
+  it('does not include tags field when no fix tags to strip', async () => {
+    const updateTask = vi.fn(() => makeTask())
+
+    const taskNoFixTags = makeTask({
+      status: 'in_progress',
+      substatus: 'running',
+      branch_name: 'harness/test-branch',
+      tags: ['feature', 'bug'],
+    })
+
+    const pool = new AgentPool({
+      config: defaultConfig,
+      agentRegistry: fakeRegistry,
+      getProjectById: () => makeProject(),
+      updateTask,
+      createTaskEvent: vi.fn(),
+      broadcast: vi.fn(),
+      getTaskById: () => taskNoFixTags,
+      getSubtaskProposals: vi.fn(() => []),
+      onTaskCompleted: vi.fn(),
+    })
+
+    await pool.dispatchDoTask(taskNoFixTags, makeProject())
+
+    const resultMsg = {
+      type: 'result',
+      result: 'Done.',
+      session_id: 'sess-1',
+    }
+    spawnedProc.stdout.emit(
+      'data',
+      Buffer.from(JSON.stringify(resultMsg) + '\n'),
+    )
+
+    updateTask.mockClear()
+    spawnedProc.emit('close', 0)
+
+    // Should NOT include tags in the update (no fix tags to strip)
+    const updateCall = updateTask.mock.calls[0][1]
+    expect(updateCall).not.toHaveProperty('tags')
+  })
 })
 
 // --- Permission requests ---
