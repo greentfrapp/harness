@@ -55,6 +55,7 @@ export const INBOX_PAIRS: readonly StatusPair[] = [
   { status: 'pending', substatus: 'review' },
   { status: 'pending', substatus: 'permission' },
   { status: 'pending', substatus: 'subtask_approval' },
+  { status: 'done', substatus: null },
   { status: 'done', substatus: 'accepted' },
   { status: 'done', substatus: 'rejected' },
   { status: 'cancelled', substatus: null },

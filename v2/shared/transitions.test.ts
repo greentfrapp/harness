@@ -240,4 +240,21 @@ describe('findAction()', () => {
     expect(findAction('queued', null, 'queued', null)).toBeNull()
     expect(findAction('pending', 'review', 'pending', 'review')).toBeNull()
   })
+
+  it('returns one of multiple valid actions for ambiguous transitions', () => {
+    // pending:review → done:accepted can be either 'approve' or 'approve_transition'
+    const action = findAction('pending', 'review', 'done', 'accepted')
+    expect(['approve', 'approve_transition']).toContain(action)
+  })
+
+  it('returns one of multiple valid actions for in_progress:running → pending:review', () => {
+    // in_progress:running → pending:review can be complete, max_retries, request_transition, or dispatch_error
+    const action = findAction('in_progress', 'running', 'pending', 'review')
+    expect([
+      'complete',
+      'max_retries',
+      'request_transition',
+      'dispatch_error',
+    ]).toContain(action)
+  })
 })
