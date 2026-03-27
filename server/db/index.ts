@@ -29,6 +29,7 @@ const CREATE_TABLES_SQL = `
     status TEXT NOT NULL,
     title TEXT,
     prompt TEXT,
+    original_prompt TEXT,
     priority TEXT NOT NULL DEFAULT 'P2',
     depends_on TEXT REFERENCES tasks(id),
     parent_task_id TEXT,
@@ -131,6 +132,11 @@ export function initDatabase(): void {
   }
   try {
     sqlite.exec('ALTER TABLE tasks ADD COLUMN title TEXT')
+  } catch {
+    // Column already exists
+  }
+  try {
+    sqlite.exec('ALTER TABLE tasks ADD COLUMN original_prompt TEXT')
   } catch {
     // Column already exists
   }

@@ -11,6 +11,7 @@ import Tooltip from './BaseTooltip.vue'
 
 const props = defineProps<{
   taskId: string
+  historical?: boolean
 }>()
 
 const messages = ref<StreamMessage[]>([])
@@ -268,16 +269,23 @@ async function fetchBufferedProgress() {
 onMounted(async () => {
   // Reset auto-scroll when (re-)opening the task
   userScrolledUp.value = false
-  window.addEventListener('task:progress', handleProgress as EventListener)
+  if (!props.historical) {
+    window.addEventListener('task:progress', handleProgress as EventListener)
+  }
   await fetchBufferedProgress()
   // Retry once after 2s if nothing arrived yet (handles race where agent just started)
-  if (messages.value.length === 0) {
+  if (!props.historical && messages.value.length === 0) {
     setTimeout(() => fetchBufferedProgress(), 2000)
   }
 })
 
 onUnmounted(() => {
-  window.removeEventListener('task:progress', handleProgress as EventListener)
+  if (!props.historical) {
+    window.removeEventListener(
+      'task:progress',
+      handleProgress as EventListener,
+    )
+  }
 })
 
 /** Render text as markdown HTML. */

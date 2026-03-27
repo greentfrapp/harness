@@ -21,6 +21,7 @@ function makeTask(overrides: Partial<Task> = {}): Task {
     status: 'queued',
     title: null,
     prompt: 'test',
+    original_prompt: null,
     priority: 'P2',
     tags: [],
     depends_on: null,

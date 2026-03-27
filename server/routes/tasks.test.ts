@@ -48,6 +48,7 @@ function makeTask(overrides: Partial<Task> = {}): Task {
     status: 'queued',
     title: null,
     prompt: 'test task',
+    original_prompt: null,
     priority: 'P2',
     tags: [],
     depends_on: null,
@@ -57,6 +58,7 @@ function makeTask(overrides: Partial<Task> = {}): Task {
     worktree_path: null,
     branch_name: null,
     diff_summary: null,
+    diff_full: null,
     agent_summary: null,
     error_message: null,
     retry_count: 0,
@@ -571,6 +573,7 @@ describe('Task Routes', () => {
         error_message: null,
         agent_summary: null,
         diff_summary: null,
+        original_prompt: 'test task',
       })
       expect(ctx.queries.createTaskEvent).toHaveBeenCalledWith(
         'task-1',

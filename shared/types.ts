@@ -177,6 +177,7 @@ export interface Task {
   status: TaskStatus
   title: string | null
   prompt: string | null
+  original_prompt: string | null
   priority: Priority
   tags: string[]
   depends_on: string | null
@@ -233,6 +234,7 @@ export interface UpdateTaskInput {
   status?: TaskStatus
   title?: string | null
   prompt?: string
+  original_prompt?: string | null
   priority?: Priority
   tags?: string[]
   depends_on?: string | null

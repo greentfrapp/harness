@@ -176,9 +176,18 @@ const showSessionStream = computed(() =>
   RUNNING_STATUSES.includes(props.task.status),
 )
 
+const showHistoricalSession = computed(
+  () =>
+    !RUNNING_STATUSES.includes(props.task.status) &&
+    (TERMINAL_STATUSES.includes(props.task.status) ||
+      REVIEWABLE_STATUSES.includes(props.task.status)),
+)
+
 const showDiffViewer = computed(
   () =>
-    props.task.branch_name && REVIEWABLE_STATUSES.includes(props.task.status),
+    props.task.branch_name &&
+    (REVIEWABLE_STATUSES.includes(props.task.status) ||
+      TERMINAL_STATUSES.includes(props.task.status)),
 )
 
 const renderedSummary = computed(() => {
@@ -373,9 +382,21 @@ function formatTime(ts: number): string {
       <p class="text-sm font-medium text-zinc-200">{{ task.title }}</p>
     </div>
 
+    <!-- Original prompt (shown when task has been revised) -->
+    <div v-if="task.original_prompt && task.original_prompt !== task.prompt">
+      <h4 class="text-xs font-medium text-zinc-500 uppercase mb-1">
+        Original Prompt
+      </h4>
+      <p class="text-sm text-zinc-400 whitespace-pre-wrap">
+        {{ task.original_prompt }}
+      </p>
+    </div>
+
     <!-- Full prompt -->
     <div>
-      <h4 class="text-xs font-medium text-zinc-500 uppercase mb-1">Prompt</h4>
+      <h4 class="text-xs font-medium text-zinc-500 uppercase mb-1">
+        {{ task.original_prompt && task.original_prompt !== task.prompt ? 'Latest Feedback' : 'Prompt' }}
+      </h4>
       <p class="text-sm text-zinc-300 whitespace-pre-wrap">{{ task.prompt }}</p>
     </div>
 
@@ -418,7 +439,12 @@ function formatTime(ts: number): string {
         v-html="renderedSummary"></div>
     </div>
 
-    <!-- Diff viewer for completed Do tasks in inbox -->
+    <!-- Historical session for completed/reviewable tasks -->
+    <div v-if="showHistoricalSession">
+      <SessionStream :task-id="task.id" :historical="true" />
+    </div>
+
+    <!-- Diff viewer for Do tasks with branches -->
     <div v-if="showDiffViewer">
       <h4 class="text-xs font-medium text-zinc-500 uppercase mb-2">Changes</h4>
       <DiffViewer :task-id="task.id" @revised="showRevise = false" />
