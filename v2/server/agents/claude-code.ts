@@ -122,26 +122,6 @@ export class ClaudeCodeAdapter implements AgentAdapter {
       }
     }
 
-    // Detect ExitPlanMode tool use: the agent is requesting plan approval.
-    // The CLI blocks waiting for user input, so we intercept and handle it.
-    if (
-      msg.type === 'assistant' &&
-      Array.isArray((msg as any).message?.content)
-    ) {
-      for (const block of (msg as any).message.content) {
-        if (block.type === 'tool_use' && block.name === 'ExitPlanMode') {
-          return {
-            ...base,
-            type: 'plan_approval_request',
-            summary:
-              typeof block.input?.plan === 'string'
-                ? block.input.plan
-                : undefined,
-          }
-        }
-      }
-    }
-
     // Detect permission denial: in -p mode, the CLI returns a user message with
     // a tool_result error when a tool needs permission. Known formats:
     //   Bash:      "Error: This command requires approval"

@@ -19,7 +19,6 @@ export interface AgentSessionData {
   session_id: string | null
   pid: number
   granted_tools?: string[]
-  plan_approved?: boolean
   pending_tool?: string | null
   pending_tool_input?: Record<string, unknown> | null
 }
@@ -160,12 +159,8 @@ export class AgentPool {
     // Check if this task has a pre-populated session ID (e.g. follow-up task)
     const existingSession = getSessionData(task)
     const grantedTools = existingSession?.granted_tools
+    const permissionMode = configPermissionMode
 
-    // Override permission mode for plan-approved tasks (execute phase):
-    // undefined falls through to default bypassPermissions for worktree tasks
-    const permissionMode = existingSession?.plan_approved
-      ? undefined
-      : configPermissionMode
     if (existingSession?.session_id) {
       // Resume the previous conversation in the existing worktree
       this.spawnAgent(task, project, {
@@ -698,33 +693,6 @@ Only propose subtasks when you have clear, actionable sub-pieces. Not every task
     _agent: ActiveAgent,
     event: AgentProgressEvent,
   ): void {
-    // Handle plan_approval_request: kill agent, move task to pending:review
-    // In v2, plan approval uses request_transition action
-    if (event.type === 'plan_approval_request') {
-      serverLog.info(`Plan approval requested`, taskId)
-
-      this.killAgent(taskId)
-
-      const currentTask = this.deps.getTaskById(taskId)
-      if (currentTask) {
-        const target = transition(
-          currentTask.status,
-          currentTask.substatus,
-          'request_transition',
-        )
-        this.deps.updateTask(taskId, {
-          status: target.status,
-          substatus: target.substatus,
-          result: event.summary || null,
-        })
-      }
-      this.deps.createTaskEvent(taskId, 'transition_requested', null)
-      const updated = this.deps.getTaskById(taskId)
-      this.deps.broadcast('inbox:new', updated)
-      this.deps.onTaskCompleted(taskId)
-      return
-    }
-
     // Handle permission_request: kill agent, move task to pending:permission
     if (event.type === 'permission_request') {
       serverLog.warn(

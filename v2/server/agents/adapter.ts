@@ -9,7 +9,6 @@ export interface AgentProgressEvent {
     | 'progress'
     | 'result'
     | 'permission_request'
-    | 'plan_approval_request'
     | 'error'
   sessionId?: string
   summary?: string
