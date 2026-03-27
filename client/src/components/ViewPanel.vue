@@ -332,9 +332,9 @@ async function handleMaximizeAction(
                 </div>
                 <p class="text-sm text-zinc-400 leading-snug">
                   {{
-                    draft.prompt.length > 120
-                      ? draft.prompt.slice(0, 120) + '...'
-                      : draft.prompt
+                    (draft.prompt ?? '').length > 120
+                      ? (draft.prompt ?? '').slice(0, 120) + '...'
+                      : draft.prompt ?? ''
                   }}
                 </p>
               </div>

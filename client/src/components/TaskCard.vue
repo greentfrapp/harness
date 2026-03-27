@@ -173,7 +173,7 @@ function getTagClasses(tag: string): string {
 }
 
 const truncatedPrompt = computed(() => {
-  const text = props.task.prompt
+  const text = props.task.prompt ?? ''
   return text.length > 120 ? text.slice(0, 120) + '...' : text
 })
 

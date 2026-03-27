@@ -34,6 +34,7 @@ export interface DisplayItem {
     | 'system'
     | 'error'
     | 'chat_separator'
+    | 'chat_user_message'
     | 'unknown'
   text?: string
   toolName?: string
@@ -172,8 +173,19 @@ function extractToolResultContent(block: any, msg: StreamMessage): unknown {
  */
 export function expandMessages(messages: StreamMessage[]): DisplayItem[] {
   const items: DisplayItem[] = []
+  let lastAssistantText = ''
 
   for (const msg of messages) {
+    // --- Chat user message (synthetic, injected by UI) ---
+    if (msg.type === '__chat_user_message') {
+      items.push({
+        displayType: 'chat_user_message',
+        text: (msg as any).text ?? '',
+        raw: msg,
+      })
+      continue
+    }
+
     if (!hasDisplayableContent(msg)) continue
 
     // --- Assistant messages: expand content blocks ---
@@ -183,6 +195,7 @@ export function expandMessages(messages: StreamMessage[]): DisplayItem[] {
         for (const block of blocks) {
           const b = block as any
           if (b.type === 'text' && b.text) {
+            lastAssistantText = b.text
             items.push({ displayType: 'text', text: b.text, raw: msg })
           } else if (b.type === 'tool_use') {
             items.push({
@@ -246,8 +259,10 @@ export function expandMessages(messages: StreamMessage[]): DisplayItem[] {
       continue
     }
 
-    // --- Result ---
+    // --- Result (skip if it duplicates the last assistant text) ---
     if (msg.type === 'result') {
+      const resultStr = typeof msg.result === 'string' ? msg.result : ''
+      if (resultStr && resultStr === lastAssistantText) continue
       items.push({
         displayType: 'result',
         resultText: msg.result,
