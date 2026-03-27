@@ -336,6 +336,8 @@ export function createTaskRoutes(ctx: AppContext) {
     const newStatus = guardTransition(c, task.status, 'approve')
     if (newStatus instanceof Response) return newStatus
 
+    // Kill any active chat before status change
+    pool.killChatAgent(id)
     // Auto-return if this task is currently checked out
     autoReturnIfCheckedOut(id)
 
@@ -412,6 +414,8 @@ export function createTaskRoutes(ctx: AppContext) {
     const newStatus = guardTransition(c, task.status, 'reject')
     if (newStatus instanceof Response) return newStatus
 
+    // Kill any active chat before status change
+    pool.killChatAgent(id)
     // Auto-return if this task is currently checked out
     autoReturnIfCheckedOut(id)
 
@@ -681,8 +685,9 @@ export function createTaskRoutes(ctx: AppContext) {
     const isTerminal = TERMINAL_STATUSES.includes(existing.status)
 
     if (isTerminal || isDraft || forcePermanent) {
-      // Kill running agent if any (relevant when force-deleting active tasks)
+      // Kill running agent or chat agent if any
       pool.killAgent(id)
+      pool.killChatAgent(id)
 
       // Clean up worktree and branch
       const project = queries.getProjectById(existing.project_id)
@@ -706,6 +711,7 @@ export function createTaskRoutes(ctx: AppContext) {
     if (cancelStatus instanceof Response) return cancelStatus
 
     pool.killAgent(id)
+    pool.killChatAgent(id)
 
     // Clean up worktree and branch
     const cancelProject = queries.getProjectById(existing.project_id)
@@ -737,6 +743,8 @@ export function createTaskRoutes(ctx: AppContext) {
     const newStatus = guardTransition(c, task.status, 'revise')
     if (newStatus instanceof Response) return newStatus
 
+    // Kill any active chat before status change
+    pool.killChatAgent(id)
     // Auto-return if this task is currently checked out
     autoReturnIfCheckedOut(id)
 
@@ -774,14 +782,15 @@ export function createTaskRoutes(ctx: AppContext) {
     return c.json(updated)
   })
 
-  /** Follow up: create a new task that resumes the conversation from an approved task. */
+  /** Follow up: create a new task that resumes the conversation from a completed task. */
   app.post('/tasks/:id/follow-up', async (c) => {
     const id = c.req.param('id')
     const result = getTaskOr404(c, id)
     if (result instanceof Response) return result
     const task = result
-    if (task.status !== 'approved') {
-      return c.json({ error: 'Only approved tasks can have follow-ups' }, 400)
+    const FOLLOW_UP_STATUSES = ['ready', 'error', 'held', 'approved', 'rejected']
+    if (!FOLLOW_UP_STATUSES.includes(task.status)) {
+      return c.json({ error: `Cannot follow up on task in status '${task.status}'` }, 400)
     }
 
     // Guard: only one active follow-up per parent task
@@ -1224,6 +1233,66 @@ export function createTaskRoutes(ctx: AppContext) {
     // Fall back to persisted session history
     const persisted = loadSessionMessages(id)
     return c.json({ messages: persisted })
+  })
+
+  // ── Chat ──────────────────────────────────────────────────────────
+
+  const CHAT_STATUSES = ['draft', 'ready', 'error', 'held', 'approved', 'rejected']
+
+  /** Send a chat message on a task. Spawns an inline agent with read-only tools. */
+  app.post('/tasks/:id/chat', async (c) => {
+    const id = c.req.param('id')
+    const result = getTaskWithProjectOr404(c, id)
+    if (result instanceof Response) return result
+    const { task, project } = result
+
+    if (!CHAT_STATUSES.includes(task.status)) {
+      return c.json(
+        { error: `Cannot chat on task in status '${task.status}'` },
+        400,
+      )
+    }
+
+    if (pool.hasChatAgent(id)) {
+      return c.json({ error: 'Chat already in progress' }, 409)
+    }
+
+    if (pool.activeConversationCount >= config.conversation_limit) {
+      return c.json({ error: 'No conversation slots available' }, 503)
+    }
+
+    const body = await c.req.json<{ message: string }>()
+    if (!body.message?.trim()) {
+      return c.json({ error: 'message is required' }, 400)
+    }
+
+    const sessionData = getSessionData(task)
+    pool.spawnChatAgent(task, project, {
+      message: body.message.trim(),
+      sessionId: sessionData?.session_id ?? null,
+    })
+
+    queries.createTaskEvent(
+      id,
+      'chat',
+      JSON.stringify({ message: body.message.trim() }),
+    )
+
+    return c.json({ ok: true })
+  })
+
+  /** Stop an active chat on a task. */
+  app.delete('/tasks/:id/chat', (c) => {
+    const id = c.req.param('id')
+    const result = getTaskOr404(c, id)
+    if (result instanceof Response) return result
+
+    if (!pool.hasChatAgent(id)) {
+      return c.json({ error: 'No active chat' }, 404)
+    }
+
+    pool.killChatAgent(id)
+    return c.json({ ok: true })
   })
 
   return app

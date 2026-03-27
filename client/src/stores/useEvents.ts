@@ -87,6 +87,16 @@ export const useEvents = defineStore('events', () => {
       }
     })
 
+    // Forward chat:complete events as custom DOM events
+    eventSource.addEventListener('chat:complete', (e) => {
+      try {
+        const data = JSON.parse(e.data)
+        window.dispatchEvent(new CustomEvent('chat:complete', { detail: data }))
+      } catch {
+        // Ignore parse errors
+      }
+    })
+
     eventSource.onerror = () => {
       connected.value = false
       eventSource?.close()
