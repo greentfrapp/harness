@@ -282,6 +282,30 @@ export class AgentPool {
     }
     this.chatAgents.set(task.id, agent)
 
+    // Seed progress buffer with user message so all clients (including modal) can see it
+    const existingBuffer = this.progressBuffers.get(task.id)
+    const hasChat = existingBuffer?.some(
+      (m: any) =>
+        m?.type === '__chat_separator' || m?.type === '__chat_user_message',
+    )
+    const seedMessages: unknown[] = []
+    if (!hasChat) {
+      seedMessages.push({ type: '__chat_separator', timestamp: Date.now() })
+    }
+    seedMessages.push({
+      type: '__chat_user_message',
+      text: opts.message,
+      timestamp: Date.now(),
+    })
+    if (existingBuffer) {
+      existingBuffer.push(...seedMessages)
+    } else {
+      this.progressBuffers.set(task.id, [...seedMessages])
+    }
+    for (const msg of seedMessages) {
+      this.deps.broadcast('task:progress', { task_id: task.id, message: msg })
+    }
+
     proc.on('error', (err) => {
       this.chatAgents.delete(task.id)
       serverLog.error(

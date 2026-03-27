@@ -147,7 +147,11 @@ export function initDatabase(): void {
       .prepare("SELECT `notnull` FROM pragma_table_info('tasks') WHERE name = 'prompt'")
       .get() as { notnull: number } | undefined
     if (promptColumnInfo && promptColumnInfo.notnull === 1) {
+      // Must disable foreign keys for table rebuild (SQLite requirement)
+      sqlite.pragma('foreign_keys = OFF')
       sqlite.exec(`
+        DROP TABLE IF EXISTS tasks_new;
+        BEGIN;
         CREATE TABLE tasks_new (
           id TEXT PRIMARY KEY,
           project_id TEXT NOT NULL REFERENCES projects(id),
@@ -155,6 +159,7 @@ export function initDatabase(): void {
           status TEXT NOT NULL,
           title TEXT,
           prompt TEXT,
+          original_prompt TEXT,
           priority TEXT NOT NULL DEFAULT 'P2',
           depends_on TEXT REFERENCES tasks(id),
           parent_task_id TEXT,
@@ -172,12 +177,15 @@ export function initDatabase(): void {
           created_at INTEGER NOT NULL,
           updated_at INTEGER NOT NULL
         );
-        INSERT INTO tasks_new SELECT * FROM tasks;
+        INSERT INTO tasks_new (id, project_id, type, status, title, prompt, original_prompt, priority, depends_on, parent_task_id, tags, agent_type, agent_session_data, worktree_path, branch_name, diff_summary, diff_full, agent_summary, error_message, retry_count, queue_position, created_at, updated_at)
+        SELECT id, project_id, type, status, title, prompt, original_prompt, priority, depends_on, parent_task_id, tags, agent_type, agent_session_data, worktree_path, branch_name, diff_summary, diff_full, agent_summary, error_message, retry_count, queue_position, created_at, updated_at FROM tasks;
         DROP TABLE tasks;
         ALTER TABLE tasks_new RENAME TO tasks;
         CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
         CREATE INDEX IF NOT EXISTS idx_tasks_project_id ON tasks(project_id);
+        COMMIT;
       `)
+      sqlite.pragma('foreign_keys = ON')
     }
   } catch {
     // Migration already applied or not needed

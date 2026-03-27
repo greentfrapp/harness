@@ -12,6 +12,7 @@ import Tooltip from './BaseTooltip.vue'
 const props = defineProps<{
   taskId: string
   historical?: boolean
+  chatEnabled?: boolean
 }>()
 
 const messages = ref<StreamMessage[]>([])
@@ -266,25 +267,84 @@ async function fetchBufferedProgress() {
   }
 }
 
+// ── Chat ──
+
+const chatMessage = ref('')
+const chatSending = ref(false)
+const chatStreaming = ref(false)
+const chatError = ref('')
+let listeningForProgress = false
+
+function startListeningForProgress() {
+  if (listeningForProgress) return
+  window.addEventListener('task:progress', handleProgress as EventListener)
+  listeningForProgress = true
+}
+
+function stopListeningForProgress() {
+  if (!listeningForProgress) return
+  window.removeEventListener('task:progress', handleProgress as EventListener)
+  listeningForProgress = false
+}
+
+async function handleChat() {
+  if (!chatMessage.value.trim() || chatStreaming.value) return
+  const msg = chatMessage.value.trim()
+  chatSending.value = true
+  chatError.value = ''
+
+  try {
+    // Start listening before the API call so we catch the server-seeded user message
+    startListeningForProgress()
+
+    await api.tasks.chat(props.taskId, msg)
+    chatMessage.value = ''
+    chatStreaming.value = true
+  } catch (e) {
+    chatError.value = e instanceof Error ? e.message : 'Chat failed'
+  } finally {
+    chatSending.value = false
+  }
+}
+
+async function handleStopChat() {
+  try {
+    await api.tasks.stopChat(props.taskId)
+  } catch {
+    // Agent may have already finished
+  }
+  chatStreaming.value = false
+}
+
+function onChatComplete(e: Event) {
+  const detail = (e as CustomEvent).detail
+  if (detail?.task_id !== props.taskId) return
+  chatStreaming.value = false
+  // Re-fetch to get the full persisted session (with appended chat turns)
+  fetchBufferedProgress()
+}
+
 onMounted(async () => {
   // Reset auto-scroll when (re-)opening the task
   userScrolledUp.value = false
   if (!props.historical) {
-    window.addEventListener('task:progress', handleProgress as EventListener)
+    startListeningForProgress()
   }
   await fetchBufferedProgress()
   // Retry once after 2s if nothing arrived yet (handles race where agent just started)
   if (!props.historical && messages.value.length === 0) {
     setTimeout(() => fetchBufferedProgress(), 2000)
   }
+
+  if (props.chatEnabled) {
+    window.addEventListener('chat:complete', onChatComplete)
+  }
 })
 
 onUnmounted(() => {
-  if (!props.historical) {
-    window.removeEventListener(
-      'task:progress',
-      handleProgress as EventListener,
-    )
+  stopListeningForProgress()
+  if (props.chatEnabled) {
+    window.removeEventListener('chat:complete', onChatComplete)
   }
 })
 
@@ -507,8 +567,17 @@ function toolResultSummary(group: ToolCallGroup): string {
           <!-- ── Chat separator ── -->
           <div
             v-else-if="g.kind === 'single' && g.item.displayType === 'chat_separator'"
-            class="border-t border-zinc-700 my-3 pt-2">
-            <span class="text-xs text-zinc-500">Chat</span>
+            class="border-t border-zinc-700 my-3">
+          </div>
+
+          <!-- ── Chat user message ── -->
+          <div
+            v-else-if="g.kind === 'single' && g.item.displayType === 'chat_user_message'"
+            class="session-chat-user">
+            <div class="flex items-start gap-2 bg-blue-950/30 rounded px-2 py-1.5">
+              <span class="shrink-0 mt-0.5 text-blue-400 text-xs font-medium">You</span>
+              <span class="text-sm text-zinc-200">{{ g.item.text }}</span>
+            </div>
           </div>
 
           <!-- ── Fallback for unrecognized message types ── -->
@@ -521,6 +590,38 @@ function toolResultSummary(group: ToolCallGroup): string {
             </div>
           </div>
         </template>
+      </div>
+
+      <!-- Chat input (inside the scrollable container) -->
+      <div v-if="chatEnabled" class="mt-3 pt-3 border-t border-zinc-800">
+        <div v-if="chatStreaming" class="flex items-center gap-2">
+          <span class="text-xs text-zinc-500">Agent is responding...</span>
+          <button
+            class="px-2 py-1 text-xs font-medium rounded bg-red-900 hover:bg-red-800 text-red-300 transition-colors"
+            @click="handleStopChat">
+            Stop
+          </button>
+        </div>
+        <div v-else class="space-y-2">
+          <textarea
+            v-model="chatMessage"
+            class="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-zinc-200 placeholder-zinc-500 focus:border-blue-600 focus:outline-none resize-y"
+            rows="2"
+            placeholder="Ask about this task..."
+            :disabled="chatSending"
+            @keydown.meta.enter="handleChat"
+            @keydown.ctrl.enter="handleChat" />
+          <div class="flex gap-2 items-center">
+            <button
+              class="px-3 py-1.5 text-xs font-medium rounded bg-blue-900 hover:bg-blue-800 text-blue-300 transition-colors disabled:opacity-50"
+              :disabled="chatSending || !chatMessage.trim()"
+              @click="handleChat">
+              {{ chatSending ? 'Sending...' : 'Ask' }}
+            </button>
+            <span class="text-xs text-zinc-600 ml-auto">Cmd+Enter to send</span>
+          </div>
+          <p v-if="chatError" class="text-xs text-red-400">{{ chatError }}</p>
+        </div>
       </div>
     </div>
   </div>

@@ -26,7 +26,14 @@ export function appendSessionMessages(
   messages: unknown[],
 ): void {
   const existing = loadSessionMessages(taskId)
-  existing.push({ type: '__chat_separator', timestamp: Date.now() })
+  // Only add separator if there isn't one already (avoid duplicates on consecutive chats)
+  const hasChat = existing.some(
+    (m: any) =>
+      m?.type === '__chat_separator' || m?.type === '__chat_user_message',
+  )
+  if (!hasChat) {
+    existing.push({ type: '__chat_separator', timestamp: Date.now() })
+  }
   existing.push(...messages)
   fs.writeFileSync(
     path.join(SESSIONS_DIR, `${taskId}.json`),
