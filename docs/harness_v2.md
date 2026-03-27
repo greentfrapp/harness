@@ -192,43 +192,50 @@ Implemented in `v2/server/db/`. Fresh schema with no v1 migration baggage.
 - [x] **Updated queries** — `deserializeTask()` parses both `tags` and `references` JSON. `getTasksByStatus()` accepts optional substatus filter. New `createTaskTransition()`, `getTaskTransitions()`, `getTransitionChain()`.
 - [x] **Tests** — Full coverage including substatus filtering, references round-trip, transition chain traversal.
 
-### Phase 2: Server Core
+### Phase 2: Server Core ✓
 
-These modules form the task execution pipeline. They depend on Phase 0+1.
+Implemented in `v2/server/`. These modules form the task execution pipeline, ported from v1 with the v2 status+substatus model.
 
-- [ ] **Config** — Update `server/config.ts` to validate `task_types` config with the v2 model. No changes to project or agent config shape needed.
-- [ ] **Queue** — Update `server/queue.ts` to order by status+substatus. Queued tasks are `queued` (no substatus).
-- [ ] **Dispatcher** — Update `server/dispatcher.ts` to use new status model when checking slot availability and dispatching. `dispatch` sets status to `in_progress:running`.
-- [ ] **Pool (AgentPool)** — Update `server/pool.ts`:
-  - On agent exit, map exit codes/results to new statuses (`pending:review`, `in_progress:retrying`, etc.)
-  - Remove `buildFixPrompt()` logic that depended on old statuses; rebuild for new model
-  - Mode escalation: when agent requests a transition (via CLI), complete the current task (`done:accepted`) and spawn a new task of the target type with the same `session_id` and a `parent_id` link
-- [ ] **Recovery** — Update `server/recovery.ts` to detect stale `in_progress:running` / `in_progress:retrying` tasks. Recovery actions map to new statuses.
-- [ ] **SSE** — No structural changes to `server/sse.ts`, but event payloads will carry the new status+substatus shape.
-- [ ] **Sessions** — Minimal changes to `server/sessions.ts`, just ensure session reuse works across mode-escalation task chains.
-- [ ] **Git** — No changes to `server/git.ts` needed.
-- [ ] **Context** — Update `AppContext` in `server/context.ts` if any new deps are introduced.
-- [ ] **Tests** — Port `queue.test.ts`, `dispatcher.test.ts`, `pool.test.ts`, `recovery.test.ts`, `sessions.test.ts`, `sse.test.ts`, `sse-integration.test.ts`, `streamFilters.test.ts`.
+- [x] **Config** — `v2/server/config.ts` unchanged from Phase 1 — already validates `task_types` with v2 model. Prompt templates, JSONC parsing, project validation all carried over.
+- [x] **Queue** — `v2/server/queue.ts` — `isDependencySatisfied()` checks `done:accepted` (was `approved`). `dispatch()` sets `in_progress:running` (was just `in_progress`). Priority ordering and position recomputation unchanged.
+- [x] **Dispatcher** — `v2/server/dispatcher.ts` — Uses 3-arg `transition(status, substatus, action)`. `dispatch` → `in_progress:running`. `dispatch_error` → `pending:review` (was `error`). Same worktree/conversation slot loop with re-dispatch flag.
+- [x] **Pool (AgentPool)** — `v2/server/pool.ts`:
+  - Success: `complete` → `pending:review` for `do` tasks, `complete_readonly` → `done:null` for `discuss`/`plan`
+  - Failure: `fail` → `in_progress:retrying`, `max_retries` / `dispatch_error` → `pending:review`
+  - Permission: `request_permission` → `pending:permission`
+  - Plan approval: uses `request_transition` → `pending:review` (was `plan_approval_request` → `held`)
+  - Subtasks: `propose_subtasks` → `pending:subtask_approval`, `auto_approve_subtasks` → `in_progress:waiting_on_subtasks`
+  - Uses `result` field instead of `error_message`/`agent_summary`/`diff_summary`/`diff_full`
+  - `buildFixPrompt()` retained for fix tags (merge-conflict, checkout-failed, needs-commit)
+- [x] **Recovery** — `v2/server/recovery.ts` — Detects stale `in_progress:running`, `in_progress:retrying`, `in_progress:waiting_on_subtasks`. `recover_requeue` → `queued:null`, `recover_error` → `pending:review`. Orphaned worktree reconciliation unchanged.
+- [x] **SSE** — `v2/server/sse.ts` — Identical to v1. Event payloads carry new status+substatus shape via shared types.
+- [x] **Sessions** — `v2/server/sessions.ts` — Identical to v1. Save/load/append/delete session files. Session reuse across mode-escalation chains handled by session_id on Task.
+- [x] **Git** — `v2/server/git.ts` — Copied from v1. No changes needed.
+- [x] **Agents** — `v2/server/agents/` — Adapter interface and ClaudeCodeAdapter copied from v1. No status-level changes needed.
+- [x] **Log** — `v2/server/log.ts` — Identical to v1.
+- [x] **Context** — `v2/server/context.ts` — Full `AppContext` with `SSEManager`, `TaskQueue`, `AgentPool`, `Dispatcher`, `queries`, `checkoutState`.
+- [x] **Views** — `v2/server/views.ts` — Default views use v2 statuses (`draft`, `queued`, `in_progress` for outbox; `pending`, `done`, `cancelled` for inbox). Removed v1 migration logic.
+- [x] **Tests** — 6 test files: `sse.test.ts`, `sessions.test.ts`, `queue.test.ts`, `dispatcher.test.ts`, `pool.test.ts`, `recovery.test.ts`. All assertions updated for v2 status+substatus model. 211 total tests passing.
 
-### Phase 3: Routes (REST API)
+### Phase 3: Routes (REST API) ✓
 
-All routes depend on the new shared types and server core.
+Implemented in `v2/server/routes/`. All routes use the v2 transition machine with `(status, substatus)` pairs.
 
-- [ ] **Task CRUD** — Update `POST /tasks`, `PATCH /tasks/:id`, `GET /tasks`, `GET /tasks/:id` to use new status+substatus model. `CreateTaskInput` and `UpdateTaskInput` need the new fields.
-- [ ] **Lifecycle routes** — Update all action endpoints to use the new transition machine:
-  - `POST /tasks/:id/send` — `draft` → `queued`
-  - `POST /tasks/:id/fix` — `pending:review` → `queued`
-  - `POST /tasks/:id/revise` — `pending:review` → `queued`
-  - `POST /tasks/:id/approve` — `pending:review` → `done:accepted` (merge for `do` tasks)
-  - `POST /tasks/:id/reject` — various → `done:rejected`
-  - `POST /tasks/:id/cancel` — various → `cancelled`
-  - `POST /tasks/:id/grant-permission` — `pending:permission` → `queued`
-  - `POST /tasks/:id/resolve-proposals` — `pending:subtask_approval` → `in_progress:waiting_on_subtasks` or `queued`
-- [ ] **Mode escalation route** — New `POST /tasks/:id/approve-transition` — user approves the agent's transition request, spawning a new task of the target type and completing the source task.
-- [ ] **Checkout/return** — Update `POST /tasks/:id/checkout` and `POST /tasks/:id/return` for new statuses.
-- [ ] **Chat** — `POST /tasks/:id/chat` — no major changes, just ensure it works with `done` status tasks.
-- [ ] **Views** — Update `server/routes/views.ts` for substatus-aware filtering.
-- [ ] **Tests** — Port `tasks.test.ts`, `views.test.ts`.
+- [x] **Task CRUD** — `GET /tasks` queries by v2 statuses. `POST /tasks` creates with `substatus: null`. `PATCH /tasks/:id` validates transitions via `findAction(fromStatus, fromSubstatus, toStatus, toSubstatus)`.
+- [x] **Lifecycle routes** — All action endpoints use `guardTransition(c, status, substatus, action)`:
+  - `POST /tasks/:id/send` — `draft:null` → `queued:null`
+  - `POST /tasks/:id/fix` — `pending:review` → `queued:null`
+  - `POST /tasks/:id/revise` — `pending:review` → `queued:null`
+  - `POST /tasks/:id/approve` — `pending:review` → `done:accepted` (merge + cleanup for `do` tasks)
+  - `POST /tasks/:id/reject` — `pending:review`/`pending:subtask_approval` → `done:rejected`
+  - `DELETE /tasks/:id` — cancel via `cancel` action → `cancelled:null`, or permanent delete for terminal/draft
+  - `POST /tasks/:id/grant-permission` — `pending:permission` → `queued:null`
+  - `POST /tasks/:id/resolve-proposals` — `pending:subtask_approval` → `in_progress:waiting_on_subtasks` or `queued:null`
+- [x] **Mode escalation route** — New `POST /tasks/:id/approve-transition` — user approves transition request. Completes source task (`done:accepted`), spawns new task of target type with same `session_id` and `parent_task_id`. Records transition in `task_transitions` table.
+- [x] **Checkout/return** — Checkout restricted to `pending:review` tasks. Return unchanged.
+- [x] **Chat** — `POST /tasks/:id/chat` works on `draft`, `pending`, `done` status tasks.
+- [x] **Views** — `v2/server/routes/views.ts` — Unchanged structure, imports from v2 views module.
+- [x] **Additional endpoints** — `GET /tasks/:id/transitions` returns mode-escalation chain. `POST /tasks/:id/follow-up` creates follow-up tasks from `pending`/`done` tasks. `GET /tasks/:id/diff` sources diff from branch (no `diff_full` cache field).
 
 ### Phase 4: CLI (Agent-Facing)
 
