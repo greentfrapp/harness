@@ -1,19 +1,13 @@
 import { describe, expect, it } from 'vitest'
 import {
   ALL_STATUS_PAIRS,
-  INBOX_PAIRS,
-  OUTBOX_PAIRS,
   RUNNING_PAIRS,
   TERMINAL_PAIRS,
   VALID_SUBSTATUSES,
   comparePriority,
-  getTaskContext,
-  isInbox,
-  isOutbox,
   isRunning,
   isTerminal,
   type Priority,
-  type StatusPair,
   type Task,
   type TaskStatus,
 } from './types'
@@ -79,50 +73,6 @@ describe('ALL_STATUS_PAIRS', () => {
   })
 })
 
-describe('status group constants', () => {
-  function pairKey(p: StatusPair): string {
-    return p.substatus ? `${p.status}:${p.substatus}` : p.status
-  }
-
-  it('OUTBOX_PAIRS and INBOX_PAIRS cover all pairs', () => {
-    const outboxKeys = new Set(OUTBOX_PAIRS.map(pairKey))
-    const inboxKeys = new Set(INBOX_PAIRS.map(pairKey))
-
-    for (const pair of ALL_STATUS_PAIRS) {
-      const key = pairKey(pair)
-      const inOutbox = outboxKeys.has(key)
-      const inInbox = inboxKeys.has(key)
-      expect(
-        inOutbox || inInbox,
-        `Pair '${key}' is in neither OUTBOX nor INBOX`,
-      ).toBe(true)
-      expect(
-        !(inOutbox && inInbox),
-        `Pair '${key}' is in both OUTBOX and INBOX`,
-      ).toBe(true)
-    }
-  })
-
-  it('TERMINAL_PAIRS are a subset of INBOX_PAIRS', () => {
-    const inboxKeys = new Set(INBOX_PAIRS.map(pairKey))
-    for (const pair of TERMINAL_PAIRS) {
-      expect(
-        inboxKeys.has(pairKey(pair)),
-        `Terminal pair '${pairKey(pair)}' is not in INBOX_PAIRS`,
-      ).toBe(true)
-    }
-  })
-
-  it('RUNNING_PAIRS are a subset of OUTBOX_PAIRS', () => {
-    const outboxKeys = new Set(OUTBOX_PAIRS.map(pairKey))
-    for (const pair of RUNNING_PAIRS) {
-      expect(
-        outboxKeys.has(pairKey(pair)),
-        `Running pair '${pairKey(pair)}' is not in OUTBOX_PAIRS`,
-      ).toBe(true)
-    }
-  })
-})
 
 describe('helper functions', () => {
   describe('isTerminal', () => {
@@ -154,56 +104,6 @@ describe('helper functions', () => {
     })
   })
 
-  describe('isOutbox', () => {
-    it('returns true for outbox pairs', () => {
-      expect(isOutbox('draft', null)).toBe(true)
-      expect(isOutbox('queued', null)).toBe(true)
-      expect(isOutbox('in_progress', 'running')).toBe(true)
-      expect(isOutbox('in_progress', 'retrying')).toBe(true)
-      expect(isOutbox('in_progress', 'waiting_on_subtasks')).toBe(true)
-    })
-
-    it('returns false for inbox pairs', () => {
-      expect(isOutbox('pending', 'review')).toBe(false)
-      expect(isOutbox('done', 'accepted')).toBe(false)
-      expect(isOutbox('cancelled', null)).toBe(false)
-    })
-  })
-
-  describe('isInbox', () => {
-    it('returns true for inbox pairs', () => {
-      expect(isInbox('pending', 'review')).toBe(true)
-      expect(isInbox('pending', 'permission')).toBe(true)
-      expect(isInbox('pending', 'subtask_approval')).toBe(true)
-      expect(isInbox('done', null)).toBe(true)
-      expect(isInbox('done', 'accepted')).toBe(true)
-      expect(isInbox('done', 'rejected')).toBe(true)
-      expect(isInbox('cancelled', null)).toBe(true)
-    })
-
-    it('returns false for outbox pairs', () => {
-      expect(isInbox('draft', null)).toBe(false)
-      expect(isInbox('queued', null)).toBe(false)
-      expect(isInbox('in_progress', 'running')).toBe(false)
-    })
-  })
-
-  describe('getTaskContext', () => {
-    it('returns draft for draft status', () => {
-      expect(getTaskContext('draft')).toBe('draft')
-    })
-
-    it('returns outbox for queued and in_progress', () => {
-      expect(getTaskContext('queued')).toBe('outbox')
-      expect(getTaskContext('in_progress')).toBe('outbox')
-    })
-
-    it('returns inbox for pending, done, cancelled', () => {
-      expect(getTaskContext('pending')).toBe('inbox')
-      expect(getTaskContext('done')).toBe('inbox')
-      expect(getTaskContext('cancelled')).toBe('inbox')
-    })
-  })
 })
 
 describe('comparePriority', () => {

@@ -1,9 +1,22 @@
 import { parse as parseJsonc } from 'jsonc-parser'
 import fs from 'node:fs'
 import path from 'node:path'
-import type { ViewConfig } from '../shared/types'
-import { DEFAULT_VIEWS } from '../shared/types'
+import type { Priority, TaskStatus, TaskSubstatus } from '../shared/types'
 import { HARNESS_DIR } from './config'
+
+export interface ViewFilter {
+  statuses?: TaskStatus[]
+  substatuses?: TaskSubstatus[]
+  priorities?: Priority[]
+  tags?: string[]
+  project_id?: string
+}
+
+export interface ViewConfig {
+  id: string
+  name: string
+  filter: ViewFilter
+}
 
 export const VIEWS_PATH = path.join(HARNESS_DIR, 'views.jsonc')
 
@@ -30,6 +43,10 @@ const DEFAULT_VIEWS_TEMPLATE = `{
 }
 `
 
+function defaultViews(): ViewConfig[] {
+  return parseJsonc(DEFAULT_VIEWS_TEMPLATE).views
+}
+
 export function ensureViewsFile(): void {
   if (!fs.existsSync(VIEWS_PATH)) {
     fs.writeFileSync(VIEWS_PATH, DEFAULT_VIEWS_TEMPLATE, 'utf-8')
@@ -38,12 +55,12 @@ export function ensureViewsFile(): void {
 
 export function loadViews(): ViewConfig[] {
   if (!fs.existsSync(VIEWS_PATH)) {
-    return [...DEFAULT_VIEWS]
+    return defaultViews()
   }
   const raw = fs.readFileSync(VIEWS_PATH, 'utf-8')
   const parsed = parseJsonc(raw)
   if (!parsed || !Array.isArray(parsed.views)) {
-    return [...DEFAULT_VIEWS]
+    return defaultViews()
   }
   return parsed.views
 }
@@ -83,5 +100,5 @@ export function saveViews(
 
 export function resetViews(): ViewConfig[] {
   fs.writeFileSync(VIEWS_PATH, DEFAULT_VIEWS_TEMPLATE, 'utf-8')
-  return [...DEFAULT_VIEWS]
+  return defaultViews()
 }

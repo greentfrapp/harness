@@ -42,25 +42,6 @@ export const ALL_STATUS_PAIRS: readonly StatusPair[] = Object.entries(
   subs.map((substatus) => ({ status: status as TaskStatus, substatus })),
 )
 
-// Status groups
-export const OUTBOX_PAIRS: readonly StatusPair[] = [
-  { status: 'draft', substatus: null },
-  { status: 'queued', substatus: null },
-  { status: 'in_progress', substatus: 'running' },
-  { status: 'in_progress', substatus: 'retrying' },
-  { status: 'in_progress', substatus: 'waiting_on_subtasks' },
-]
-
-export const INBOX_PAIRS: readonly StatusPair[] = [
-  { status: 'pending', substatus: 'review' },
-  { status: 'pending', substatus: 'permission' },
-  { status: 'pending', substatus: 'subtask_approval' },
-  { status: 'done', substatus: null },
-  { status: 'done', substatus: 'accepted' },
-  { status: 'done', substatus: 'rejected' },
-  { status: 'cancelled', substatus: null },
-]
-
 export const TERMINAL_PAIRS: readonly StatusPair[] = [
   { status: 'done', substatus: null },
   { status: 'done', substatus: 'accepted' },
@@ -94,60 +75,6 @@ export function isRunning(
   substatus: TaskSubstatus,
 ): boolean {
   return matchesPair(status, substatus, RUNNING_PAIRS)
-}
-
-export function isOutbox(
-  status: TaskStatus,
-  substatus: TaskSubstatus,
-): boolean {
-  return matchesPair(status, substatus, OUTBOX_PAIRS)
-}
-
-export function isInbox(
-  status: TaskStatus,
-  substatus: TaskSubstatus,
-): boolean {
-  return matchesPair(status, substatus, INBOX_PAIRS)
-}
-
-// View types
-export interface ViewFilter {
-  statuses?: TaskStatus[]
-  substatuses?: TaskSubstatus[]
-  priorities?: Priority[]
-  tags?: string[]
-  project_id?: string
-}
-
-export interface ViewConfig {
-  id: string
-  name: string
-  filter: ViewFilter
-}
-
-export const DEFAULT_VIEWS: ViewConfig[] = [
-  {
-    id: 'outbox',
-    name: 'Outbox',
-    filter: {
-      statuses: ['draft', 'queued', 'in_progress'],
-    },
-  },
-  {
-    id: 'inbox',
-    name: 'Inbox',
-    filter: {
-      statuses: ['pending', 'done', 'cancelled'],
-    },
-  },
-]
-
-export function getTaskContext(
-  status: TaskStatus,
-): 'outbox' | 'inbox' | 'draft' {
-  if (status === 'draft') return 'draft'
-  if (status === 'queued' || status === 'in_progress') return 'outbox'
-  return 'inbox'
 }
 
 // Config types
