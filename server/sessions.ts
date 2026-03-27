@@ -21,6 +21,19 @@ export function loadSessionMessages(taskId: string): unknown[] {
   }
 }
 
+export function appendSessionMessages(
+  taskId: string,
+  messages: unknown[],
+): void {
+  const existing = loadSessionMessages(taskId)
+  existing.push({ type: '__chat_separator', timestamp: Date.now() })
+  existing.push(...messages)
+  fs.writeFileSync(
+    path.join(SESSIONS_DIR, `${taskId}.json`),
+    JSON.stringify(existing),
+  )
+}
+
 export function deleteSessionMessages(taskId: string): void {
   try {
     fs.unlinkSync(path.join(SESSIONS_DIR, `${taskId}.json`))

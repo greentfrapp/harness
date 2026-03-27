@@ -504,6 +504,13 @@ function toolResultSummary(group: ToolCallGroup): string {
             </div>
           </div>
 
+          <!-- ── Chat separator ── -->
+          <div
+            v-else-if="g.kind === 'single' && g.item.displayType === 'chat_separator'"
+            class="border-t border-zinc-700 my-3 pt-2">
+            <span class="text-xs text-zinc-500">Chat</span>
+          </div>
+
           <!-- ── Fallback for unrecognized message types ── -->
           <div v-else-if="g.kind === 'single'" class="session-unknown">
             <div class="flex items-start gap-2 text-zinc-500 text-xs">

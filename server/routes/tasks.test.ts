@@ -123,7 +123,11 @@ function makeContext(): AppContext {
     } as any,
     pool: {
       killAgent: vi.fn().mockReturnValue(false),
+      killChatAgent: vi.fn().mockReturnValue(false),
       hasAgent: vi.fn().mockReturnValue(false),
+      hasChatAgent: vi.fn().mockReturnValue(false),
+      spawnChatAgent: vi.fn(),
+      activeConversationCount: 0,
       getProgressBuffer: vi.fn().mockReturnValue([]),
     } as any,
     dispatcher: { tryDispatch: vi.fn() } as any,

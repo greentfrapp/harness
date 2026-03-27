@@ -8,7 +8,7 @@ import {
   TERMINAL_STATUSES,
 } from '@shared/types'
 import { marked } from 'marked'
-import { computed, inject, nextTick, onMounted, ref } from 'vue'
+import { computed, inject, nextTick, onMounted, onUnmounted, ref } from 'vue'
 import { api } from '../api'
 import { useCheckouts } from '../stores/useCheckouts'
 import DiffViewer from './DiffViewer.vue'
@@ -67,6 +67,12 @@ const resolvingProposals = ref(false)
 const proposalDecisions = ref<
   Map<number, { action: 'approve' | 'dismiss'; feedback: string }>
 >(new Map())
+const chatMessage = ref('')
+const chatSending = ref(false)
+const chatStreaming = ref(false)
+const chatError = ref('')
+const chatTextarea = ref<HTMLTextAreaElement | null>(null)
+
 const checkoutsStore = useCheckouts()
 
 const isTaskCheckedOut = computed(() =>
@@ -188,6 +194,12 @@ const showDiffViewer = computed(
     props.task.branch_name &&
     (REVIEWABLE_STATUSES.includes(props.task.status) ||
       TERMINAL_STATUSES.includes(props.task.status)),
+)
+
+const canChat = computed(() =>
+  ['draft', 'ready', 'error', 'held', 'approved', 'rejected'].includes(
+    props.task.status,
+  ),
 )
 
 const renderedSummary = computed(() => {
@@ -359,6 +371,44 @@ async function handleReturn() {
     returning.value = false
   }
 }
+
+async function handleChat() {
+  if (!chatMessage.value.trim() || chatStreaming.value) return
+  chatSending.value = true
+  chatError.value = ''
+  try {
+    await api.tasks.chat(props.task.id, chatMessage.value.trim())
+    chatMessage.value = ''
+    chatStreaming.value = true
+  } catch (e) {
+    chatError.value = e instanceof Error ? e.message : 'Chat failed'
+  } finally {
+    chatSending.value = false
+  }
+}
+
+async function handleStopChat() {
+  try {
+    await api.tasks.stopChat(props.task.id)
+  } catch {
+    // Agent may have already finished
+  }
+  chatStreaming.value = false
+}
+
+function onChatComplete(e: Event) {
+  const detail = (e as CustomEvent).detail
+  if (detail?.task_id === props.task.id) {
+    chatStreaming.value = false
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('chat:complete', onChatComplete)
+})
+onUnmounted(() => {
+  window.removeEventListener('chat:complete', onChatComplete)
+})
 
 function formatTime(ts: number): string {
   return new Date(ts).toLocaleTimeString()
@@ -641,6 +691,43 @@ function formatTime(ts: number): string {
           }}</span>
           <span class="text-zinc-400">{{ event.event_type }}</span>
         </div>
+      </div>
+    </div>
+
+    <!-- Chat -->
+    <div v-if="canChat" class="space-y-2">
+      <!-- Chat stream (shown while agent is responding) -->
+      <div v-if="chatStreaming">
+        <h4 class="text-xs font-medium text-zinc-500 uppercase mb-1">Chat</h4>
+        <SessionStream :task-id="task.id" />
+        <button
+          class="mt-1 px-3 py-1.5 text-xs font-medium rounded bg-red-900 hover:bg-red-800 text-red-300 transition-colors"
+          @click="handleStopChat">
+          Stop
+        </button>
+      </div>
+
+      <!-- Chat input -->
+      <div v-if="!chatStreaming" class="space-y-2">
+        <textarea
+          ref="chatTextarea"
+          v-model="chatMessage"
+          class="w-full bg-zinc-800 border border-zinc-700 rounded px-3 py-2 text-sm text-zinc-200 placeholder-zinc-500 focus:border-blue-600 focus:outline-none resize-y"
+          rows="2"
+          placeholder="Ask about this task..."
+          :disabled="chatSending"
+          @keydown.meta.enter="handleChat"
+          @keydown.ctrl.enter="handleChat" />
+        <div class="flex gap-2 items-center">
+          <button
+            class="px-3 py-1.5 text-xs font-medium rounded bg-blue-900 hover:bg-blue-800 text-blue-300 transition-colors disabled:opacity-50"
+            :disabled="chatSending || !chatMessage.trim()"
+            @click="handleChat">
+            {{ chatSending ? 'Sending...' : 'Ask' }}
+          </button>
+          <span class="text-xs text-zinc-600 ml-auto">Cmd+Enter to send</span>
+        </div>
+        <p v-if="chatError" class="text-xs text-red-400">{{ chatError }}</p>
       </div>
     </div>
 

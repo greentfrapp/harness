@@ -33,6 +33,7 @@ export interface DisplayItem {
     | 'result'
     | 'system'
     | 'error'
+    | 'chat_separator'
     | 'unknown'
   text?: string
   toolName?: string
@@ -252,6 +253,12 @@ export function expandMessages(messages: StreamMessage[]): DisplayItem[] {
         resultText: msg.result,
         raw: msg,
       })
+      continue
+    }
+
+    // --- Chat separator ---
+    if (msg.type === '__chat_separator') {
+      items.push({ displayType: 'chat_separator', raw: msg })
       continue
     }
 

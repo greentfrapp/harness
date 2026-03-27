@@ -13,7 +13,7 @@ import type { AgentProgressEvent } from './agents/index'
 import type { AgentRegistry } from './agents/index'
 import * as git from './git'
 import { serverLog } from './log'
-import { saveSessionMessages } from './sessions'
+import { appendSessionMessages, saveSessionMessages } from './sessions'
 
 export interface AgentSessionData {
   session_id: string | null
@@ -92,6 +92,7 @@ function buildFixPrompt(task: Task, project: Project): string | null {
 
 export class AgentPool {
   private agents = new Map<string, ActiveAgent>()
+  private chatAgents = new Map<string, ActiveAgent>()
   private deps: PoolDeps
   /** Per-task buffer of recent progress messages for late-joining clients. */
   private progressBuffers = new Map<string, unknown[]>()
@@ -111,11 +112,18 @@ export class AgentPool {
   }
 
   get activeConversationCount(): number {
-    return [...this.agents.values()].filter((a) => !a.usesWorktree).length
+    return (
+      [...this.agents.values()].filter((a) => !a.usesWorktree).length +
+      this.chatAgents.size
+    )
   }
 
   hasAgent(taskId: string): boolean {
     return this.agents.has(taskId)
+  }
+
+  hasChatAgent(taskId: string): boolean {
+    return this.chatAgents.has(taskId)
   }
 
   /** Dispatch a Do task: create worktree, spawn agent, handle lifecycle. */
@@ -218,6 +226,156 @@ export class AgentPool {
     })
   }
 
+  /**
+   * Spawn a chat agent for inline Q&A on a task.
+   * Uses read-only tools, does not change task status.
+   * Bypasses the dispatcher — called directly from the chat route.
+   */
+  spawnChatAgent(
+    task: Task,
+    project: Project,
+    opts: { message: string; sessionId: string | null },
+  ): void {
+    const adapter = this.deps.agentRegistry.getOrDefault(task.agent_type)
+    const cwd = task.worktree_path ?? project.repo_path
+    const readOnlyTools = ['Read', 'Glob', 'Grep', 'WebSearch', 'WebFetch']
+
+    const args = opts.sessionId
+      ? adapter.buildResumeArgs({
+          prompt: opts.message,
+          sessionId: opts.sessionId,
+          usesWorktree: false,
+          allowedTools: readOnlyTools,
+        })
+      : adapter.buildArgs({
+          prompt: opts.message,
+          systemPrompt: null,
+          usesWorktree: false,
+          allowedTools: readOnlyTools,
+        })
+
+    const agentConfig = this.deps.config.agents?.[task.agent_type]
+    if (agentConfig?.extra_args) {
+      args.push(...agentConfig.extra_args)
+    }
+
+    serverLog.info(`Spawning chat agent in ${cwd}`, task.id)
+
+    const __dirname = path.dirname(fileURLToPath(import.meta.url))
+    const proc = spawn(adapter.executable, args, {
+      cwd,
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: {
+        ...process.env,
+        HARNESS_TASK_ID: task.id,
+        HARNESS_API_URL: `http://localhost:${process.env.PORT ?? '3001'}`,
+        HARNESS_CLI: path.resolve(__dirname, '../cli/harness.mjs'),
+      },
+    })
+
+    const agent: ActiveAgent = {
+      taskId: task.id,
+      projectId: project.id,
+      process: proc,
+      sessionId: opts.sessionId,
+      usesWorktree: false,
+    }
+    this.chatAgents.set(task.id, agent)
+
+    proc.on('error', (err) => {
+      this.chatAgents.delete(task.id)
+      serverLog.error(
+        `Failed to spawn chat agent: ${err.message}`,
+        task.id,
+      )
+    })
+
+    // Store PID, preserving existing session data
+    if (proc.pid) {
+      this.deps.updateTask(task.id, {
+        agent_session_data: updateSessionData(task.agent_session_data, {
+          session_id: opts.sessionId,
+          pid: proc.pid,
+        }),
+      })
+    }
+
+    let buffer = ''
+    proc.stdout?.on('data', (chunk: Buffer) => {
+      buffer += chunk.toString()
+      const lines = buffer.split('\n')
+      buffer = lines.pop() ?? ''
+
+      for (const line of lines) {
+        if (!line.trim()) continue
+        const event = adapter.parseMessage(line)
+        if (!event) continue
+
+        // Buffer and broadcast progress (reuses existing pattern)
+        let progBuf = this.progressBuffers.get(task.id)
+        if (!progBuf) {
+          progBuf = []
+          this.progressBuffers.set(task.id, progBuf)
+        }
+        progBuf.push(event.raw)
+        if (progBuf.length > AgentPool.MAX_BUFFER_SIZE) {
+          progBuf.splice(0, progBuf.length - AgentPool.MAX_BUFFER_SIZE)
+        }
+        this.deps.broadcast('task:progress', {
+          task_id: task.id,
+          message: event.raw,
+        })
+
+        // Capture session_id
+        if (event.sessionId && !agent.sessionId) {
+          agent.sessionId = event.sessionId
+          const currentData = this.deps.getTaskById(task.id)
+          this.deps.updateTask(task.id, {
+            agent_session_data: updateSessionData(
+              currentData?.agent_session_data ?? null,
+              { session_id: event.sessionId, pid: proc.pid! },
+            ),
+          })
+        }
+      }
+    })
+
+    proc.stderr?.on('data', () => {
+      // Logged but not surfaced — chat errors don't change task status
+    })
+
+    proc.on('close', () => {
+      // Flush remaining buffer
+      if (buffer.trim()) {
+        const event = adapter.parseMessage(buffer)
+        if (event) {
+          let progBuf = this.progressBuffers.get(task.id)
+          if (!progBuf) {
+            progBuf = []
+            this.progressBuffers.set(task.id, progBuf)
+          }
+          progBuf.push(event.raw)
+          this.deps.broadcast('task:progress', {
+            task_id: task.id,
+            message: event.raw,
+          })
+        }
+        buffer = ''
+      }
+
+      this.chatAgents.delete(task.id)
+
+      // Append chat messages to session file (not overwrite)
+      const progressBuffer = this.progressBuffers.get(task.id)
+      if (progressBuffer && progressBuffer.length > 0) {
+        appendSessionMessages(task.id, progressBuffer)
+      }
+      this.progressBuffers.delete(task.id)
+
+      this.deps.broadcast('chat:complete', { task_id: task.id })
+    })
+  }
+
   /** Retry a failed task using --resume. */
   async retryTask(task: Task, project: Project): Promise<void> {
     const sessionData = getSessionData(task)
@@ -259,6 +417,27 @@ export class AgentPool {
     }
 
     this.agents.delete(taskId)
+    return true
+  }
+
+  killChatAgent(taskId: string): boolean {
+    const agent = this.chatAgents.get(taskId)
+    if (!agent) return false
+
+    try {
+      agent.process.kill('SIGTERM')
+      setTimeout(() => {
+        try {
+          agent.process.kill('SIGKILL')
+        } catch {
+          // Already dead
+        }
+      }, 5000)
+    } catch {
+      // Process may already be dead
+    }
+
+    this.chatAgents.delete(taskId)
     return true
   }
 

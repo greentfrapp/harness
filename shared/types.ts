@@ -266,6 +266,7 @@ export type SSEEventType =
   | 'inbox:updated'
   | 'task:checked_out'
   | 'task:returned'
+  | 'chat:complete'
   | 'log:entry'
 
 // Checkout state exposed to clients

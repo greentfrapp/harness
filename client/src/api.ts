@@ -140,6 +140,10 @@ export const api = {
     events: (id: string) => request<TaskEvent[]>(`/api/tasks/${id}/events`),
     progress: (id: string) =>
       request<{ messages: unknown[] }>(`/api/tasks/${id}/progress`),
+    chat: (id: string, message: string) =>
+      request<{ ok: boolean }>(`/api/tasks/${id}/chat`, json({ message })),
+    stopChat: (id: string) =>
+      request<{ ok: boolean }>(`/api/tasks/${id}/chat`, { method: 'DELETE' }),
     checkout: (id: string) =>
       request<{ ok: boolean; checkout_branch: string }>(
         `/api/tasks/${id}/checkout`,
