@@ -25,7 +25,7 @@ import {
 import type { AppContext } from '../context'
 import * as git from '../git'
 import { serverLog } from '../log'
-import { getSessionData, updateSessionData } from '../pool'
+import { getSessionData } from '../pool'
 import { deleteSessionMessages, loadSessionMessages } from '../sessions'
 
 export function createTaskRoutes(ctx: AppContext) {
