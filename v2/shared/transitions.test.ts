@@ -87,9 +87,12 @@ describe('transition()', () => {
     ['draft', null, 'send', 'queued', null],
     ['pending', 'review', 'approve', 'done', 'accepted'],
     ['pending', 'review', 'reject', 'done', 'rejected'],
+    ['pending', 'error', 'reject', 'done', 'rejected'],
     ['pending', 'subtask_approval', 'reject', 'done', 'rejected'],
     ['pending', 'review', 'fix', 'queued', null],
+    ['pending', 'error', 'fix', 'queued', null],
     ['pending', 'review', 'revise', 'queued', null],
+    ['pending', 'error', 'revise', 'queued', null],
     ['pending', 'subtask_approval', 'revise', 'queued', null],
     ['pending', 'permission', 'grant_permission', 'queued', null],
     [
@@ -107,14 +110,15 @@ describe('transition()', () => {
     ['in_progress', 'retrying', 'cancel', 'cancelled', null],
     ['in_progress', 'waiting_on_subtasks', 'cancel', 'cancelled', null],
     ['pending', 'review', 'cancel', 'cancelled', null],
+    ['pending', 'error', 'cancel', 'cancelled', null],
     ['pending', 'permission', 'cancel', 'cancelled', null],
     ['pending', 'subtask_approval', 'cancel', 'cancelled', null],
     // Agent-driven
     ['in_progress', 'running', 'complete', 'pending', 'review'],
     ['in_progress', 'running', 'complete_readonly', 'done', null],
     ['in_progress', 'running', 'fail', 'in_progress', 'retrying'],
-    ['in_progress', 'running', 'max_retries', 'pending', 'review'],
-    ['in_progress', 'retrying', 'max_retries', 'pending', 'review'],
+    ['in_progress', 'running', 'max_retries', 'pending', 'error'],
+    ['in_progress', 'retrying', 'max_retries', 'pending', 'error'],
     ['in_progress', 'running', 'request_permission', 'pending', 'permission'],
     [
       'in_progress',
@@ -134,9 +138,9 @@ describe('transition()', () => {
     // Dispatcher-driven
     ['queued', null, 'dispatch', 'in_progress', 'running'],
     ['in_progress', 'retrying', 'dispatch_retry', 'in_progress', 'running'],
-    ['queued', null, 'dispatch_error', 'pending', 'review'],
-    ['in_progress', 'running', 'dispatch_error', 'pending', 'review'],
-    ['in_progress', 'retrying', 'dispatch_error', 'pending', 'review'],
+    ['queued', null, 'dispatch_error', 'pending', 'error'],
+    ['in_progress', 'running', 'dispatch_error', 'pending', 'error'],
+    ['in_progress', 'retrying', 'dispatch_error', 'pending', 'error'],
     // Subtask-driven
     [
       'in_progress',
@@ -155,14 +159,14 @@ describe('transition()', () => {
       'queued',
       null,
     ],
-    ['in_progress', 'running', 'recover_error', 'pending', 'review'],
-    ['in_progress', 'retrying', 'recover_error', 'pending', 'review'],
+    ['in_progress', 'running', 'recover_error', 'pending', 'error'],
+    ['in_progress', 'retrying', 'recover_error', 'pending', 'error'],
     [
       'in_progress',
       'waiting_on_subtasks',
       'recover_error',
       'pending',
-      'review',
+      'error',
     ],
   ]
 
@@ -188,6 +192,7 @@ describe('transition()', () => {
     ['draft', null, 'cancel'], // draft uses delete, not cancel
     ['in_progress', 'retrying', 'complete'], // only running can complete
     ['pending', 'permission', 'approve'], // wrong substatus
+    ['pending', 'error', 'approve'], // cannot approve errored task
   ]
 
   for (const [fromStatus, fromSub, action] of illegalCases) {
@@ -248,13 +253,14 @@ describe('findAction()', () => {
   })
 
   it('returns one of multiple valid actions for in_progress:running → pending:review', () => {
-    // in_progress:running → pending:review can be complete, max_retries, request_transition, or dispatch_error
+    // in_progress:running → pending:review can be complete or request_transition
     const action = findAction('in_progress', 'running', 'pending', 'review')
-    expect([
-      'complete',
-      'max_retries',
-      'request_transition',
-      'dispatch_error',
-    ]).toContain(action)
+    expect(['complete', 'request_transition']).toContain(action)
+  })
+
+  it('returns one of multiple valid actions for in_progress:running → pending:error', () => {
+    // in_progress:running → pending:error can be max_retries or dispatch_error
+    const action = findAction('in_progress', 'running', 'pending', 'error')
+    expect(['max_retries', 'dispatch_error']).toContain(action)
   })
 })

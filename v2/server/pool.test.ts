@@ -996,12 +996,12 @@ describe('AgentPool plan task validation', () => {
 
     expect(getSubtaskProposals).toHaveBeenCalledWith('task-1')
 
-    // v2: dispatch_error → pending:review (not error)
+    // v2: dispatch_error → pending:error
     expect(updateTask).toHaveBeenCalledWith(
       'task-1',
       expect.objectContaining({
         status: 'pending',
-        substatus: 'review',
+        substatus: 'error',
         result: expect.stringContaining('without proposing any subtasks'),
       }),
     )

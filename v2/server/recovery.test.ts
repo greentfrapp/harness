@@ -123,10 +123,10 @@ describe('recoverStaleTasks', () => {
 
     recoverStaleTasks(deps)
 
-    // v2: recover_error → pending:review
+    // v2: recover_error → pending:error
     expect(deps.updateTask).toHaveBeenCalledWith(
       task.id,
-      expect.objectContaining({ status: 'pending', substatus: 'review' }),
+      expect.objectContaining({ status: 'pending', substatus: 'error' }),
     )
   })
 })

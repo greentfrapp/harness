@@ -166,7 +166,7 @@ describe('Dispatcher', () => {
     expect(deps.pool.dispatchDoTask).not.toHaveBeenCalled()
   })
 
-  it('marks task as pending:review when dispatch fails', async () => {
+  it('marks task as pending:error when dispatch fails', async () => {
     const task = makeTask()
     const dispatched = makeTask({ status: 'in_progress', substatus: 'running' })
     deps.getQueuedTasks.mockReturnValueOnce([task])
@@ -183,12 +183,12 @@ describe('Dispatcher', () => {
       task.id,
       expect.objectContaining({
         status: 'pending',
-        substatus: 'review',
+        substatus: 'error',
       }),
     )
   })
 
-  it('marks task as pending:review when project not found', async () => {
+  it('marks task as pending:error when project not found', async () => {
     const task = makeTask()
     deps.getQueuedTasks.mockReturnValueOnce([task])
     deps.getProjectById.mockReturnValue(undefined)
@@ -199,7 +199,7 @@ describe('Dispatcher', () => {
       task.id,
       expect.objectContaining({
         status: 'pending',
-        substatus: 'review',
+        substatus: 'error',
         result: 'Project not found',
       }),
     )

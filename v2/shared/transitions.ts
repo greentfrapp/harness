@@ -61,12 +61,12 @@ export const TRANSITION_MAP: Readonly<
   send: { from: [sp('draft')], to: sp('queued') },
   approve: { from: [sp('pending', 'review')], to: sp('done', 'accepted') },
   reject: {
-    from: [sp('pending', 'review'), sp('pending', 'subtask_approval')],
+    from: [sp('pending', 'review'), sp('pending', 'error'), sp('pending', 'subtask_approval')],
     to: sp('done', 'rejected'),
   },
-  fix: { from: [sp('pending', 'review')], to: sp('queued') },
+  fix: { from: [sp('pending', 'review'), sp('pending', 'error')], to: sp('queued') },
   revise: {
-    from: [sp('pending', 'review'), sp('pending', 'subtask_approval')],
+    from: [sp('pending', 'review'), sp('pending', 'error'), sp('pending', 'subtask_approval')],
     to: sp('queued'),
   },
   grant_permission: {
@@ -92,6 +92,7 @@ export const TRANSITION_MAP: Readonly<
       sp('in_progress', 'retrying'),
       sp('in_progress', 'waiting_on_subtasks'),
       sp('pending', 'review'),
+      sp('pending', 'error'),
       sp('pending', 'permission'),
       sp('pending', 'subtask_approval'),
     ],
@@ -113,7 +114,7 @@ export const TRANSITION_MAP: Readonly<
   },
   max_retries: {
     from: [sp('in_progress', 'running'), sp('in_progress', 'retrying')],
-    to: sp('pending', 'review'),
+    to: sp('pending', 'error'),
   },
   request_permission: {
     from: [sp('in_progress', 'running')],
@@ -147,7 +148,7 @@ export const TRANSITION_MAP: Readonly<
       sp('in_progress', 'running'),
       sp('in_progress', 'retrying'),
     ],
-    to: sp('pending', 'review'),
+    to: sp('pending', 'error'),
   },
 
   // --- Subtask-driven ---
@@ -171,7 +172,7 @@ export const TRANSITION_MAP: Readonly<
       sp('in_progress', 'retrying'),
       sp('in_progress', 'waiting_on_subtasks'),
     ],
-    to: sp('pending', 'review'),
+    to: sp('pending', 'error'),
   },
 }
 

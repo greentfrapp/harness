@@ -41,6 +41,7 @@ describe('VALID_SUBSTATUSES', () => {
     ])
     expect(VALID_SUBSTATUSES.pending).toEqual([
       'review',
+      'error',
       'permission',
       'subtask_approval',
     ])
