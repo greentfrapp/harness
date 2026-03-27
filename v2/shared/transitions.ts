@@ -60,7 +60,7 @@ export const TRANSITION_MAP: Readonly<
 > = {
   // --- Route-driven (user actions) ---
   send: { from: [sp('draft')], to: sp('queued') },
-  approve: { from: [sp('pending', 'review')], to: sp('done', 'accepted') },
+  approve: { from: [sp('pending', 'review')], to: sp('done', 'approved') },
   reject: {
     from: [sp('pending', 'review'), sp('pending', 'error'), sp('pending', 'subtask_approval')],
     to: sp('done', 'rejected'),
@@ -88,7 +88,7 @@ export const TRANSITION_MAP: Readonly<
   },
   approve_transition: {
     from: [sp('pending', 'review'), sp('pending', 'response')],
-    to: sp('done', 'accepted'),
+    to: sp('done', 'approved'),
   },
   cancel: {
     from: [

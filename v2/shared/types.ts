@@ -16,7 +16,7 @@ export type TaskSubstatus =
   | 'error'
   | 'permission'
   | 'subtask_approval'
-  | 'accepted'
+  | 'approved'
   | 'rejected'
   | null
 export type Priority = 'P0' | 'P1' | 'P2' | 'P3'
@@ -28,7 +28,7 @@ export const VALID_SUBSTATUSES: Record<TaskStatus, readonly TaskSubstatus[]> = {
   queued: [null],
   in_progress: ['running', 'retrying', 'waiting_on_subtasks'],
   pending: ['review', 'response', 'error', 'permission', 'subtask_approval'],
-  done: [null, 'accepted', 'rejected'],
+  done: [null, 'approved', 'rejected'],
   cancelled: [null],
 }
 
@@ -46,7 +46,7 @@ export const ALL_STATUS_PAIRS: readonly StatusPair[] = Object.entries(
 
 export const TERMINAL_PAIRS: readonly StatusPair[] = [
   { status: 'done', substatus: null },
-  { status: 'done', substatus: 'accepted' },
+  { status: 'done', substatus: 'approved' },
   { status: 'done', substatus: 'rejected' },
   { status: 'cancelled', substatus: null },
 ]

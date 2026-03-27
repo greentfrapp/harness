@@ -85,7 +85,7 @@ describe('transition()', () => {
   ][] = [
     // Route-driven
     ['draft', null, 'send', 'queued', null],
-    ['pending', 'review', 'approve', 'done', 'accepted'],
+    ['pending', 'review', 'approve', 'done', 'approved'],
     ['pending', 'review', 'reject', 'done', 'rejected'],
     ['pending', 'error', 'reject', 'done', 'rejected'],
     ['pending', 'subtask_approval', 'reject', 'done', 'rejected'],
@@ -105,8 +105,8 @@ describe('transition()', () => {
     ],
     ['pending', 'subtask_approval', 'dismiss_all_subtasks', 'queued', null],
     ['pending', 'response', 'dismiss', 'done', null],
-    ['pending', 'review', 'approve_transition', 'done', 'accepted'],
-    ['pending', 'response', 'approve_transition', 'done', 'accepted'],
+    ['pending', 'review', 'approve_transition', 'done', 'approved'],
+    ['pending', 'response', 'approve_transition', 'done', 'approved'],
     // Cancel from various states
     ['queued', null, 'cancel', 'cancelled', null],
     ['in_progress', 'running', 'cancel', 'cancelled', null],
@@ -187,12 +187,12 @@ describe('transition()', () => {
   // Illegal transitions
   const illegalCases: [TaskStatus, TaskSubstatus, TransitionAction][] = [
     ['queued', null, 'send'], // not draft
-    ['done', 'accepted', 'approve'], // terminal
+    ['done', 'approved', 'approve'], // terminal
     ['draft', null, 'approve'], // wrong phase
     ['in_progress', 'running', 'approve'], // still running
     ['cancelled', null, 'cancel'], // already terminal
     ['pending', 'review', 'dispatch'], // wrong status
-    ['done', 'accepted', 'revise'], // terminal
+    ['done', 'approved', 'revise'], // terminal
     ['draft', null, 'cancel'], // draft uses delete, not cancel
     ['in_progress', 'retrying', 'complete'], // only running can complete
     ['pending', 'permission', 'approve'], // wrong substatus
@@ -219,7 +219,7 @@ describe('canTransition()', () => {
 
   it('returns false for illegal transitions', () => {
     expect(canTransition('queued', null, 'send')).toBe(false)
-    expect(canTransition('done', 'accepted', 'revise')).toBe(false)
+    expect(canTransition('done', 'approved', 'revise')).toBe(false)
     expect(canTransition('draft', null, 'dispatch')).toBe(false)
     expect(canTransition('in_progress', 'retrying', 'complete')).toBe(false)
   })
@@ -228,7 +228,7 @@ describe('canTransition()', () => {
 describe('findAction()', () => {
   it('finds a valid action for legal transitions', () => {
     expect(findAction('draft', null, 'queued', null)).toBe('send')
-    expect(findAction('pending', 'review', 'done', 'accepted')).toBe(
+    expect(findAction('pending', 'review', 'done', 'approved')).toBe(
       'approve',
     )
     expect(findAction('in_progress', 'running', 'pending', 'review')).toBe(
@@ -240,8 +240,8 @@ describe('findAction()', () => {
   })
 
   it('returns null for impossible transitions', () => {
-    expect(findAction('draft', null, 'done', 'accepted')).toBeNull()
-    expect(findAction('done', 'accepted', 'queued', null)).toBeNull()
+    expect(findAction('draft', null, 'done', 'approved')).toBeNull()
+    expect(findAction('done', 'approved', 'queued', null)).toBeNull()
     expect(findAction('cancelled', null, 'in_progress', 'running')).toBeNull()
   })
 
@@ -251,8 +251,8 @@ describe('findAction()', () => {
   })
 
   it('returns one of multiple valid actions for ambiguous transitions', () => {
-    // pending:review → done:accepted can be either 'approve' or 'approve_transition'
-    const action = findAction('pending', 'review', 'done', 'accepted')
+    // pending:review → done:approved can be either 'approve' or 'approve_transition'
+    const action = findAction('pending', 'review', 'done', 'approved')
     expect(['approve', 'approve_transition']).toContain(action)
   })
 

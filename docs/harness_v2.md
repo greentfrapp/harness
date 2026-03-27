@@ -92,9 +92,9 @@ Statuses: `draft`, `queued`, `in_progress`, `pending`, `done`, `cancelled`.
 Substatuses by status:
 - `in_progress` → `running`, `retrying`, `waiting_on_subtasks`
 - `pending` → `review`, `permission`, `subtask_approval`
-- `done` → (none), `accepted`, `rejected`
+- `done` → (none), `approved`, `rejected`
 
-`done` with no substatus is for read-only tasks (`discuss`, `plan`) that complete without needing accept/reject review. `do` tasks always go through `pending:review` first and end as `done:accepted` or `done:rejected`.
+`done` with no substatus is for read-only tasks (`discuss`, `plan`) that complete without needing approve/reject review. `do` tasks always go through `pending:review` first and end as `done:approved` or `done:rejected`.
 
 ### Task Lifecycle Flows
 
@@ -197,7 +197,7 @@ Implemented in `v2/server/db/`. Fresh schema with no v1 migration baggage.
 Implemented in `v2/server/`. These modules form the task execution pipeline, ported from v1 with the v2 status+substatus model.
 
 - [x] **Config** — `v2/server/config.ts` unchanged from Phase 1 — already validates `task_types` with v2 model. Prompt templates, JSONC parsing, project validation all carried over.
-- [x] **Queue** — `v2/server/queue.ts` — `isDependencySatisfied()` checks `done:accepted` (was `approved`). `dispatch()` sets `in_progress:running` (was just `in_progress`). Priority ordering and position recomputation unchanged.
+- [x] **Queue** — `v2/server/queue.ts` — `isDependencySatisfied()` checks `done:approved`. `dispatch()` sets `in_progress:running` (was just `in_progress`). Priority ordering and position recomputation unchanged.
 - [x] **Dispatcher** — `v2/server/dispatcher.ts` — Uses 3-arg `transition(status, substatus, action)`. `dispatch` → `in_progress:running`. `dispatch_error` → `pending:review` (was `error`). Same worktree/conversation slot loop with re-dispatch flag.
 - [x] **Pool (AgentPool)** — `v2/server/pool.ts`:
   - Success: `complete` → `pending:review` for `do` tasks, `complete_readonly` → `done:null` for `discuss`/`plan`
@@ -226,12 +226,12 @@ Implemented in `v2/server/routes/`. All routes use the v2 transition machine wit
   - `POST /tasks/:id/send` — `draft:null` → `queued:null`
   - `POST /tasks/:id/fix` — `pending:review` → `queued:null`
   - `POST /tasks/:id/revise` — `pending:review` → `queued:null`
-  - `POST /tasks/:id/approve` — `pending:review` → `done:accepted` (merge + cleanup for `do` tasks)
+  - `POST /tasks/:id/approve` — `pending:review` → `done:approved` (merge + cleanup for `do` tasks)
   - `POST /tasks/:id/reject` — `pending:review`/`pending:subtask_approval` → `done:rejected`
   - `DELETE /tasks/:id` — cancel via `cancel` action → `cancelled:null`, or permanent delete for terminal/draft
   - `POST /tasks/:id/grant-permission` — `pending:permission` → `queued:null`
   - `POST /tasks/:id/resolve-proposals` — `pending:subtask_approval` → `in_progress:waiting_on_subtasks` or `queued:null`
-- [x] **Mode escalation route** — New `POST /tasks/:id/approve-transition` — user approves transition request. Completes source task (`done:accepted`), spawns new task of target type with same `session_id` and `parent_task_id`. Records transition in `task_transitions` table.
+- [x] **Mode escalation route** — New `POST /tasks/:id/approve-transition` — user approves transition request. Completes source task (`done:approved`), spawns new task of target type with same `session_id` and `parent_task_id`. Records transition in `task_transitions` table.
 - [x] **Checkout/return** — Checkout restricted to `pending:review` tasks. Return unchanged.
 - [x] **Chat** — `POST /tasks/:id/chat` works on `draft`, `pending`, `done` status tasks.
 - [x] **Views** — `v2/server/routes/views.ts` — Unchanged structure, imports from v2 views module.

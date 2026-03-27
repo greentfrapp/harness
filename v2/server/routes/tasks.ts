@@ -215,7 +215,7 @@ export function createTaskRoutes(ctx: AppContext) {
 
   // --- Task Lifecycle Actions ---
 
-  /** Approve: merge branch into target, destroy worktree, mark done:accepted. */
+  /** Approve: merge branch into target, destroy worktree, mark done:approved. */
   app.post('/tasks/:id/approve', (c) => {
     const id = c.req.param('id')
     const result = getTaskWithProjectOr404(queries, c, id)

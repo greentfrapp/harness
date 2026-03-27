@@ -46,7 +46,7 @@ describe('VALID_SUBSTATUSES', () => {
       'permission',
       'subtask_approval',
     ])
-    expect(VALID_SUBSTATUSES.done).toEqual([null, 'accepted', 'rejected'])
+    expect(VALID_SUBSTATUSES.done).toEqual([null, 'approved', 'rejected'])
     expect(VALID_SUBSTATUSES.cancelled).toEqual([null])
   })
 })
@@ -79,7 +79,7 @@ describe('ALL_STATUS_PAIRS', () => {
 describe('helper functions', () => {
   describe('isTerminal', () => {
     it('returns true for terminal pairs', () => {
-      expect(isTerminal('done', 'accepted')).toBe(true)
+      expect(isTerminal('done', 'approved')).toBe(true)
       expect(isTerminal('done', 'rejected')).toBe(true)
       expect(isTerminal('done', null)).toBe(true)
       expect(isTerminal('cancelled', null)).toBe(true)

@@ -19,8 +19,8 @@ export class TaskQueue {
   isDependencySatisfied(task: Task): boolean {
     if (!task.depends_on) return true
     const dep = this.deps.getTaskById(task.depends_on)
-    // v2: dependencies are satisfied when task is done:accepted
-    return dep?.status === 'done' && dep?.substatus === 'accepted'
+    // v2: dependencies are satisfied when task is done:approved
+    return dep?.status === 'done' && dep?.substatus === 'approved'
   }
 
   getNextReady(projectId?: string): Task | null {

@@ -60,10 +60,10 @@ describe('TaskQueue', () => {
       expect(queue.isDependencySatisfied(task)).toBe(true)
     })
 
-    it('returns true when dependency is done:accepted', () => {
+    it('returns true when dependency is done:approved', () => {
       const task = makeTask({ depends_on: 'dep-1' })
       deps.getTaskById.mockReturnValue(
-        makeTask({ id: 'dep-1', status: 'done', substatus: 'accepted' }),
+        makeTask({ id: 'dep-1', status: 'done', substatus: 'approved' }),
       )
       expect(queue.isDependencySatisfied(task)).toBe(true)
     })
