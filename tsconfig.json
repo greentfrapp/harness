@@ -11,9 +11,9 @@
     "isolatedModules": true,
     "noEmit": true,
     "paths": {
-      "@shared/*": ["./shared/*"]
+      "@shared/*": ["./v2/shared/*"]
     },
     "types": ["node"]
   },
-  "include": ["server/**/*.ts", "shared/**/*.ts"]
+  "include": ["server/**/*.ts", "shared/**/*.ts", "v2/**/*.ts"]
 }
