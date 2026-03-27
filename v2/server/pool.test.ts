@@ -492,13 +492,12 @@ describe('AgentPool task completion', () => {
     updateTask.mockClear()
     spawnedProc.emit('close', 0)
 
-    // v2: discuss tasks → done:null
+    // v2: discuss tasks → pending:response
     expect(updateTask).toHaveBeenCalledWith(
       'task-1',
       expect.objectContaining({
-        status: 'done',
-        substatus: null,
-        completed_at: expect.any(Number),
+        status: 'pending',
+        substatus: 'response',
       }),
     )
   })

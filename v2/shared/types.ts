@@ -12,6 +12,7 @@ export type TaskSubstatus =
   | 'retrying'
   | 'waiting_on_subtasks'
   | 'review'
+  | 'response'
   | 'error'
   | 'permission'
   | 'subtask_approval'
@@ -26,7 +27,7 @@ export const VALID_SUBSTATUSES: Record<TaskStatus, readonly TaskSubstatus[]> = {
   draft: [null],
   queued: [null],
   in_progress: ['running', 'retrying', 'waiting_on_subtasks'],
-  pending: ['review', 'error', 'permission', 'subtask_approval'],
+  pending: ['review', 'response', 'error', 'permission', 'subtask_approval'],
   done: [null, 'accepted', 'rejected'],
   cancelled: [null],
 }

@@ -330,6 +330,29 @@ export function createTaskRoutes(ctx: AppContext) {
     return c.json(updated)
   })
 
+  /** Dismiss: mark a pending:response (discuss) task as read. */
+  app.post('/tasks/:id/dismiss', (c) => {
+    const id = c.req.param('id')
+    const result = getTaskOr404(queries, c, id)
+    if (result instanceof Response) return result
+    const task = result
+    const target = guardTransition(c, task.status, task.substatus, 'dismiss')
+    if (target instanceof Response) return target
+
+    pool.killChatAgent(id)
+
+    const updated = queries.updateTask(id, {
+      status: target.status,
+      substatus: target.substatus,
+      completed_at: Date.now(),
+    })
+    queries.createTaskEvent(id, 'dismissed', null)
+    serverLog.info(`Task dismissed`, id)
+    sseManager.broadcast('task:updated', updated)
+
+    return c.json(updated)
+  })
+
   /** Fix: re-queue a pending:review task to address an issue. */
   app.post('/tasks/:id/fix', async (c) => {
     const id = c.req.param('id')
