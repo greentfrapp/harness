@@ -21,6 +21,7 @@ const DEFAULT_TAGS: Record<string, TagConfig> = {
 export const HARNESS_DIR = path.join(os.homedir(), '.harness')
 export const DB_PATH = path.join(HARNESS_DIR, 'harness.db')
 export const CONFIG_PATH = path.join(HARNESS_DIR, 'config.jsonc')
+export const SESSIONS_DIR = path.join(HARNESS_DIR, 'sessions')
 
 const DEFAULT_DO_PROMPT = `You are working on a task in a git worktree branch. Your job is to complete the task described below.
 
@@ -129,6 +130,7 @@ export function getDefaultTaskTypes(): Record<string, unknown> {
 
 export function ensureHarnessDir(): void {
   fs.mkdirSync(HARNESS_DIR, { recursive: true })
+  fs.mkdirSync(SESSIONS_DIR, { recursive: true })
   if (!fs.existsSync(CONFIG_PATH)) {
     fs.writeFileSync(CONFIG_PATH, DEFAULT_CONFIG_TEMPLATE, 'utf-8')
   }

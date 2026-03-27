@@ -13,6 +13,7 @@ import type { AgentProgressEvent } from './agents/index'
 import type { AgentRegistry } from './agents/index'
 import * as git from './git'
 import { serverLog } from './log'
+import { saveSessionMessages } from './sessions'
 
 export interface AgentSessionData {
   session_id: string | null
@@ -455,6 +456,10 @@ Only propose subtasks when you have clear, actionable sub-pieces. Not every task
       }
 
       this.agents.delete(task.id)
+      const progressBuffer = this.progressBuffers.get(task.id)
+      if (progressBuffer && progressBuffer.length > 0) {
+        saveSessionMessages(task.id, progressBuffer)
+      }
       this.progressBuffers.delete(task.id)
 
       const currentTask = this.deps.getTaskById(task.id)

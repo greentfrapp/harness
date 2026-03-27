@@ -70,7 +70,8 @@ Views are persisted in `~/.harness/views.jsonc` and managed via `GET/PUT /api/vi
 **Task Detail** uses an **accordion pattern** — clicking a task expands it inline within its column, showing the relevant detail content. An **Expand button** opens the detail in a full modal for more space (useful for diffs and extended conversations). What the detail shows depends on context:
 
 - For an in-progress task: streams the live Claude Code session output
-- For a completed Do task: shows the diff viewer
+- For a completed Do task: shows the diff viewer and historical session stream
+- For approved/rejected tasks: shows read-only diff viewer and historical session stream (persisted to disk)
 - For any task in conversation mode: shows a chat UI (see "Conversational Mode" below)
 
 Task context (outbox vs. inbox behavior) is **derived from task status** via the `getTaskContext()` helper, not passed explicitly. This enables mixed-status views where a single column can contain tasks from different lifecycle phases.
@@ -393,7 +394,7 @@ These prompts are starting points — small wording changes significantly affect
 
 ## Data Model
 
-Mutable task rows for current state (fast queries) + an append-only events table for history (audit trail, revise history). Conversation history is not stored in Harness — it lives in the agent's own session files, referenced by `agent_session_data`.
+Mutable task rows for current state (fast queries) + an append-only events table for history (audit trail, revise history). Agent progress streams are persisted to disk (`~/.harness/sessions/<task_id>.json`) for post-completion viewing. The agent's own session files (referenced by `agent_session_data`) are used for `--resume`.
 
 ### Schema
 
@@ -420,6 +421,7 @@ tasks (
                                         --   'waiting_on_subtasks' | 'ready' | 'held' | 'error' |
                                         --   'permission' | 'approved' | 'rejected' | 'cancelled'
   prompt        TEXT,                   -- user's prompt body (nullable — at least one of title/prompt required)
+  original_prompt TEXT,                 -- preserved on first revise so the original intent is always visible
   priority      TEXT DEFAULT 'P2',      -- 'P0' | 'P1' | 'P2' | 'P3'
   depends_on    TEXT REFERENCES tasks(id),  -- nullable, user-declared dependency
   parent_task_id TEXT,                      -- nullable, links follow-up tasks to their parent (lineage only, not a dependency)
@@ -470,7 +472,7 @@ subtask_proposals (
 
 - **Mutable `tasks` table**: Status, error, retry count, etc. are updated in place. Fast for queue queries (`WHERE status = 'queued' ORDER BY priority, created_at`).
 - **Append-only `task_events`**: Every state transition is logged. Revise history is reconstructable from events with `event_type = 'revised'` and the feedback stored in `data`. No data is lost even though the task row is mutable.
-- **No conversation storage**: The agent manages its own session files. Harness only stores `agent_session_data` to resume. This avoids duplicating potentially large conversation histories. If a future agent doesn't handle its own persistence, conversation data can be stored in `task_events` as `data` payloads.
+- **Session history persistence**: Agent progress messages (up to 200 per task) are persisted to disk (`~/.harness/sessions/<task_id>.json`) when the agent process exits. This allows viewing the full session stream on completed tasks and survives server restarts. Files are cleaned up on task deletion. The agent still manages its own session files for `--resume`; Harness stores the progress stream separately for UI display.
 - **Agent-agnostic fields**: `agent_type` identifies which adapter to use. `agent_session_data` is a JSON blob each adapter interprets (CC stores a session ID, Codex might store a thread ID, etc.).
 - **`title` field**: Optional short title for tasks (nullable). Subtask proposals always have a required title, which is carried over when a proposal is approved and spawned as a task.
 - **`subtask_proposals` as a separate table**: Clean separation from the task lifecycle. Links back to both the source task and the spawned Do task (if approved). Includes a `feedback` field for dismissal reasons, which is injected into the parent's resume prompt.
@@ -594,6 +596,7 @@ harness/
 │   ├── pool.ts               # Agent pool, worktree mgmt, CC process mgmt
 │   ├── git.ts                # Git operations (worktree, merge, branch naming)
 │   ├── recovery.ts           # Crash recovery on startup
+│   ├── sessions.ts           # Persist/load/delete agent progress to ~/.harness/sessions/
 │   ├── sse.ts                # SSE manager with client tracking and broadcast
 │   ├── log.ts                # Server-side activity logging
 │   ├── streamFilters.ts      # Filters CC JSON output for displayable content
@@ -620,7 +623,7 @@ harness/
 │   │   │   ├── TaskDetail.vue      # Accordion detail + expand-to-modal
 │   │   │   ├── TaskModal.vue       # Full-screen task detail modal
 │   │   │   ├── DiffViewer.vue      # diff2html side-by-side display
-│   │   │   ├── SessionStream.vue   # Live CC session output with progress buffering
+│   │   │   ├── SessionStream.vue   # Live CC session output with progress buffering; historical mode for completed tasks
 │   │   │   ├── SettingsModal.vue   # JSONC config editor with IDE-like keyboard handling
 │   │   │   └── ActivityLog.vue     # Server activity log viewer
 │   │   ├── stores/
@@ -863,13 +866,13 @@ These features were implemented during development but weren't tracked in the or
 - **Configurable multi-column views**: Replaced the fixed two-column Outbox/Inbox layout with a dynamic N-column grid driven by `ViewConfig[]`. Each view defines a filter by status, priority, tags, and/or project. Views are persisted in `~/.harness/views.jsonc` and managed via REST API (`GET/PUT /api/views`, `POST /api/views/reset`). New components: `ViewPanel.vue` (generic column, replaced `OutboxPanel`/`InboxPanel`), `ViewEditor.vue` (CRUD modal). New stores: `useTasks.ts` (unified task store replacing `useOutbox`/`useInbox`), `useViews.ts` (view management). Task context (outbox/inbox behavior) is now derived from status via `getTaskContext()` rather than explicitly passed, enabling mixed-status views. Default views replicate the original Outbox + Inbox layout.
 - **Dirty repo indicator**: Visual indicator (amber dot) in navbar when repos have uncommitted changes. Shows file count per dirty repo on hover. Checkout state is recovered from git branches on server restart.
 
-- **Revise flow**: `POST /tasks/:id/revise` returns a `ready` or `error` task to the outbox with new feedback, preserving `agent_session_data`, `worktree_path`, and `branch_name`. The agent resumes via `--resume` in the same worktree with full conversation context. The dispatcher reuses the existing worktree (skipping `createWorktree`) so original commits are preserved. Auto-returns any active checkout before re-queuing. This is the primary pre-approval feedback mechanism.
+- **Revise flow**: `POST /tasks/:id/revise` returns a `ready` or `error` task to the outbox with new feedback, preserving `agent_session_data`, `worktree_path`, and `branch_name`. On the first revise, the task's `original_prompt` is saved so the original intent remains visible in the UI regardless of how many revise cycles occur. The agent resumes via `--resume` in the same worktree with full conversation context. The dispatcher reuses the existing worktree (skipping `createWorktree`) so original commits are preserved. Auto-returns any active checkout before re-queuing. This is the primary pre-approval feedback mechanism.
 - **Follow-up flow**: `POST /tasks/:id/follow-up` creates a continuation task from an `approved` parent, carrying forward the session ID for `--resume` in a fresh worktree. Uses `parent_task_id` for lineage (not `depends_on`). Guarded against concurrent follow-ups on the same parent (409).
 - **Orphan cleanup**: `clearParentReferences()` nulls out `depends_on` and `parent_task_id` on children when a parent task is rejected, cancelled, or deleted — preventing orphaned tasks from being blocked forever on unsatisfiable dependencies.
 - **Fix flow**: `POST /tasks/:id/fix` re-queues a task preserving `agent_session_data`, `worktree_path`, and `branch_name`. Fix type is specified via `body.type` (one of `merge-conflict`, `checkout-failed`, `needs-commit`; default `merge-conflict`). Instead of modifying the prompt, the fix type is added as a **tag** on the task. At dispatch time, `buildFixPrompt()` in `pool.ts` reads the task's tags and constructs an appropriate resume prompt: merge-conflict tags prompt the agent to merge `target_branch` and resolve conflicts; checkout-failed tags prompt branch recovery; needs-commit tags prompt the agent to commit its changes. The original prompt is never overwritten. Auto-returns any active checkout. Used when merge fails on approve or when uncommitted changes are detected.
 - **Bulk operations**: `POST /tasks/bulk-delete` (delete by IDs) and `DELETE /tasks?status=...` (delete by status filter) with multi-select UI in `InboxPanel.vue`.
 - **Activity log**: `ActivityLog.vue` + `useLog.ts` + `server/log.ts` — server-side activity log streamed via SSE `log:entry` events, capped at 200 entries.
-- **Progress buffering**: `GET /api/tasks/:id/progress` returns buffered agent output for late-joining SSE clients, so they see prior progress when expanding a running task.
+- **Progress buffering**: `GET /api/tasks/:id/progress` returns buffered agent output for late-joining SSE clients, so they see prior progress when expanding a running task. On agent exit, the buffer is persisted to `~/.harness/sessions/<task_id>.json`. The endpoint falls back to these persisted files when the in-memory buffer is empty, enabling session history viewing on completed, approved, and rejected tasks.
 - **Stream filters**: `server/streamFilters.ts` filters Claude Code `--json` output to extract displayable content (assistant messages, tool calls, results) from metadata noise.
 - **Settings modal**: `SettingsModal.vue` with JSONC editor, real-time parse error detection, and hot-reload via `PUT /api/config/raw`.
 - **Permission handling**: When an agent emits a `permission_request` event, `handleAgentEvent()` kills the process, sets status to `permission` (with tool name in `error_message`), and pushes to inbox. `POST /tasks/:id/grant-permission` re-queues preserving session/worktree so the agent resumes with `--permission-mode bypassPermissions`. `buildResumeArgs` now mirrors the permission logic from `buildArgs`, ensuring resumed tasks (retries, revises, fixes, follow-ups) retain their permission mode — this was the root cause of permission requests appearing in the first place.
@@ -911,7 +914,7 @@ These features were implemented during development but weren't tracked in the or
 - **Project config**: JSONC settings file (`~/.harness/config.jsonc`) with project list, per-project settings (target branch, limits), and task type definitions. DB and config live in `~/.harness/`, separate from repos. Single-project focus in v1.
 - **Custom task types**: Users can define custom task types with their own system prompt templates. Each type specifies whether it needs a worktree and its default priority. Do and Discuss are built-in defaults, not hard constraints.
 - **Agent prompting**: System prompts are stored as configurable templates in `config.jsonc`, passed via `--systemPrompt`. Templates support `{user_prompt}` (combined title + prompt) and `{title}` (title only) placeholders. Do tasks get worktree-aware instructions; Discuss tasks get read-only research instructions. The `AgentPool` also injects Harness CLI instructions for subtask proposal into the system prompt.
-- **Data model**: Mutable `tasks` table for current state + append-only `task_events` for audit trail. Agent-specific session data stored as a JSON blob (`agent_session_data`) with an `agent_type` field, keeping the schema adaptable for future agents. Conversation history managed by the agent (not duplicated in Harness).
+- **Data model**: Mutable `tasks` table for current state + append-only `task_events` for audit trail. Agent-specific session data stored as a JSON blob (`agent_session_data`) with an `agent_type` field, keeping the schema adaptable for future agents. Agent progress streams are persisted to disk (`~/.harness/sessions/`) for post-completion viewing.
 - **Server crash recovery**: On startup, detect stale tasks via SQLite, kill orphaned processes via stored PIDs, reconcile worktrees with filesystem, and transition tasks to `error` (partial work reviewable) or `queued` (re-dispatch). Runs synchronously before accepting connections.
 - **Chat vs. Revise boundary**: Conversational mode on Do tasks uses plan mode (read-only). Chat never changes code; revise always does. If the user requests changes during chat, the agent explains what it would do and the UI prompts a formal Revise.
 - **External repo changes**: Out of scope for v1. Future work will add periodic sync/re-validation.

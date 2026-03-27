@@ -29,6 +29,7 @@ import type { AppContext } from '../context'
 import * as git from '../git'
 import { serverLog } from '../log'
 import { getSessionData, updateSessionData } from '../pool'
+import { deleteSessionMessages, loadSessionMessages } from '../sessions'
 
 export function createTaskRoutes(ctx: AppContext) {
   const app = new Hono()
@@ -624,6 +625,7 @@ export function createTaskRoutes(ctx: AppContext) {
     const ids = deleted.map((t) => t.id)
 
     for (const id of ids) {
+      deleteSessionMessages(id)
       sseManager.broadcast('task:removed', { id })
     }
 
@@ -688,6 +690,7 @@ export function createTaskRoutes(ctx: AppContext) {
 
       // Permanently delete from database
       queries.deleteTasksByIds([id])
+      deleteSessionMessages(id)
       serverLog.info(`Task permanently deleted`, id)
       sseManager.broadcast('task:removed', { id })
 
@@ -743,15 +746,20 @@ export function createTaskRoutes(ctx: AppContext) {
     }
 
     // Replace prompt with the revise feedback — the original prompt is already
-    // in the agent's session history and will be replayed via --resume
-    const updated = queries.updateTask(id, {
+    // in the agent's session history and will be replayed via --resume.
+    // Preserve the very first prompt so it's always visible in the UI.
+    const updates: Parameters<typeof queries.updateTask>[1] = {
       status: 'queued',
       prompt: body.prompt.trim(),
       error_message: null,
       agent_summary: null,
       diff_summary: null,
       // Preserve: agent_session_data (for --resume), worktree_path, branch_name
-    })
+    }
+    if (!task.original_prompt) {
+      updates.original_prompt = task.prompt
+    }
+    const updated = queries.updateTask(id, updates)
     queries.createTaskEvent(
       id,
       'revised',
@@ -1205,14 +1213,17 @@ export function createTaskRoutes(ctx: AppContext) {
     return c.json(queries.getTaskEvents(id))
   })
 
-  /** Get buffered progress messages for an in-progress task (for late-joining clients). */
+  /** Get buffered progress messages for a task (live buffer or persisted history). */
   app.get('/tasks/:id/progress', (c) => {
     const id = c.req.param('id')
     const result = getTaskOr404(c, id)
     if (result instanceof Response) return result
 
     const messages = pool.getProgressBuffer(id)
-    return c.json({ messages })
+    if (messages.length > 0) return c.json({ messages })
+    // Fall back to persisted session history
+    const persisted = loadSessionMessages(id)
+    return c.json({ messages: persisted })
   })
 
   return app
