@@ -206,6 +206,7 @@ export interface Project {
 }
 
 export interface Task {
+  // Core
   id: string
   project_id: string
   type: TaskType
@@ -214,22 +215,32 @@ export interface Task {
   title: string | null
   prompt: string | null
   result: string | null
+
+  // Metadata
   priority: Priority
   tags: string[]
-  references: string[]
-  depends_on: string | null
-  parent_task_id: string | null
-  agent_type: string
-  agent_session_data: string | null
-  session_id: string | null
-  worktree_path: string | null
-  branch_name: string | null
-  retry_count: number
-  queue_position: number | null
   created_at: number
   updated_at: number
   started_at: number | null
   completed_at: number | null
+
+  // Relations
+  depends_on: string | null
+  parent_task_id: string | null
+  references: string[]
+
+  // Agent
+  agent_type: string
+  agent_session_data: string | null
+  session_id: string | null
+
+  // Worktree
+  worktree_path: string | null
+  branch_name: string | null
+
+  // Queue
+  retry_count: number
+  queue_position: number | null
 }
 
 export interface TaskEvent {
