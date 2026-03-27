@@ -136,13 +136,22 @@ export class AgentPool {
       // Revision: reuse existing worktree and branch (preserves original commits)
       wtPath = task.worktree_path
     } else {
-      // New task: create fresh worktree from target branch
+      // Resolve base branch: if this is a subtask of a plan, branch off the feature branch
+      let baseBranch = project.target_branch
+      if (task.parent_task_id) {
+        const parent = this.deps.getTaskById(task.parent_task_id)
+        if (parent?.type === 'plan' && parent.branch_name) {
+          baseBranch = parent.branch_name
+        }
+      }
+
+      // New task: create fresh worktree from base branch
       const branchName = git.makeBranchName(task.id, task.title ?? task.prompt ?? '')
       wtPath = git.worktreePath(project.repo_path, branchName)
 
       git.createWorktree(
         project.repo_path,
-        project.target_branch,
+        baseBranch,
         branchName,
         wtPath,
       )

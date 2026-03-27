@@ -377,6 +377,18 @@ export function cleanupCheckoutBranches(repoPath: string): void {
   }
 }
 
+/** Create a branch without a worktree (for feature branches). */
+export function createBranch(
+  repoPath: string,
+  baseBranch: string,
+  branchName: string,
+): void {
+  execSync(`git branch ${branchName} ${baseBranch}`, {
+    cwd: repoPath,
+    stdio: 'pipe',
+  })
+}
+
 /** Generate a branch name from task ID and prompt. */
 export function makeBranchName(taskId: string, prompt: string): string {
   const shortId = taskId.slice(0, 8)

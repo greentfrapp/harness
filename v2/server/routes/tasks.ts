@@ -228,15 +228,26 @@ export function createTaskRoutes(ctx: AppContext) {
     autoReturnIfCheckedOut(ctx, id)
 
     if (task.branch_name) {
+      // Resolve merge target: subtasks of plan tasks merge to the feature branch
+      let mergeTarget = project.target_branch
+      let shouldPush = !!project.auto_push
+      if (task.parent_task_id) {
+        const parent = queries.getTaskById(task.parent_task_id)
+        if (parent?.type === 'plan' && parent.branch_name) {
+          mergeTarget = parent.branch_name
+          shouldPush = false // don't push feature branches
+        }
+      }
+
       if (
         !git.hasCommits(
           project.repo_path,
-          project.target_branch,
+          mergeTarget,
           task.branch_name,
         )
       ) {
         serverLog.warn(
-          `Task branch has no commits ahead of ${project.target_branch}`,
+          `Task branch has no commits ahead of ${mergeTarget}`,
           id,
         )
         return c.json(
@@ -250,17 +261,17 @@ export function createTaskRoutes(ctx: AppContext) {
 
       try {
         serverLog.info(
-          `Merging ${task.branch_name} into ${project.target_branch}`,
+          `Merging ${task.branch_name} into ${mergeTarget}`,
           id,
         )
         git.mergeBranch(
           project.repo_path,
-          project.target_branch,
+          mergeTarget,
           task.branch_name,
-          { push: !!project.auto_push },
+          { push: shouldPush },
         )
         serverLog.info(
-          `Merge successful${project.auto_push ? ' (pushed to remote)' : ''}`,
+          `Merge successful${shouldPush ? ' (pushed to remote)' : ''}`,
           id,
         )
       } catch (err) {
@@ -283,6 +294,9 @@ export function createTaskRoutes(ctx: AppContext) {
     queries.createTaskEvent(id, 'approved', null)
     serverLog.info(`Task approved`, id)
     sseManager.broadcast('task:updated', updated)
+
+    // Check if this was a subtask and its parent plan is waiting
+    checkWaitingParent(ctx, task)
 
     dispatcher.tryDispatch()
 
@@ -313,6 +327,9 @@ export function createTaskRoutes(ctx: AppContext) {
     queries.createTaskEvent(id, 'rejected', null)
     serverLog.info(`Task rejected`, id)
     sseManager.broadcast('task:updated', updated)
+
+    // Check if this was a subtask and its parent plan is waiting
+    checkWaitingParent(ctx, task)
 
     const dependents = getDependentTasks(queries, id)
     queries.clearParentReferences(id)
@@ -694,6 +711,9 @@ export function createTaskRoutes(ctx: AppContext) {
     queries.createTaskEvent(id, 'cancelled', null)
     sseManager.broadcast('task:updated', updated)
 
+    // Check if this was a subtask and its parent plan is waiting
+    checkWaitingParent(ctx, existing)
+
     dispatcher.tryDispatch()
 
     return c.json(updated)
@@ -800,6 +820,8 @@ export function createTaskRoutes(ctx: AppContext) {
         substatus: autoTarget.substatus,
       })
       pool.killAgent(id)
+      // Create feature branch for plan tasks
+      ensurePlanFeatureBranch(ctx, task)
       for (const proposal of proposals) {
         const newTask = queries.createTask({
           project_id: task.project_id,
@@ -875,6 +897,11 @@ export function createTaskRoutes(ctx: AppContext) {
         status: 'dismissed',
         feedback: d.feedback ?? null,
       })
+    }
+
+    // Create feature branch for plan tasks when first subtask is approved
+    if ((body.approved ?? []).length > 0) {
+      ensurePlanFeatureBranch(ctx, task)
     }
 
     for (const a of body.approved ?? []) {
@@ -1095,4 +1122,71 @@ function getDependentTasks(
 ): Task[] {
   const activeTasks = queries.getTasksByStatus(['queued', 'in_progress'])
   return activeTasks.filter((t) => t.depends_on === taskId)
+}
+
+/**
+ * Ensure a plan task has a feature branch for its subtasks.
+ * Creates the branch on first call (when first subtask is approved).
+ */
+function ensurePlanFeatureBranch(
+  ctx: AppContext,
+  planTask: Task,
+): void {
+  if (planTask.type !== 'plan' || planTask.branch_name) return
+
+  const project = ctx.queries.getProjectById(planTask.project_id)
+  if (!project) return
+
+  const branchName = git.makeBranchName(planTask.id, planTask.title ?? planTask.prompt ?? '')
+  git.createBranch(project.repo_path, project.target_branch, branchName)
+  ctx.queries.updateTask(planTask.id, { branch_name: branchName })
+  serverLog.info(`Created feature branch ${branchName} for plan task`, planTask.id)
+}
+
+/**
+ * Check if a completed/cancelled subtask's parent plan is waiting on subtasks.
+ * If all children are terminal, transition the parent back to queued so the
+ * plan agent can resume and set its result.
+ */
+function checkWaitingParent(ctx: AppContext, task: Task): void {
+  if (!task.parent_task_id) return
+
+  const parent = ctx.queries.getTaskById(task.parent_task_id)
+  if (
+    !parent ||
+    parent.status !== 'in_progress' ||
+    parent.substatus !== 'waiting_on_subtasks'
+  )
+    return
+
+  const children = ctx.queries.getChildTasks(parent.id)
+  const allTerminal = children.every((c) => isTerminal(c.status, c.substatus))
+  if (!allTerminal) return
+
+  // Build resume prompt with subtask results
+  let resumePrompt = 'All subtasks have completed. Here are the results:\n\n'
+  for (const child of children) {
+    const status = child.substatus
+      ? `${child.status}:${child.substatus}`
+      : child.status
+    resumePrompt += `## ${child.title ?? child.prompt?.slice(0, 80) ?? child.id}\n`
+    resumePrompt += `Status: ${status}\n`
+    if (child.result) {
+      resumePrompt += `Result: ${child.result}\n`
+    }
+    resumePrompt += '\n'
+  }
+  resumePrompt +=
+    'Set your result with a summary of the plan and what was accomplished, then finish.'
+
+  const target = transition(parent.status, parent.substatus, 'subtasks_completed')
+  ctx.queries.updateTask(parent.id, {
+    status: target.status,
+    substatus: target.substatus,
+    prompt: resumePrompt,
+  })
+  ctx.queries.createTaskEvent(parent.id, 'subtasks_completed', null)
+  serverLog.info(`All subtasks complete, parent re-queued`, parent.id)
+
+  ctx.sseManager.broadcast('task:updated', ctx.queries.getTaskById(parent.id))
 }
