@@ -8,6 +8,7 @@ import {
   removeWorktree,
   returnCheckout,
 } from '../git'
+import { loadSessionMessages } from '../sessions'
 import { createTaskRoutes } from './tasks'
 
 vi.mock('../config.ts', () => ({
@@ -19,6 +20,12 @@ vi.mock('../config.ts', () => ({
     plan: { prompt_template: '...', needs_worktree: false, default_priority: 'P2' },
   }),
   CONFIG_PATH: '/mock/.harness/config.jsonc',
+}))
+
+vi.mock('../sessions.ts', () => ({
+  loadSessionMessages: vi.fn().mockReturnValue([]),
+  deleteSessionMessages: vi.fn(),
+  saveSessionMessages: vi.fn(),
 }))
 
 vi.mock('../git.ts', async (importOriginal) => {
@@ -117,6 +124,7 @@ function makeContext(): AppContext {
     pool: {
       killAgent: vi.fn().mockReturnValue(false),
       hasAgent: vi.fn().mockReturnValue(false),
+      getProgressBuffer: vi.fn().mockReturnValue([]),
     } as any,
     dispatcher: { tryDispatch: vi.fn() } as any,
     queries: {
@@ -598,6 +606,37 @@ describe('Task Routes', () => {
         body: JSON.stringify({ prompt: 'test' }),
       })
       expect(res.status).toBe(400)
+    })
+
+    it('does not overwrite original_prompt on second revise', async () => {
+      const task = makeTask({
+        status: 'ready',
+        prompt: 'second feedback',
+        original_prompt: 'the very first prompt',
+        agent_session_data: '{"session_id":"sess-1","pid":123}',
+        worktree_path: '/tmp/wt',
+        branch_name: 'harness/abc-test',
+      })
+      ;(ctx.queries.getTaskById as any).mockReturnValue(task)
+      ;(ctx.queries.updateTask as any).mockImplementation(
+        (id: string, updates: any) => makeTask({ id, ...updates }),
+      )
+
+      const res = await app.request('/tasks/task-1/revise', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: 'third feedback' }),
+      })
+      expect(res.status).toBe(200)
+
+      // original_prompt should NOT be in the update since it's already set
+      expect(ctx.queries.updateTask).toHaveBeenCalledWith('task-1', {
+        status: 'queued',
+        prompt: 'third feedback',
+        error_message: null,
+        agent_summary: null,
+        diff_summary: null,
+      })
     })
 
     it('revises an error task', async () => {
@@ -1564,6 +1603,46 @@ describe('Task Routes', () => {
         status: 'dismissed',
         feedback: 'Already fixed',
       })
+    })
+  })
+
+  describe('GET /tasks/:id/progress', () => {
+    it('returns live buffer when available', async () => {
+      const task = makeTask({ status: 'in_progress' })
+      ;(ctx.queries.getTaskById as any).mockReturnValue(task)
+      const liveMessages = [{ type: 'assistant', message: 'Working...' }]
+      ;(ctx.pool.getProgressBuffer as any).mockReturnValue(liveMessages)
+
+      const res = await app.request('/tasks/task-1/progress')
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.messages).toEqual(liveMessages)
+    })
+
+    it('falls back to persisted session when live buffer is empty', async () => {
+      const task = makeTask({ status: 'approved' })
+      ;(ctx.queries.getTaskById as any).mockReturnValue(task)
+      ;(ctx.pool.getProgressBuffer as any).mockReturnValue([])
+      const persisted = [{ type: 'assistant', message: 'Done' }]
+      ;(loadSessionMessages as any).mockReturnValue(persisted)
+
+      const res = await app.request('/tasks/task-1/progress')
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.messages).toEqual(persisted)
+      expect(loadSessionMessages).toHaveBeenCalledWith('task-1')
+    })
+
+    it('returns empty array when no live buffer or persisted session', async () => {
+      const task = makeTask({ status: 'approved' })
+      ;(ctx.queries.getTaskById as any).mockReturnValue(task)
+      ;(ctx.pool.getProgressBuffer as any).mockReturnValue([])
+      ;(loadSessionMessages as any).mockReturnValue([])
+
+      const res = await app.request('/tasks/task-1/progress')
+      expect(res.status).toBe(200)
+      const body = await res.json()
+      expect(body.messages).toEqual([])
     })
   })
 })
