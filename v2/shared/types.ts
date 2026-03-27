@@ -26,7 +26,7 @@ export const VALID_SUBSTATUSES: Record<TaskStatus, readonly TaskSubstatus[]> = {
   queued: [null],
   in_progress: ['running', 'retrying', 'waiting_on_subtasks'],
   pending: ['review', 'permission', 'subtask_approval'],
-  done: ['accepted', 'rejected'],
+  done: [null, 'accepted', 'rejected'],
   cancelled: [null],
 }
 
@@ -61,6 +61,7 @@ export const INBOX_PAIRS: readonly StatusPair[] = [
 ]
 
 export const TERMINAL_PAIRS: readonly StatusPair[] = [
+  { status: 'done', substatus: null },
   { status: 'done', substatus: 'accepted' },
   { status: 'done', substatus: 'rejected' },
   { status: 'cancelled', substatus: null },

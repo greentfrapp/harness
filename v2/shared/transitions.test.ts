@@ -111,6 +111,7 @@ describe('transition()', () => {
     ['pending', 'subtask_approval', 'cancel', 'cancelled', null],
     // Agent-driven
     ['in_progress', 'running', 'complete', 'pending', 'review'],
+    ['in_progress', 'running', 'complete_readonly', 'done', null],
     ['in_progress', 'running', 'fail', 'in_progress', 'retrying'],
     ['in_progress', 'running', 'max_retries', 'pending', 'review'],
     ['in_progress', 'retrying', 'max_retries', 'pending', 'review'],

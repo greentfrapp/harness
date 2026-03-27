@@ -17,6 +17,7 @@ export type TransitionAction =
   | 'approve_transition'
   // Agent-driven
   | 'complete'
+  | 'complete_readonly'
   | 'fail'
   | 'max_retries'
   | 'request_permission'
@@ -101,6 +102,10 @@ export const TRANSITION_MAP: Readonly<
   complete: {
     from: [sp('in_progress', 'running')],
     to: sp('pending', 'review'),
+  },
+  complete_readonly: {
+    from: [sp('in_progress', 'running')],
+    to: sp('done'),
   },
   fail: {
     from: [sp('in_progress', 'running')],
