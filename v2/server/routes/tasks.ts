@@ -373,7 +373,7 @@ export function createTaskRoutes(ctx: AppContext) {
     return c.json(updated)
   })
 
-  /** Fix: re-queue a pending:review task to address an issue. */
+  /** Fix: re-queue a pending:review or pending:error task to address an issue. */
   app.post('/tasks/:id/fix', async (c) => {
     const id = c.req.param('id')
     const result = getTaskWithProjectOr404(queries, c, id)
