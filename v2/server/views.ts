@@ -1,22 +1,10 @@
 import { parse as parseJsonc } from 'jsonc-parser'
 import fs from 'node:fs'
 import path from 'node:path'
-import type { Priority, TaskStatus, TaskSubstatus } from '../shared/types'
+import type { ViewConfig, ViewFilter } from '../shared/types'
 import { HARNESS_DIR } from './config'
 
-export interface ViewFilter {
-  statuses?: TaskStatus[]
-  substatuses?: TaskSubstatus[]
-  priorities?: Priority[]
-  tags?: string[]
-  project_id?: string
-}
-
-export interface ViewConfig {
-  id: string
-  name: string
-  filter: ViewFilter
-}
+export type { ViewConfig, ViewFilter }
 
 export const VIEWS_PATH = path.join(HARNESS_DIR, 'views.jsonc')
 

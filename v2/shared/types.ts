@@ -271,7 +271,7 @@ export type SSEEventType =
 // Checkout state exposed to clients
 export interface CheckoutInfo {
   taskId: string
-  taskPrompt: string
+  taskTitle: string
   repoPath: string
   projectName: string
   projectId: string
@@ -307,4 +307,28 @@ export function comparePriority(a: Task, b: Task): number {
   const pb = PRIORITY_ORDER[b.priority] ?? 1
   if (pa !== pb) return pa - pb
   return a.created_at - b.created_at
+}
+
+// View types (shared between server and client)
+export interface ViewFilter {
+  statuses?: TaskStatus[]
+  substatuses?: TaskSubstatus[]
+  priorities?: Priority[]
+  tags?: string[]
+  project_id?: string
+}
+
+export interface ViewConfig {
+  id: string
+  name: string
+  filter: ViewFilter
+}
+
+// Status context helper for UI
+export function getTaskContext(
+  status: TaskStatus,
+): 'outbox' | 'inbox' | 'draft' {
+  if (status === 'draft') return 'draft'
+  if (status === 'queued' || status === 'in_progress') return 'outbox'
+  return 'inbox'
 }
