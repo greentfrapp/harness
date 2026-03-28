@@ -5,6 +5,7 @@ import type {
   Priority,
   Project,
   Task,
+  TaskProposal,
   TaskProposalInput,
   TaskStatus,
   UpdateTaskInput,
@@ -719,6 +720,56 @@ export function createTaskRoutes(ctx: AppContext) {
 
   // --- Task Proposals ---
 
+  /** Create a task from an approved proposal, handling session copy and transition recording. */
+  function spawnTaskFromProposal(
+    sourceTask: Task,
+    proposal: TaskProposal,
+    overrides?: { prompt?: string; priority?: Priority },
+  ): Task {
+    const taskType = proposal.type ?? sourceTask.type
+    const newTask = queries.createTask({
+      project_id: sourceTask.project_id,
+      type: taskType,
+      title: proposal.title,
+      prompt: overrides?.prompt ?? proposal.prompt,
+      priority: overrides?.priority ?? (proposal.priority as Priority),
+      tags: proposal.tags.length > 0 ? proposal.tags : undefined,
+      parent_task_id: proposal.parent_task_id ?? undefined,
+      depends_on: proposal.depends_on ?? undefined,
+      references:
+        proposal.references.length > 0 ? proposal.references : undefined,
+    })
+
+    if (proposal.inherit_session) {
+      const parentSession = getSessionData(sourceTask)
+      if (parentSession?.session_id) {
+        queries.updateTask(newTask.id, {
+          agent_session_data: JSON.stringify({
+            session_id: parentSession.session_id,
+            pid: 0,
+          }),
+          session_id: parentSession.session_id,
+        })
+      }
+    }
+
+    if (!proposal.parent_task_id) {
+      queries.createTaskTransition(
+        sourceTask.id,
+        newTask.id,
+        `${sourceTask.type}_to_${taskType}`,
+      )
+    }
+
+    queries.updateTaskProposal(proposal.id, {
+      status: 'approved',
+      spawned_task_id: newTask.id,
+    })
+    sseManager.broadcast('task:created', queries.getTaskById(newTask.id))
+
+    return newTask
+  }
+
   /** Propose tasks: agent posts proposals, parent gets paused. */
   app.post('/tasks/:id/propose-tasks', async (c) => {
     const id = c.req.param('id')
@@ -768,46 +819,9 @@ export function createTaskRoutes(ctx: AppContext) {
         substatus: autoTarget.substatus,
       })
       pool.killAgent(id)
-      // Create feature branch for plan tasks
       ensurePlanFeatureBranch(ctx, task)
       for (const proposal of proposals) {
-        const taskType = proposal.type ?? task.type
-        const newTask = queries.createTask({
-          project_id: task.project_id,
-          type: taskType,
-          title: proposal.title,
-          prompt: proposal.prompt,
-          priority: proposal.priority as Priority,
-          tags: proposal.tags.length > 0 ? proposal.tags : undefined,
-          parent_task_id: proposal.parent_task_id ?? undefined,
-          depends_on: proposal.depends_on ?? undefined,
-          references:
-            proposal.references.length > 0 ? proposal.references : undefined,
-        })
-        if (proposal.inherit_session) {
-          const parentSession = getSessionData(task)
-          if (parentSession?.session_id) {
-            queries.updateTask(newTask.id, {
-              agent_session_data: JSON.stringify({
-                session_id: parentSession.session_id,
-                pid: 0,
-              }),
-              session_id: parentSession.session_id,
-            })
-          }
-        }
-        if (!proposal.parent_task_id) {
-          queries.createTaskTransition(
-            id,
-            newTask.id,
-            `${task.type}_to_${taskType}`,
-          )
-        }
-        queries.updateTaskProposal(proposal.id, {
-          status: 'approved',
-          spawned_task_id: newTask.id,
-        })
-        sseManager.broadcast('task:created', queries.getTaskById(newTask.id))
+        spawnTaskFromProposal(task, proposal)
       }
       queries.createTaskEvent(id, 'tasks_auto_approved', null)
       const updated = queries.getTaskById(id)
@@ -885,48 +899,10 @@ export function createTaskRoutes(ctx: AppContext) {
 
       if (proposal.parent_task_id != null) hasApprovedChildTasks = true
 
-      const taskType = proposal.type ?? task.type
-      const newTask = queries.createTask({
-        project_id: task.project_id,
-        type: taskType,
-        title: proposal.title,
-        prompt: a.prompt ?? proposal.prompt,
-        priority: a.priority ?? (proposal.priority as Priority),
-        tags: proposal.tags.length > 0 ? proposal.tags : undefined,
-        parent_task_id: proposal.parent_task_id ?? undefined,
-        depends_on: proposal.depends_on ?? undefined,
-        references:
-          proposal.references.length > 0 ? proposal.references : undefined,
+      spawnTaskFromProposal(task, proposal, {
+        prompt: a.prompt,
+        priority: a.priority,
       })
-
-      // Copy session if requested
-      if (proposal.inherit_session) {
-        const parentSession = getSessionData(task)
-        if (parentSession?.session_id) {
-          queries.updateTask(newTask.id, {
-            agent_session_data: JSON.stringify({
-              session_id: parentSession.session_id,
-              pid: 0,
-            }),
-            session_id: parentSession.session_id,
-          })
-        }
-      }
-
-      // Record transition for non-child proposals
-      if (!proposal.parent_task_id) {
-        queries.createTaskTransition(
-          id,
-          newTask.id,
-          `${task.type}_to_${taskType}`,
-        )
-      }
-
-      queries.updateTaskProposal(a.id, {
-        status: 'approved',
-        spawned_task_id: newTask.id,
-      })
-      sseManager.broadcast('task:created', queries.getTaskById(newTask.id))
     }
 
     const approvedCount = approvedItems.length
