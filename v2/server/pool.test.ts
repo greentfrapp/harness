@@ -219,7 +219,7 @@ describe('AgentPool progress broadcasting', () => {
       createTaskEvent: vi.fn(),
       broadcast,
       getTaskById: () => makeTask(),
-      getSubtaskProposals: vi.fn(() => []),
+      getTaskProposals: vi.fn(() => []),
       onTaskCompleted: vi.fn(),
     })
   })
@@ -346,7 +346,7 @@ describe('AgentPool worktree management', () => {
       createTaskEvent: vi.fn(),
       broadcast,
       getTaskById: () => makeTask(),
-      getSubtaskProposals: vi.fn(() => []),
+      getTaskProposals: vi.fn(() => []),
       onTaskCompleted: vi.fn(),
     })
 
@@ -379,7 +379,7 @@ describe('AgentPool worktree management', () => {
       createTaskEvent: vi.fn(),
       broadcast: vi.fn(),
       getTaskById: () => makeTask(),
-      getSubtaskProposals: vi.fn(() => []),
+      getTaskProposals: vi.fn(() => []),
       onTaskCompleted: vi.fn(),
     })
 
@@ -420,7 +420,7 @@ describe('AgentPool task completion', () => {
           substatus: 'running',
           branch_name: 'harness/test-branch',
         }),
-      getSubtaskProposals: vi.fn(() => []),
+      getTaskProposals: vi.fn(() => []),
       onTaskCompleted,
     })
 
@@ -472,7 +472,7 @@ describe('AgentPool task completion', () => {
           status: 'in_progress',
           substatus: 'running',
         }),
-      getSubtaskProposals: vi.fn(() => []),
+      getTaskProposals: vi.fn(() => []),
       onTaskCompleted,
     })
 
@@ -520,7 +520,7 @@ describe('AgentPool task completion', () => {
           substatus: 'running',
           branch_name: 'harness/test-branch',
         }),
-      getSubtaskProposals: vi.fn(() => []),
+      getTaskProposals: vi.fn(() => []),
       onTaskCompleted,
     })
 
@@ -565,7 +565,7 @@ describe('AgentPool task completion', () => {
           substatus: 'running',
           branch_name: 'harness/test-branch',
         }),
-      getSubtaskProposals: vi.fn(() => []),
+      getTaskProposals: vi.fn(() => []),
       onTaskCompleted,
     })
 
@@ -625,7 +625,7 @@ describe('AgentPool task completion', () => {
       createTaskEvent: vi.fn(),
       broadcast: vi.fn(),
       getTaskById: () => taskWithFixTag,
-      getSubtaskProposals: vi.fn(() => []),
+      getTaskProposals: vi.fn(() => []),
       onTaskCompleted,
     })
 
@@ -673,7 +673,7 @@ describe('AgentPool task completion', () => {
       createTaskEvent: vi.fn(),
       broadcast: vi.fn(),
       getTaskById: () => taskNoFixTags,
-      getSubtaskProposals: vi.fn(() => []),
+      getTaskProposals: vi.fn(() => []),
       onTaskCompleted: vi.fn(),
     })
 
@@ -718,7 +718,7 @@ describe('AgentPool permission handling', () => {
       broadcast,
       getTaskById: () =>
         makeTask({ status: 'in_progress', substatus: 'running' }),
-      getSubtaskProposals: vi.fn(() => []),
+      getTaskProposals: vi.fn(() => []),
       onTaskCompleted,
     })
 
@@ -827,7 +827,7 @@ describe('AgentPool permission handling', () => {
       createTaskEvent: vi.fn(),
       broadcast: vi.fn(),
       getTaskById: () => taskWithGrants,
-      getSubtaskProposals: vi.fn(() => []),
+      getTaskProposals: vi.fn(() => []),
       onTaskCompleted: vi.fn(),
     })
 
@@ -867,7 +867,7 @@ describe('AgentPool early return on close', () => {
           status: 'in_progress',
           substatus: 'waiting_on_subtasks',
         }),
-      getSubtaskProposals: vi.fn(() => []),
+      getTaskProposals: vi.fn(() => []),
       onTaskCompleted,
     })
 
@@ -900,7 +900,7 @@ describe('AgentPool early return on close', () => {
       broadcast: vi.fn(),
       getTaskById: () =>
         makeTask({ status: 'cancelled', substatus: null }),
-      getSubtaskProposals: vi.fn(() => []),
+      getTaskProposals: vi.fn(() => []),
       onTaskCompleted,
     })
 
@@ -916,7 +916,7 @@ describe('AgentPool early return on close', () => {
     expect(updateTask).not.toHaveBeenCalled()
   })
 
-  it('does not process success/failure when task is pending (permission/subtask_approval)', async () => {
+  it('does not process success/failure when task is pending (permission/task_proposal)', async () => {
     const updateTask = vi.fn(() => makeTask())
     const createTaskEvent = vi.fn()
     const onTaskCompleted = vi.fn()
@@ -930,7 +930,7 @@ describe('AgentPool early return on close', () => {
       broadcast: vi.fn(),
       getTaskById: () =>
         makeTask({ status: 'pending', substatus: 'permission' }),
-      getSubtaskProposals: vi.fn(() => []),
+      getTaskProposals: vi.fn(() => []),
       onTaskCompleted,
     })
 
@@ -956,7 +956,7 @@ describe('AgentPool plan task validation', () => {
     )
     const createTaskEvent = vi.fn()
     const onTaskCompleted = vi.fn()
-    const getSubtaskProposals = vi.fn(() => [])
+    const getTaskProposals = vi.fn(() => [])
 
     const pool = new AgentPool({
       config: defaultConfig,
@@ -971,7 +971,7 @@ describe('AgentPool plan task validation', () => {
           status: 'in_progress',
           substatus: 'running',
         }),
-      getSubtaskProposals,
+      getTaskProposals,
       onTaskCompleted,
     })
 
@@ -993,7 +993,7 @@ describe('AgentPool plan task validation', () => {
 
     spawnedProc.emit('close', 0)
 
-    expect(getSubtaskProposals).toHaveBeenCalledWith('task-1')
+    expect(getTaskProposals).toHaveBeenCalledWith('task-1')
 
     // v2: dispatch_error → pending:error
     expect(updateTask).toHaveBeenCalledWith(
@@ -1007,7 +1007,7 @@ describe('AgentPool plan task validation', () => {
   })
 
   it('does not check proposals for non-plan tasks', async () => {
-    const getSubtaskProposals = vi.fn(() => [])
+    const getTaskProposals = vi.fn(() => [])
 
     const pool = new AgentPool({
       config: defaultConfig,
@@ -1022,7 +1022,7 @@ describe('AgentPool plan task validation', () => {
           substatus: 'running',
           branch_name: 'harness/test-branch',
         }),
-      getSubtaskProposals,
+      getTaskProposals,
       onTaskCompleted: vi.fn(),
     })
 
@@ -1041,7 +1041,7 @@ describe('AgentPool plan task validation', () => {
 
     spawnedProc.emit('close', 0)
 
-    expect(getSubtaskProposals).not.toHaveBeenCalled()
+    expect(getTaskProposals).not.toHaveBeenCalled()
   })
 })
 
@@ -1061,7 +1061,7 @@ describe('AgentPool environment and prompts', () => {
       createTaskEvent: vi.fn(),
       broadcast: vi.fn(),
       getTaskById: () => makeTask(),
-      getSubtaskProposals: vi.fn(() => []),
+      getTaskProposals: vi.fn(() => []),
       onTaskCompleted: vi.fn(),
     })
 
@@ -1106,7 +1106,7 @@ describe('AgentPool environment and prompts', () => {
       createTaskEvent: vi.fn(),
       broadcast: vi.fn(),
       getTaskById: () => makeTask(),
-      getSubtaskProposals: vi.fn(() => []),
+      getTaskProposals: vi.fn(() => []),
       onTaskCompleted: vi.fn(),
     })
 
@@ -1155,7 +1155,7 @@ describe('AgentPool environment and prompts', () => {
       createTaskEvent: vi.fn(),
       broadcast: vi.fn(),
       getTaskById: () => makeTask(),
-      getSubtaskProposals: vi.fn(() => []),
+      getTaskProposals: vi.fn(() => []),
       onTaskCompleted: vi.fn(),
     })
 

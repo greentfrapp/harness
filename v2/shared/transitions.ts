@@ -12,25 +12,24 @@ export type TransitionAction =
   | 'revise'
   | 'cancel'
   | 'grant_permission'
-  | 'approve_subtasks'
-  | 'dismiss_all_subtasks'
+  | 'approve_tasks'
+  | 'complete_proposals'
+  | 'dismiss_all_tasks'
   | 'dismiss'
-  | 'approve_transition'
   // Agent-driven
   | 'complete'
   | 'complete_readonly'
   | 'fail'
   | 'max_retries'
   | 'request_permission'
-  | 'propose_subtasks'
-  | 'auto_approve_subtasks'
-  | 'request_transition'
+  | 'propose_tasks'
+  | 'auto_approve_tasks'
   // Dispatcher-driven
   | 'dispatch'
   | 'dispatch_retry'
   | 'dispatch_error'
-  // Subtask-driven
-  | 'subtasks_completed'
+  // Task-completion-driven
+  | 'tasks_completed'
   // Recovery-driven
   | 'recover_requeue'
   | 'recover_error'
@@ -62,33 +61,33 @@ export const TRANSITION_MAP: Readonly<
   send: { from: [sp('draft')], to: sp('queued') },
   approve: { from: [sp('pending', 'review')], to: sp('done', 'approved') },
   reject: {
-    from: [sp('pending', 'review'), sp('pending', 'error'), sp('pending', 'subtask_approval')],
+    from: [sp('pending', 'review'), sp('pending', 'error'), sp('pending', 'task_proposal')],
     to: sp('done', 'rejected'),
   },
   fix: { from: [sp('pending', 'review'), sp('pending', 'error')], to: sp('queued') },
   revise: {
-    from: [sp('pending', 'review'), sp('pending', 'response'), sp('pending', 'error'), sp('pending', 'subtask_approval')],
+    from: [sp('pending', 'review'), sp('pending', 'response'), sp('pending', 'error'), sp('pending', 'task_proposal')],
     to: sp('queued'),
   },
   grant_permission: {
     from: [sp('pending', 'permission')],
     to: sp('queued'),
   },
-  approve_subtasks: {
-    from: [sp('pending', 'subtask_approval')],
+  approve_tasks: {
+    from: [sp('pending', 'task_proposal')],
     to: sp('in_progress', 'waiting_on_subtasks'),
   },
-  dismiss_all_subtasks: {
-    from: [sp('pending', 'subtask_approval')],
+  complete_proposals: {
+    from: [sp('pending', 'task_proposal')],
+    to: sp('done', 'approved'),
+  },
+  dismiss_all_tasks: {
+    from: [sp('pending', 'task_proposal')],
     to: sp('queued'),
   },
   dismiss: {
     from: [sp('pending', 'response')],
     to: sp('done'),
-  },
-  approve_transition: {
-    from: [sp('pending', 'review'), sp('pending', 'response')],
-    to: sp('done', 'approved'),
   },
   cancel: {
     from: [
@@ -100,7 +99,7 @@ export const TRANSITION_MAP: Readonly<
       sp('pending', 'response'),
       sp('pending', 'error'),
       sp('pending', 'permission'),
-      sp('pending', 'subtask_approval'),
+      sp('pending', 'task_proposal'),
     ],
     to: sp('cancelled'),
   },
@@ -126,17 +125,13 @@ export const TRANSITION_MAP: Readonly<
     from: [sp('in_progress', 'running')],
     to: sp('pending', 'permission'),
   },
-  propose_subtasks: {
+  propose_tasks: {
     from: [sp('in_progress', 'running')],
-    to: sp('pending', 'subtask_approval'),
+    to: sp('pending', 'task_proposal'),
   },
-  auto_approve_subtasks: {
+  auto_approve_tasks: {
     from: [sp('in_progress', 'running')],
     to: sp('in_progress', 'waiting_on_subtasks'),
-  },
-  request_transition: {
-    from: [sp('in_progress', 'running')],
-    to: sp('pending', 'review'),
   },
 
   // --- Dispatcher-driven ---
@@ -157,8 +152,8 @@ export const TRANSITION_MAP: Readonly<
     to: sp('pending', 'error'),
   },
 
-  // --- Subtask-driven ---
-  subtasks_completed: {
+  // --- Task-completion-driven ---
+  tasks_completed: {
     from: [sp('in_progress', 'waiting_on_subtasks')],
     to: sp('queued'),
   },

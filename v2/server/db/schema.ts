@@ -58,14 +58,17 @@ export const taskEvents = sqliteTable('task_events', {
     .$defaultFn(() => Date.now()),
 })
 
-export const subtaskProposals = sqliteTable('subtask_proposals', {
+export const taskProposals = sqliteTable('task_proposals', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   task_id: text('task_id')
     .notNull()
     .references(() => tasks.id),
   title: text('title').notNull(),
   prompt: text('prompt').notNull(),
+  type: text('type'),
   priority: text('priority').notNull().default('P2'),
+  is_subtask: integer('is_subtask', { mode: 'boolean' }).notNull().default(true),
+  inherit_session: integer('inherit_session', { mode: 'boolean' }).notNull().default(false),
   depends_on_title: text('depends_on_title'),
   status: text('status').notNull().default('pending'),
   feedback: text('feedback'),

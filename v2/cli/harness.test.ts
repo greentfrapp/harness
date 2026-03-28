@@ -97,7 +97,7 @@ describe('harness CLI', () => {
       expect(stdout).toContain('Usage: harness <command>')
       expect(stdout).toContain('set-result')
       expect(stdout).toContain('request-permission')
-      expect(stdout).toContain('request-transition')
+      expect(stdout).toContain('propose-transition-task')
       expect(stdout).toContain('propose-subtasks')
       expect(stdout).toContain('get-task')
       expect(stdout).toContain('list-tasks')
@@ -178,18 +178,29 @@ describe('harness CLI', () => {
     })
   })
 
-  describe('request-transition', () => {
-    it('sends POST with target type', async () => {
-      const { code, stdout } = await runCli(['request-transition', 'plan'])
+  describe('propose-transition-task', () => {
+    it('sends POST with target type as proposal', async () => {
+      const { code, stdout } = await runCli(['propose-transition-task', '--type', 'plan'])
       expect(code).toBe(0)
       expect(lastRequest!.method).toBe('POST')
-      expect(lastRequest!.url).toBe('/api/tasks/test-task-123/request-transition')
-      expect(JSON.parse(lastRequest!.body)).toEqual({ target_type: 'plan' })
-      expect(stdout).toContain("Transition to 'plan' requested")
+      expect(lastRequest!.url).toBe('/api/tasks/test-task-123/propose-tasks')
+      const body = JSON.parse(lastRequest!.body)
+      expect(body.tasks).toHaveLength(1)
+      expect(body.tasks[0].type).toBe('plan')
+      expect(body.tasks[0].is_subtask).toBe(false)
+      expect(body.tasks[0].inherit_session).toBe(true)
+      expect(stdout).toContain("Transition to 'plan' proposed")
+    })
+
+    it('accepts positional type arg', async () => {
+      const { code } = await runCli(['propose-transition-task', 'plan'])
+      expect(code).toBe(0)
+      const body = JSON.parse(lastRequest!.body)
+      expect(body.tasks[0].type).toBe('plan')
     })
 
     it('exits 1 with no target type', async () => {
-      const { code, stderr } = await runCli(['request-transition'])
+      const { code, stderr } = await runCli(['propose-transition-task'])
       expect(code).not.toBe(0)
       expect(stderr).toContain('Target type is required')
     })
@@ -209,13 +220,11 @@ describe('harness CLI', () => {
       ])
       expect(code).toBe(0)
       expect(lastRequest!.method).toBe('POST')
-      expect(lastRequest!.url).toBe('/api/tasks/test-task-123/propose-subtasks')
-      expect(JSON.parse(lastRequest!.body)).toEqual({
-        subtasks: [
-          { title: 'Task A', prompt: 'Do A' },
-          { title: 'Task B', prompt: 'Do B' },
-        ],
-      })
+      expect(lastRequest!.url).toBe('/api/tasks/test-task-123/propose-tasks')
+      const body = JSON.parse(lastRequest!.body)
+      expect(body.tasks).toHaveLength(2)
+      expect(body.tasks[0]).toEqual({ title: 'Task A', prompt: 'Do A', is_subtask: true })
+      expect(body.tasks[1]).toEqual({ title: 'Task B', prompt: 'Do B', is_subtask: true })
       expect(stdout).toContain('Proposed 2 subtask(s)')
     })
 

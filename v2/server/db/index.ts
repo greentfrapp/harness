@@ -57,12 +57,15 @@ const CREATE_TABLES_SQL = `
     created_at INTEGER NOT NULL
   );
 
-  CREATE TABLE IF NOT EXISTS subtask_proposals (
+  CREATE TABLE IF NOT EXISTS task_proposals (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     task_id TEXT NOT NULL REFERENCES tasks(id),
     title TEXT NOT NULL,
     prompt TEXT NOT NULL,
+    type TEXT,
     priority TEXT NOT NULL DEFAULT 'P2',
+    is_subtask INTEGER NOT NULL DEFAULT 1,
+    inherit_session INTEGER NOT NULL DEFAULT 0,
     depends_on_title TEXT,
     status TEXT NOT NULL DEFAULT 'pending',
     feedback TEXT,

@@ -5,7 +5,7 @@ import type {
   HarnessConfig,
   Project,
   SSEEventType,
-  SubtaskProposal,
+  TaskProposal,
   Task,
 } from '../shared/types'
 import { transition } from '../shared/transitions'
@@ -62,7 +62,7 @@ interface PoolDeps {
   ) => void
   broadcast: (event: SSEEventType, data: unknown) => void
   getTaskById: (id: string) => Task | undefined
-  getSubtaskProposals: (taskId: string) => SubtaskProposal[]
+  getTaskProposals: (taskId: string) => TaskProposal[]
   onTaskCompleted: (taskId: string) => void
 }
 
@@ -496,8 +496,7 @@ export class AgentPool {
   ): void {
     const adapter = this.deps.agentRegistry.getOrDefault(task.agent_type)
 
-    // Inject harness subtask instructions into the system prompt so the agent
-    // knows how to propose subtasks via the CLI instead of using its own tools.
+    // Inject harness CLI instructions into the system prompt.
     const harnessInstructions = `
 
 ## Harness Task System
@@ -511,11 +510,11 @@ You are running as an agent inside Harness, a task queue system. You have access
 **Request permission for a tool (pauses agent until granted):**
   $HARNESS_CLI request-permission <tool-name>
 
-**Request mode escalation, e.g. discuss → plan (pauses agent until approved):**
-  $HARNESS_CLI request-transition <target-type>
-
 **Propose subtasks for parallel execution (pauses agent until reviewed):**
   $HARNESS_CLI propose-subtasks --subtasks '[{"title":"Short title","prompt":"Detailed instructions"}]'
+
+**Propose a mode transition, e.g. discuss → plan (pauses agent until approved):**
+  $HARNESS_CLI propose-transition-task --type <target-type> --title "Title for the new task"
 
 **Read another task's data:**
   $HARNESS_CLI get-task <task-id>
@@ -526,7 +525,7 @@ You are running as an agent inside Harness, a task queue system. You have access
 ### Notes:
 - Use set-result to provide your final output before completing.
 - Only propose subtasks when you have clear, actionable sub-pieces. Not every task needs subtasks.
-- After proposing subtasks, you will be paused while the user reviews them. You will be resumed with their results.`
+- After proposing subtasks or a transition, you will be paused while the user reviews. You will be resumed with results.`
 
     const systemPrompt = opts.systemPrompt
       ? opts.systemPrompt + harnessInstructions
@@ -827,7 +826,7 @@ You are running as an agent inside Harness, a task queue system. You have access
 
     // Plan tasks must produce subtask proposals — error if they didn't
     if (task.type === 'plan') {
-      const proposals = this.deps.getSubtaskProposals(taskId)
+      const proposals = this.deps.getTaskProposals(taskId)
       if (proposals.length === 0) {
         this.pushToError(
           taskId,

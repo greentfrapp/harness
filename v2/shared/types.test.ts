@@ -42,7 +42,7 @@ describe('VALID_SUBSTATUSES', () => {
       'response',
       'error',
       'permission',
-      'subtask_approval',
+      'task_proposal',
     ])
     expect(VALID_SUBSTATUSES.done).toEqual([null, 'approved', 'rejected'])
     expect(VALID_SUBSTATUSES.cancelled).toEqual([null])

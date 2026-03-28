@@ -88,25 +88,24 @@ describe('transition()', () => {
     ['pending', 'review', 'approve', 'done', 'approved'],
     ['pending', 'review', 'reject', 'done', 'rejected'],
     ['pending', 'error', 'reject', 'done', 'rejected'],
-    ['pending', 'subtask_approval', 'reject', 'done', 'rejected'],
+    ['pending', 'task_proposal', 'reject', 'done', 'rejected'],
     ['pending', 'review', 'fix', 'queued', null],
     ['pending', 'error', 'fix', 'queued', null],
     ['pending', 'review', 'revise', 'queued', null],
     ['pending', 'response', 'revise', 'queued', null],
     ['pending', 'error', 'revise', 'queued', null],
-    ['pending', 'subtask_approval', 'revise', 'queued', null],
+    ['pending', 'task_proposal', 'revise', 'queued', null],
     ['pending', 'permission', 'grant_permission', 'queued', null],
     [
       'pending',
-      'subtask_approval',
-      'approve_subtasks',
+      'task_proposal',
+      'approve_tasks',
       'in_progress',
       'waiting_on_subtasks',
     ],
-    ['pending', 'subtask_approval', 'dismiss_all_subtasks', 'queued', null],
+    ['pending', 'task_proposal', 'complete_proposals', 'done', 'approved'],
+    ['pending', 'task_proposal', 'dismiss_all_tasks', 'queued', null],
     ['pending', 'response', 'dismiss', 'done', null],
-    ['pending', 'review', 'approve_transition', 'done', 'approved'],
-    ['pending', 'response', 'approve_transition', 'done', 'approved'],
     // Cancel from various states
     ['queued', null, 'cancel', 'cancelled', null],
     ['in_progress', 'running', 'cancel', 'cancelled', null],
@@ -116,7 +115,7 @@ describe('transition()', () => {
     ['pending', 'response', 'cancel', 'cancelled', null],
     ['pending', 'error', 'cancel', 'cancelled', null],
     ['pending', 'permission', 'cancel', 'cancelled', null],
-    ['pending', 'subtask_approval', 'cancel', 'cancelled', null],
+    ['pending', 'task_proposal', 'cancel', 'cancelled', null],
     // Agent-driven
     ['in_progress', 'running', 'complete', 'pending', 'review'],
     ['in_progress', 'running', 'complete_readonly', 'pending', 'response'],
@@ -127,29 +126,28 @@ describe('transition()', () => {
     [
       'in_progress',
       'running',
-      'propose_subtasks',
+      'propose_tasks',
       'pending',
-      'subtask_approval',
+      'task_proposal',
     ],
     [
       'in_progress',
       'running',
-      'auto_approve_subtasks',
+      'auto_approve_tasks',
       'in_progress',
       'waiting_on_subtasks',
     ],
-    ['in_progress', 'running', 'request_transition', 'pending', 'review'],
     // Dispatcher-driven
     ['queued', null, 'dispatch', 'in_progress', 'running'],
     ['in_progress', 'retrying', 'dispatch_retry', 'in_progress', 'running'],
     ['queued', null, 'dispatch_error', 'pending', 'error'],
     ['in_progress', 'running', 'dispatch_error', 'pending', 'error'],
     ['in_progress', 'retrying', 'dispatch_error', 'pending', 'error'],
-    // Subtask-driven
+    // Task-completion-driven
     [
       'in_progress',
       'waiting_on_subtasks',
-      'subtasks_completed',
+      'tasks_completed',
       'queued',
       null,
     ],
@@ -250,16 +248,14 @@ describe('findAction()', () => {
     expect(findAction('pending', 'review', 'pending', 'review')).toBeNull()
   })
 
-  it('returns one of multiple valid actions for ambiguous transitions', () => {
-    // pending:review → done:approved can be either 'approve' or 'approve_transition'
+  it('finds approve for pending:review → done:approved', () => {
     const action = findAction('pending', 'review', 'done', 'approved')
-    expect(['approve', 'approve_transition']).toContain(action)
+    expect(action).toBe('approve')
   })
 
-  it('returns one of multiple valid actions for in_progress:running → pending:review', () => {
-    // in_progress:running → pending:review can be complete or request_transition
+  it('finds complete for in_progress:running → pending:review', () => {
     const action = findAction('in_progress', 'running', 'pending', 'review')
-    expect(['complete', 'request_transition']).toContain(action)
+    expect(action).toBe('complete')
   })
 
   it('returns one of multiple valid actions for in_progress:running → pending:error', () => {

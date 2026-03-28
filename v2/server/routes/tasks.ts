@@ -3,7 +3,7 @@ import type {
   CreateTaskInput,
   Priority,
   Project,
-  SubtaskProposalInput,
+  TaskProposalInput,
   Task,
   TaskStatus,
   UpdateTaskInput,
@@ -587,76 +587,6 @@ export function createTaskRoutes(ctx: AppContext) {
     return c.json(updated, 201)
   })
 
-  /** Approve mode-escalation transition: complete source task, spawn new task of target type. */
-  app.post('/tasks/:id/approve-transition', async (c) => {
-    const id = c.req.param('id')
-    const result = getTaskOr404(queries, c, id)
-    if (result instanceof Response) return result
-    const task = result
-    const target = guardTransition(
-      c,
-      task.status,
-      task.substatus,
-      'approve_transition',
-    )
-    if (target instanceof Response) return target
-
-    const body = await c.req.json<{
-      target_type: string
-      prompt?: string
-    }>()
-    if (!body.target_type) {
-      return c.json({ error: 'target_type is required' }, 400)
-    }
-
-    queries.updateTask(id, {
-      status: target.status,
-      substatus: target.substatus,
-      completed_at: Date.now(),
-    })
-    queries.createTaskEvent(id, 'transition_approved', null)
-    sseManager.broadcast('task:updated', queries.getTaskById(id))
-
-    const parentSession = getSessionData(task)
-    const taskTypeConfig = config.task_types[body.target_type]
-    const agentType = taskTypeConfig?.agent ?? task.agent_type ?? 'claude-code'
-
-    const newTask = queries.createTask({
-      project_id: task.project_id,
-      type: body.target_type,
-      title: task.title,
-      prompt: body.prompt?.trim() || task.prompt,
-      priority: task.priority,
-      tags: task.tags,
-      parent_task_id: id,
-      agent_type: agentType,
-    })
-
-    if (parentSession?.session_id) {
-      queries.updateTask(newTask.id, {
-        agent_session_data: JSON.stringify({
-          session_id: parentSession.session_id,
-          pid: 0,
-        }),
-        session_id: parentSession.session_id,
-      })
-    }
-
-    queries.createTaskTransition(id, newTask.id, `${task.type}_to_${body.target_type}`)
-
-    taskQueue.recomputePositions(newTask.project_id)
-    const created = queries.getTaskById(newTask.id)!
-    sseManager.broadcast('task:created', created)
-    dispatcher.tryDispatch()
-
-    serverLog.info(
-      `Transition approved: ${task.type} → ${body.target_type}`,
-      id,
-    )
-
-    return c.json({ source: queries.getTaskById(id), target: created }, 201)
-  })
-
   // --- Delete / Cancel ---
 
   // --- Cancel / Delete helpers ---
@@ -812,7 +742,7 @@ export function createTaskRoutes(ctx: AppContext) {
   // --- Subtask Proposals ---
 
   /** Propose subtasks: agent posts proposals, parent gets paused. */
-  app.post('/tasks/:id/propose-subtasks', async (c) => {
+  app.post('/tasks/:id/propose-tasks', async (c) => {
     const id = c.req.param('id')
     const result = getTaskOr404(queries, c, id)
     if (result instanceof Response) return result
@@ -821,37 +751,38 @@ export function createTaskRoutes(ctx: AppContext) {
     if (task.status !== 'in_progress' || task.substatus !== 'running') {
       return c.json(
         {
-          error: `Task must be in_progress:running to propose subtasks, got '${task.status}:${task.substatus}'`,
+          error: `Task must be in_progress:running to propose tasks, got '${task.status}:${task.substatus}'`,
         },
         400,
       )
     }
 
-    const body = await c.req.json<{ subtasks: SubtaskProposalInput[] }>()
-    if (!Array.isArray(body.subtasks) || body.subtasks.length === 0) {
+    const body = await c.req.json<{ tasks: TaskProposalInput[] }>()
+    if (!Array.isArray(body.tasks) || body.tasks.length === 0) {
       return c.json(
-        { error: 'subtasks array is required and must not be empty' },
+        { error: 'tasks array is required and must not be empty' },
         400,
       )
     }
 
-    for (const s of body.subtasks) {
+    for (const s of body.tasks) {
       if (!s.title?.trim() || !s.prompt?.trim()) {
         return c.json(
-          { error: 'Each subtask must have a title and prompt' },
+          { error: 'Each proposal must have a title and prompt' },
           400,
         )
       }
     }
 
-    const proposals = queries.createSubtaskProposals(id, body.subtasks)
+    const proposals = queries.createTaskProposals(id, body.tasks)
+    const hasSubtasks = proposals.some((p) => p.is_subtask)
 
-    if (config.auto_approve_subtasks) {
+    if (hasSubtasks && config.auto_approve_subtasks) {
       const autoTarget = guardTransition(
         c,
         task.status,
         task.substatus,
-        'auto_approve_subtasks',
+        'auto_approve_tasks',
       )
       if (autoTarget instanceof Response) return autoTarget
       queries.updateTask(id, {
@@ -862,21 +793,37 @@ export function createTaskRoutes(ctx: AppContext) {
       // Create feature branch for plan tasks
       ensurePlanFeatureBranch(ctx, task)
       for (const proposal of proposals) {
+        const taskType = proposal.type ?? task.type
         const newTask = queries.createTask({
           project_id: task.project_id,
-          type: task.type,
+          type: taskType,
           title: proposal.title,
           prompt: proposal.prompt,
           priority: proposal.priority as Priority,
+          parent_task_id: proposal.is_subtask ? id : undefined,
         })
-        queries.updateTask(newTask.id, { parent_task_id: id })
-        queries.updateSubtaskProposal(proposal.id, {
+        if (proposal.inherit_session) {
+          const parentSession = getSessionData(task)
+          if (parentSession?.session_id) {
+            queries.updateTask(newTask.id, {
+              agent_session_data: JSON.stringify({
+                session_id: parentSession.session_id,
+                pid: 0,
+              }),
+              session_id: parentSession.session_id,
+            })
+          }
+        }
+        if (!proposal.is_subtask) {
+          queries.createTaskTransition(id, newTask.id, `${task.type}_to_${taskType}`)
+        }
+        queries.updateTaskProposal(proposal.id, {
           status: 'approved',
           spawned_task_id: newTask.id,
         })
         sseManager.broadcast('task:created', queries.getTaskById(newTask.id))
       }
-      queries.createTaskEvent(id, 'subtasks_auto_approved', null)
+      queries.createTaskEvent(id, 'tasks_auto_approved', null)
       const updated = queries.getTaskById(id)
       sseManager.broadcast('task:updated', updated)
       dispatcher.tryDispatch()
@@ -885,7 +832,7 @@ export function createTaskRoutes(ctx: AppContext) {
         c,
         task.status,
         task.substatus,
-        'propose_subtasks',
+        'propose_tasks',
       )
       if (proposeTarget instanceof Response) return proposeTarget
       queries.updateTask(id, {
@@ -893,7 +840,7 @@ export function createTaskRoutes(ctx: AppContext) {
         substatus: proposeTarget.substatus,
       })
       pool.killAgent(id)
-      queries.createTaskEvent(id, 'subtasks_proposed', null)
+      queries.createTaskEvent(id, 'tasks_proposed', null)
       const updated = queries.getTaskById(id)
       sseManager.broadcast('task:updated', updated)
     }
@@ -960,73 +907,13 @@ export function createTaskRoutes(ctx: AppContext) {
     return c.json({ ok: true, tool: body.tool })
   })
 
-  /** Agent requests mode escalation via CLI. */
-  app.post('/tasks/:id/request-transition', async (c) => {
-    const id = c.req.param('id')
-    const result = getTaskOr404(queries, c, id)
-    if (result instanceof Response) return result
-    const task = result
-
-    if (task.status !== 'in_progress' || task.substatus !== 'running') {
-      return c.json(
-        {
-          error: `Task must be in_progress:running to request transition, got '${task.status}:${task.substatus}'`,
-        },
-        400,
-      )
-    }
-
-    const body = await c.req.json<{ target_type: string }>()
-    if (!body.target_type?.trim()) {
-      return c.json({ error: 'target_type is required' }, 400)
-    }
-
-    if (!config.task_types[body.target_type]) {
-      return c.json(
-        { error: `Unknown task type: ${body.target_type}` },
-        400,
-      )
-    }
-
-    const target = guardTransition(
-      c,
-      task.status,
-      task.substatus,
-      'request_transition',
-    )
-    if (target instanceof Response) return target
-
-    queries.updateTask(id, {
-      status: target.status,
-      substatus: target.substatus,
-      result: `Transition requested: ${task.type} → ${body.target_type}`,
-    })
-
-    pool.killAgent(id)
-
-    queries.createTaskEvent(
-      id,
-      'transition_requested',
-      JSON.stringify({ target_type: body.target_type }),
-    )
-    serverLog.info(
-      `Transition requested: ${task.type} → ${body.target_type} (via CLI)`,
-      id,
-    )
-
-    const updated = queries.getTaskById(id)
-    sseManager.broadcast('inbox:new', updated)
-
-    return c.json({ ok: true, target_type: body.target_type })
-  })
-
   /** Get proposals for a task. */
   app.get('/tasks/:id/proposals', (c) => {
     const id = c.req.param('id')
     const result = getTaskOr404(queries, c, id)
     if (result instanceof Response) return result
 
-    return c.json(queries.getSubtaskProposals(id))
+    return c.json(queries.getTaskProposals(id))
   })
 
   /** Resolve proposals: approve some, dismiss others. */
@@ -1036,10 +923,10 @@ export function createTaskRoutes(ctx: AppContext) {
     if (result instanceof Response) return result
     const task = result
 
-    if (task.status !== 'pending' || task.substatus !== 'subtask_approval') {
+    if (task.status !== 'pending' || task.substatus !== 'task_proposal') {
       return c.json(
         {
-          error: `Task must be pending:subtask_approval, got '${task.status}:${task.substatus}'`,
+          error: `Task must be pending:task_proposal, got '${task.status}:${task.substatus}'`,
         },
         400,
       )
@@ -1051,44 +938,70 @@ export function createTaskRoutes(ctx: AppContext) {
     }>()
 
     for (const d of body.dismissed ?? []) {
-      queries.updateSubtaskProposal(d.id, {
+      queries.updateTaskProposal(d.id, {
         status: 'dismissed',
         feedback: d.feedback ?? null,
       })
     }
 
     // Create feature branch for plan tasks when first subtask is approved
-    if ((body.approved ?? []).length > 0) {
+    const approvedItems = body.approved ?? []
+    if (approvedItems.length > 0) {
       ensurePlanFeatureBranch(ctx, task)
     }
 
-    for (const a of body.approved ?? []) {
-      const proposals = queries.getSubtaskProposals(id)
+    let hasApprovedSubtasks = false
+    for (const a of approvedItems) {
+      const proposals = queries.getTaskProposals(id)
       const proposal = proposals.find((p) => p.id === a.id)
       if (!proposal) continue
 
+      if (proposal.is_subtask) hasApprovedSubtasks = true
+
+      const taskType = proposal.type ?? task.type
       const newTask = queries.createTask({
         project_id: task.project_id,
-        type: task.type,
+        type: taskType,
         title: proposal.title,
         prompt: a.prompt ?? proposal.prompt,
         priority: a.priority ?? (proposal.priority as Priority),
+        parent_task_id: proposal.is_subtask ? id : undefined,
       })
-      queries.updateTask(newTask.id, { parent_task_id: id })
-      queries.updateSubtaskProposal(a.id, {
+
+      // Copy session if requested
+      if (proposal.inherit_session) {
+        const parentSession = getSessionData(task)
+        if (parentSession?.session_id) {
+          queries.updateTask(newTask.id, {
+            agent_session_data: JSON.stringify({
+              session_id: parentSession.session_id,
+              pid: 0,
+            }),
+            session_id: parentSession.session_id,
+          })
+        }
+      }
+
+      // Record transition for non-subtask proposals
+      if (!proposal.is_subtask) {
+        queries.createTaskTransition(id, newTask.id, `${task.type}_to_${taskType}`)
+      }
+
+      queries.updateTaskProposal(a.id, {
         status: 'approved',
         spawned_task_id: newTask.id,
       })
       sseManager.broadcast('task:created', queries.getTaskById(newTask.id))
     }
 
-    const approvedCount = (body.approved ?? []).length
+    const approvedCount = approvedItems.length
 
     if (approvedCount === 0) {
-      const proposals = queries.getSubtaskProposals(id)
+      // All dismissed — re-queue parent with feedback
+      const proposals = queries.getTaskProposals(id)
       const dismissed = proposals.filter((p) => p.status === 'dismissed')
       let resumePrompt =
-        'All proposed subtasks were dismissed by the user.\n\n'
+        'All proposed tasks were dismissed by the user.\n\n'
       if (dismissed.length > 0) {
         resumePrompt += '## Dismissed Proposals\n'
         for (const d of dismissed) {
@@ -1104,7 +1017,7 @@ export function createTaskRoutes(ctx: AppContext) {
       const dismissTarget = transition(
         task.status,
         task.substatus,
-        'dismiss_all_subtasks',
+        'dismiss_all_tasks',
       )
       queries.updateTask(id, {
         status: dismissTarget.status,
@@ -1112,23 +1025,42 @@ export function createTaskRoutes(ctx: AppContext) {
         prompt: resumePrompt,
         result: null,
       })
-      queries.createTaskEvent(id, 'subtasks_all_dismissed', null)
+      queries.createTaskEvent(id, 'proposals_all_dismissed', null)
       serverLog.info(`All proposals dismissed, parent re-queued`, id)
 
       taskQueue.recomputePositions(task.project_id)
       const updated = queries.getTaskById(id)
       sseManager.broadcast('task:updated', updated)
       dispatcher.tryDispatch()
-    } else {
+    } else if (hasApprovedSubtasks) {
+      // Has subtasks — parent waits
       const approveTarget = transition(
         task.status,
         task.substatus,
-        'approve_subtasks',
+        'approve_tasks',
       )
       queries.updateTask(id, {
         status: approveTarget.status,
         substatus: approveTarget.substatus,
       })
+      queries.createTaskEvent(id, 'tasks_approved', null)
+      const updated = queries.getTaskById(id)
+      sseManager.broadcast('task:updated', updated)
+      taskQueue.recomputePositions(task.project_id)
+      dispatcher.tryDispatch()
+    } else {
+      // No subtasks — parent completes (transition/handoff)
+      const completeTarget = transition(
+        task.status,
+        task.substatus,
+        'complete_proposals',
+      )
+      queries.updateTask(id, {
+        status: completeTarget.status,
+        substatus: completeTarget.substatus,
+        completed_at: Date.now(),
+      })
+      queries.createTaskEvent(id, 'transition_approved', null)
       const updated = queries.getTaskById(id)
       sseManager.broadcast('task:updated', updated)
       taskQueue.recomputePositions(task.project_id)
@@ -1337,13 +1269,13 @@ function checkWaitingParent(ctx: AppContext, task: Task): void {
   resumePrompt +=
     'Set your result with a summary of the plan and what was accomplished, then finish.'
 
-  const target = transition(parent.status, parent.substatus, 'subtasks_completed')
+  const target = transition(parent.status, parent.substatus, 'tasks_completed')
   ctx.queries.updateTask(parent.id, {
     status: target.status,
     substatus: target.substatus,
     prompt: resumePrompt,
   })
-  ctx.queries.createTaskEvent(parent.id, 'subtasks_completed', null)
+  ctx.queries.createTaskEvent(parent.id, 'tasks_completed', null)
   serverLog.info(`All subtasks complete, parent re-queued`, parent.id)
 
   ctx.sseManager.broadcast('task:updated', ctx.queries.getTaskById(parent.id))

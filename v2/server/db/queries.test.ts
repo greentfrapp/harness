@@ -3,21 +3,21 @@ import type { HarnessConfig } from '../../shared/types'
 import { initTestDatabase } from './index'
 import {
   clearParentReferences,
-  createSubtaskProposals,
+  createTaskProposals,
   createTask,
   createTaskEvent,
   createTaskTransition,
   deleteTasksByIds,
   getAllProjects,
   getChildTasks,
-  getSubtaskProposals,
+  getTaskProposals,
   getTaskById,
   getTaskEvents,
   getTasksByStatus,
   getTaskTransitions,
   getTransitionChain,
   seedProjects,
-  updateSubtaskProposal,
+  updateTaskProposal,
   updateTask,
 } from './queries'
 
@@ -347,7 +347,7 @@ describe('DB Queries', () => {
     })
   })
 
-  describe('createSubtaskProposals', () => {
+  describe('createTaskProposals', () => {
     it('bulk inserts proposals with defaults', () => {
       const projectId = getAllProjects()[0].id
       const task = createTask({
@@ -356,7 +356,7 @@ describe('DB Queries', () => {
         prompt: 'parent task',
       })
 
-      const proposals = createSubtaskProposals(task.id, [
+      const proposals = createTaskProposals(task.id, [
         { title: 'Fix auth', prompt: 'Fix the auth bug' },
         { title: 'Add tests', prompt: 'Add unit tests', priority: 'P0' },
       ])
@@ -380,7 +380,7 @@ describe('DB Queries', () => {
         prompt: 'parent',
       })
 
-      const [proposal] = createSubtaskProposals(task.id, [
+      const [proposal] = createTaskProposals(task.id, [
         { title: 'Test', prompt: 'Do it' },
       ])
 
@@ -395,7 +395,7 @@ describe('DB Queries', () => {
     })
   })
 
-  describe('getSubtaskProposals', () => {
+  describe('getTaskProposals', () => {
     it('retrieves proposals by task ID', () => {
       const projectId = getAllProjects()[0].id
       const task = createTask({
@@ -403,22 +403,22 @@ describe('DB Queries', () => {
         type: 'do',
         prompt: 'parent',
       })
-      createSubtaskProposals(task.id, [
+      createTaskProposals(task.id, [
         { title: 'A', prompt: 'Do A' },
         { title: 'B', prompt: 'Do B' },
       ])
 
-      const results = getSubtaskProposals(task.id)
+      const results = getTaskProposals(task.id)
       expect(results).toHaveLength(2)
       expect(results.map((r) => r.title)).toEqual(['A', 'B'])
     })
 
     it('returns empty array for nonexistent task', () => {
-      expect(getSubtaskProposals('nonexistent-id')).toEqual([])
+      expect(getTaskProposals('nonexistent-id')).toEqual([])
     })
   })
 
-  describe('updateSubtaskProposal', () => {
+  describe('updateTaskProposal', () => {
     it('updates status, feedback, and spawned_task_id', () => {
       const projectId = getAllProjects()[0].id
       const task = createTask({
@@ -426,16 +426,16 @@ describe('DB Queries', () => {
         type: 'do',
         prompt: 'parent',
       })
-      const [proposal] = createSubtaskProposals(task.id, [
+      const [proposal] = createTaskProposals(task.id, [
         { title: 'Test', prompt: 'Do it' },
       ])
 
-      updateSubtaskProposal(proposal.id, {
+      updateTaskProposal(proposal.id, {
         status: 'dismissed',
         feedback: 'Not needed',
       })
 
-      const [updated] = getSubtaskProposals(task.id)
+      const [updated] = getTaskProposals(task.id)
       expect(updated.status).toBe('dismissed')
       expect(updated.feedback).toBe('Not needed')
     })
@@ -452,16 +452,16 @@ describe('DB Queries', () => {
         type: 'do',
         prompt: 'child',
       })
-      const [proposal] = createSubtaskProposals(parent.id, [
+      const [proposal] = createTaskProposals(parent.id, [
         { title: 'Test', prompt: 'Do it' },
       ])
 
-      updateSubtaskProposal(proposal.id, {
+      updateTaskProposal(proposal.id, {
         status: 'approved',
         spawned_task_id: child.id,
       })
 
-      const [updated] = getSubtaskProposals(parent.id)
+      const [updated] = getTaskProposals(parent.id)
       expect(updated.status).toBe('approved')
       expect(updated.spawned_task_id).toBe(child.id)
     })

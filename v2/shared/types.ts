@@ -15,19 +15,19 @@ export type TaskSubstatus =
   | 'response'
   | 'error'
   | 'permission'
-  | 'subtask_approval'
+  | 'task_proposal'
   | 'approved'
   | 'rejected'
   | null
 export type Priority = 'P0' | 'P1' | 'P2' | 'P3'
-export type SubtaskProposalStatus = 'pending' | 'approved' | 'dismissed'
+export type TaskProposalStatus = 'pending' | 'approved' | 'dismissed'
 
 // Valid substatus values for each status
 export const VALID_SUBSTATUSES: Record<TaskStatus, readonly TaskSubstatus[]> = {
   draft: [null],
   queued: [null],
   in_progress: ['running', 'retrying', 'waiting_on_subtasks'],
-  pending: ['review', 'response', 'error', 'permission', 'subtask_approval'],
+  pending: ['review', 'response', 'error', 'permission', 'task_proposal'],
   done: [null, 'approved', 'rejected'],
   cancelled: [null],
 }
@@ -117,10 +117,13 @@ export interface HarnessConfig {
   projects: ProjectConfig[]
 }
 
-export interface SubtaskProposalInput {
+export interface TaskProposalInput {
   title: string
   prompt: string
+  type?: string
   priority?: Priority
+  is_subtask?: boolean
+  inherit_session?: boolean
 }
 
 // Data model types
@@ -181,14 +184,17 @@ export interface TaskEvent {
   created_at: number
 }
 
-export interface SubtaskProposal {
+export interface TaskProposal {
   id: number
   task_id: string
   title: string
   prompt: string
+  type: string | null
   priority: Priority
+  is_subtask: boolean
+  inherit_session: boolean
   depends_on_title: string | null
-  status: SubtaskProposalStatus
+  status: TaskProposalStatus
   feedback: string | null
   spawned_task_id: string | null
   created_at: number

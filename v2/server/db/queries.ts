@@ -3,8 +3,8 @@ import type {
   CreateTaskInput,
   HarnessConfig,
   Project,
-  SubtaskProposal,
-  SubtaskProposalInput,
+  TaskProposal,
+  TaskProposalInput,
   Task,
   TaskEvent,
   TaskStatus,
@@ -15,7 +15,7 @@ import type {
 import { getDb } from './index'
 import {
   projects,
-  subtaskProposals,
+  taskProposals,
   taskEvents,
   taskTransitions,
   tasks,
@@ -269,8 +269,8 @@ function deleteTasksAndRelated(ids: string[]): void {
       ),
     )
     .run()
-  db.delete(subtaskProposals)
-    .where(inArray(subtaskProposals.task_id, ids))
+  db.delete(taskProposals)
+    .where(inArray(taskProposals.task_id, ids))
     .run()
   db.delete(taskEvents).where(inArray(taskEvents.task_id, ids)).run()
   db.delete(tasks).where(inArray(tasks.id, ids)).run()
@@ -289,44 +289,47 @@ export function deleteTasksByIds(ids: string[]): Task[] {
   return toDelete
 }
 
-// --- Subtask Proposals ---
+// --- Task Proposals ---
 
-export function createSubtaskProposals(
+export function createTaskProposals(
   taskId: string,
-  proposals: SubtaskProposalInput[],
-): SubtaskProposal[] {
+  proposals: TaskProposalInput[],
+): TaskProposal[] {
   const db = getDb()
   const now = Date.now()
-  const results: SubtaskProposal[] = []
+  const results: TaskProposal[] = []
 
   for (const p of proposals) {
     const row = db
-      .insert(subtaskProposals)
+      .insert(taskProposals)
       .values({
         task_id: taskId,
         title: p.title,
         prompt: p.prompt,
+        type: p.type ?? null,
         priority: p.priority ?? 'P2',
+        is_subtask: p.is_subtask ?? true,
+        inherit_session: p.inherit_session ?? false,
         status: 'pending',
         created_at: now,
       })
       .returning()
       .get()
-    results.push(row as SubtaskProposal)
+    results.push(row as TaskProposal)
   }
 
   return results
 }
 
-export function getSubtaskProposals(taskId: string): SubtaskProposal[] {
+export function getTaskProposals(taskId: string): TaskProposal[] {
   return getDb()
     .select()
-    .from(subtaskProposals)
-    .where(eq(subtaskProposals.task_id, taskId))
-    .all() as SubtaskProposal[]
+    .from(taskProposals)
+    .where(eq(taskProposals.task_id, taskId))
+    .all() as TaskProposal[]
 }
 
-export function updateSubtaskProposal(
+export function updateTaskProposal(
   id: number,
   updates: {
     status?: string
@@ -335,9 +338,9 @@ export function updateSubtaskProposal(
   },
 ): void {
   getDb()
-    .update(subtaskProposals)
+    .update(taskProposals)
     .set(updates)
-    .where(eq(subtaskProposals.id, id))
+    .where(eq(taskProposals.id, id))
     .run()
 }
 

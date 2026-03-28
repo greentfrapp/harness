@@ -65,8 +65,8 @@ switch (command) {
   case 'request-permission':
     await cmdRequestPermission(commandArgs)
     break
-  case 'request-transition':
-    await cmdRequestTransition(commandArgs)
+  case 'propose-transition-task':
+    await cmdProposeTransitionTask(commandArgs)
     break
   case 'propose-subtasks':
     await cmdProposeSubtasks(commandArgs)
@@ -139,30 +139,47 @@ async function cmdRequestPermission(cmdArgs) {
   process.exit(0)
 }
 
-async function cmdRequestTransition(cmdArgs) {
+async function cmdProposeTransitionTask(cmdArgs) {
   const taskId = requireTaskId(cmdArgs)
 
+  let targetType = null
+  let title = null
   const filtered = []
   for (let i = 0; i < cmdArgs.length; i++) {
     if (cmdArgs[i] === '--task-id') {
       i++
+    } else if (cmdArgs[i] === '--type' && cmdArgs[i + 1]) {
+      targetType = cmdArgs[++i]
+    } else if (cmdArgs[i] === '--title' && cmdArgs[i + 1]) {
+      title = cmdArgs[++i]
     } else {
       filtered.push(cmdArgs[i])
     }
   }
-  const targetType = filtered[0]
+  // Allow positional arg as type fallback
+  if (!targetType) targetType = filtered[0]
 
   if (!targetType?.trim()) {
     console.error('Error: Target type is required.')
-    console.error('Usage: harness request-transition <target-type>')
+    console.error(
+      'Usage: harness propose-transition-task --type <target-type> [--title <title>]',
+    )
     process.exit(1)
   }
 
-  await apiCall('POST', `/api/tasks/${taskId}/request-transition`, {
-    target_type: targetType,
+  const proposal = {
+    title: title || `Transition to ${targetType}`,
+    prompt: `Continue the work as a ${targetType} task.`,
+    type: targetType,
+    is_subtask: false,
+    inherit_session: true,
+  }
+
+  const data = await apiCall('POST', `/api/tasks/${taskId}/propose-tasks`, {
+    tasks: [proposal],
   })
   console.log(
-    `Transition to '${targetType}' requested. This agent will now be paused.`,
+    `Transition to '${targetType}' proposed. This agent will now be paused.`,
   )
   process.exit(0)
 }
@@ -211,10 +228,12 @@ async function cmdProposeSubtasks(cmdArgs) {
     }
   }
 
+  // Mark each as a subtask
+  const tasks = subtasks.map((s) => ({ ...s, is_subtask: true }))
   const data = await apiCall(
     'POST',
-    `/api/tasks/${taskId}/propose-subtasks`,
-    { subtasks },
+    `/api/tasks/${taskId}/propose-tasks`,
+    { tasks },
   )
   console.log(
     `Proposed ${data.proposal_count} subtask(s). This agent will now be paused.`,
@@ -269,8 +288,8 @@ function printHelp() {
 Commands:
   set-result <text>                  Set the task's result text
   request-permission <tool>          Request permission for a tool (pauses agent)
-  request-transition <target-type>   Request mode escalation (pauses agent)
   propose-subtasks --subtasks <json> Propose subtasks for parallel execution (pauses agent)
+  propose-transition-task --type <type> [--title <title>]  Propose mode transition (pauses agent)
   get-task <task-id>                 Read another task's data
   list-tasks [--status X] [--project Y]  Query tasks
 
