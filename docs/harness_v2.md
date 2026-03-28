@@ -91,7 +91,7 @@ Statuses: `draft`, `queued`, `in_progress`, `pending`, `done`, `cancelled`.
 
 Substatuses by status:
 - `in_progress` → `running`, `retrying`, `waiting_on_subtasks`
-- `pending` → `review`, `permission`, `subtask_approval`
+- `pending` → `review`, `response`, `error`, `permission`, `task_proposal`
 - `done` → (none), `approved`, `rejected`
 
 `done` with no substatus is for read-only tasks (`discuss`, `plan`) that complete without needing approve/reject review. `do` tasks always go through `pending:review` first and end as `done:approved` or `done:rejected`.
@@ -135,12 +135,15 @@ Environment variables injected into agent processes: `HARNESS_TASK_ID`, `HARNESS
 An agent can use the CLI to modify its own task:
 - Set the task result
 - Request permissions (task moves to `pending:permission`)
-- Append task artifacts
-- Request a type transition (e.g. discuss → plan), surfaced to user for approval
 
-#### Create Subtask
+#### Propose Tasks
 
-Propose sub-tasks for approval by the user. Proposals are stored separately and surfaced in the UI. The user can approve (spawns the task), dismiss (with feedback), or edit before approving.
+Both subtasks and mode transitions use the same unified proposal mechanism (`POST /tasks/:id/propose-tasks`). Each proposal can specify `title`, `prompt`, `type`, `priority`, `tags`, `parent_task_id`, `depends_on`, `references`, and `inherit_session`.
+
+- **Subtasks** (`propose-subtasks` CLI): `parent_task_id` defaults to the proposing task. The proposing task waits (`in_progress:waiting_on_subtasks`) until all children complete.
+- **Transitions** (`propose-transition-task` CLI): `parent_task_id` is null, `inherit_session` is true. The proposing task completes (`done:approved`) when approved.
+
+Proposals are stored in the `task_proposals` table and surfaced in the UI. The user can approve (spawns the task), dismiss (with feedback), or edit before approving. All proposals are resolved via a single `POST /tasks/:id/resolve-proposals` endpoint.
 
 #### Read Other Tasks
 
@@ -243,13 +246,14 @@ Implemented in `v2/cli/`. The CLI is the agent's interface to Harness, replacing
 
 - [x] **CLI framework** — `v2/cli/harness.mjs`. Self-contained Node.js script (no dependencies). Parses subcommands, reads `HARNESS_TASK_ID` and `HARNESS_API_URL` from env. Shared `apiCall()` helper for all HTTP requests. `--task-id` override for all commands.
 - [x] **`harness set-result`** — Set the task's result text. `PATCH /tasks/:id` with `result` field. Accepts positional args or `--text` flag.
-- [x] **`harness request-permission <tool>`** — New `POST /tasks/:id/request-permission` endpoint in `routes/tasks.ts`. Validates `in_progress:running`, transitions to `pending:permission`, stores tool in `agent_session_data.pending_tool`, kills agent via `pool.killAgent()`.
-- [x] **`harness request-transition <target_type>`** — New `POST /tasks/:id/request-transition` endpoint. Validates `in_progress:running`, validates target type exists in config, transitions to `pending:review`, kills agent. User approves via existing `approve-transition` endpoint.
-- [x] **`harness propose-subtasks`** — Ported from v1 `cli/harness.mjs`. Validates JSON array, posts to `POST /tasks/:id/propose-subtasks`.
+- [x] **`harness request-permission <tool>`** — `POST /tasks/:id/request-permission` endpoint. Validates `in_progress:running`, transitions to `pending:permission`, stores tool in `agent_session_data.pending_tool`, kills agent via `pool.killAgent()`.
+- [x] **`harness propose-subtasks`** — Posts to unified `POST /tasks/:id/propose-tasks`. Each proposal defaults `parent_task_id` to the proposing task (subtask behavior). Supports optional `type`, `priority`, `tags`, `depends_on`, `references` per proposal.
+- [x] **`harness propose-transition-task`** — Posts to unified `POST /tasks/:id/propose-tasks` with `parent_task_id: null` and `inherit_session: true`. Accepts `--type <target-type>` and optional `--title`. Both proposal commands are resolved via `POST /tasks/:id/resolve-proposals`.
 - [x] **`harness get-task <id>`** — Read another task's data. `GET /tasks/:id`. Prints JSON to stdout.
 - [x] **`harness list-tasks [--status] [--project]`** — Query tasks with optional filters. `GET /tasks` with query params. Prints JSON to stdout.
-- [x] **Agent prompt injection** — Updated `pool.ts` `harnessInstructions` to document all 6 CLI commands. Updated `HARNESS_CLI` env var path to `v2/cli/harness.mjs`.
-- [x] **Tests** — `v2/cli/harness.test.ts`: 25 tests covering all commands, arg parsing, error handling, `--task-id` override, and API error responses. Uses a mock HTTP server spawned in-process.
+- [x] **Unified proposal mechanism** — Subtasks and transitions share the same `task_proposals` table, `pending:task_proposal` substatus, and `resolve-proposals` endpoint. Per-proposal `parent_task_id` determines parent fate: if any approved proposals have a parent, the proposing task waits; otherwise it completes. Replaced separate `request-transition`/`approve-transition` endpoints.
+- [x] **Agent prompt injection** — Updated `pool.ts` `harnessInstructions` to document all CLI commands. Updated `HARNESS_CLI` env var path to `v2/cli/harness.mjs`.
+- [x] **Tests** — `v2/cli/harness.test.ts` (CLI arg parsing, mock HTTP server), `v2/server/routes/tasks.test.ts` (cancel/delete + propose-tasks + resolve-proposals with subtask, transition, mixed, and dismiss-all flows), `v2/server/db/queries.test.ts` (proposal relation fields, tags/references round-trip, parent_task_id defaulting).
 
 ### Phase 5: Frontend (Vue Client)
 
