@@ -453,7 +453,7 @@ describe('Task Routes — Proposals', () => {
       const task = makeTask({ status: 'in_progress', substatus: 'running' })
       ;(ctx.queries.getTaskById as any).mockReturnValue(task)
       ;(ctx.queries.createTaskProposals as any).mockReturnValue([
-        { id: 1, title: 'Sub 1', is_subtask: true, inherit_session: false },
+        { id: 1, title: 'Sub 1', parent_task_id: 'task-1', inherit_session: false },
       ])
 
       const res = await app.request('/tasks/task-1/propose-tasks', {
@@ -540,7 +540,7 @@ describe('Task Routes — Proposals', () => {
           title: 'Dismissed task',
           status: 'dismissed',
           feedback: 'Not needed',
-          is_subtask: true,
+          parent_task_id: 'task-1',
         },
       ])
 
@@ -583,7 +583,10 @@ describe('Task Routes — Proposals', () => {
           prompt: 'Do A',
           type: null,
           priority: 'P2',
-          is_subtask: true,
+          tags: [],
+          parent_task_id: 'task-1',
+          depends_on: null,
+          references: [],
           inherit_session: false,
         },
       ])
@@ -626,7 +629,10 @@ describe('Task Routes — Proposals', () => {
           prompt: 'Plan the work',
           type: 'plan',
           priority: 'P2',
-          is_subtask: false,
+          tags: [],
+          parent_task_id: null,
+          depends_on: null,
+          references: [],
           inherit_session: true,
         },
       ])
@@ -681,7 +687,10 @@ describe('Task Routes — Proposals', () => {
           prompt: 'Do it',
           type: null,
           priority: 'P2',
-          is_subtask: true,
+          tags: [],
+          parent_task_id: 'task-1',
+          depends_on: null,
+          references: [],
           inherit_session: false,
         },
         {
@@ -690,7 +699,10 @@ describe('Task Routes — Proposals', () => {
           prompt: 'Continue',
           type: 'plan',
           priority: 'P2',
-          is_subtask: false,
+          tags: [],
+          parent_task_id: null,
+          depends_on: null,
+          references: [],
           inherit_session: true,
         },
       ])
@@ -711,6 +723,45 @@ describe('Task Routes — Proposals', () => {
         'tasks_approved',
         null,
       )
+    })
+
+    it('passes tags, depends_on, and references through to created task', async () => {
+      const task = makeTask({
+        status: 'pending',
+        substatus: 'task_proposal',
+      })
+      ;(ctx.queries.getTaskById as any).mockReturnValue(task)
+      ;(ctx.queries.getTaskProposals as any).mockReturnValue([
+        {
+          id: 1,
+          title: 'Tagged subtask',
+          prompt: 'Do it',
+          type: null,
+          priority: 'P1',
+          tags: ['bug', 'urgent'],
+          parent_task_id: 'task-1',
+          depends_on: 'dep-task-1',
+          references: ['ref-1', 'ref-2'],
+          inherit_session: false,
+        },
+      ])
+
+      const res = await app.request('/tasks/task-1/resolve-proposals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          approved: [{ id: 1 }],
+          dismissed: [],
+        }),
+      })
+      expect(res.status).toBe(200)
+
+      const createCall = (ctx.queries.createTask as any).mock.calls[0][0]
+      expect(createCall.tags).toEqual(['bug', 'urgent'])
+      expect(createCall.depends_on).toBe('dep-task-1')
+      expect(createCall.references).toEqual(['ref-1', 'ref-2'])
+      expect(createCall.parent_task_id).toBe('task-1')
+      expect(createCall.priority).toBe('P1')
     })
   })
 })

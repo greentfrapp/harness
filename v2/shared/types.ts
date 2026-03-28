@@ -122,7 +122,10 @@ export interface TaskProposalInput {
   prompt: string
   type?: string
   priority?: Priority
-  is_subtask?: boolean
+  tags?: string[]
+  parent_task_id?: string | null
+  depends_on?: string | null
+  references?: string[]
   inherit_session?: boolean
 }
 
@@ -191,7 +194,10 @@ export interface TaskProposal {
   prompt: string
   type: string | null
   priority: Priority
-  is_subtask: boolean
+  tags: string[]
+  parent_task_id: string | null
+  depends_on: string | null
+  references: string[]
   inherit_session: boolean
   depends_on_title: string | null
   status: TaskProposalStatus

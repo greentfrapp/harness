@@ -512,6 +512,7 @@ You are running as an agent inside Harness, a task queue system. You have access
 
 **Propose subtasks for parallel execution (pauses agent until reviewed):**
   $HARNESS_CLI propose-subtasks --subtasks '[{"title":"Short title","prompt":"Detailed instructions"}]'
+  Optional fields per subtask: "type", "priority", "tags", "depends_on", "references"
 
 **Propose a mode transition, e.g. discuss → plan (pauses agent until approved):**
   $HARNESS_CLI propose-transition-task --type <target-type> --title "Title for the new task"

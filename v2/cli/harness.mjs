@@ -171,7 +171,7 @@ async function cmdProposeTransitionTask(cmdArgs) {
     title: title || `Transition to ${targetType}`,
     prompt: `Continue the work as a ${targetType} task.`,
     type: targetType,
-    is_subtask: false,
+    parent_task_id: null,
     inherit_session: true,
   }
 
@@ -228,12 +228,11 @@ async function cmdProposeSubtasks(cmdArgs) {
     }
   }
 
-  // Mark each as a subtask
-  const tasks = subtasks.map((s) => ({ ...s, is_subtask: true }))
+  // Server defaults parent_task_id to proposing task (subtask behavior)
   const data = await apiCall(
     'POST',
     `/api/tasks/${taskId}/propose-tasks`,
-    { tasks },
+    { tasks: subtasks },
   )
   console.log(
     `Proposed ${data.proposal_count} subtask(s). This agent will now be paused.`,

@@ -300,6 +300,9 @@ export function createTaskProposals(
   const results: TaskProposal[] = []
 
   for (const p of proposals) {
+    // Default parent_task_id to proposing task (subtask behavior)
+    // Pass null explicitly to opt out (transition behavior)
+    const parentId = p.parent_task_id === undefined ? taskId : (p.parent_task_id ?? null)
     const row = db
       .insert(taskProposals)
       .values({
@@ -308,17 +311,31 @@ export function createTaskProposals(
         prompt: p.prompt,
         type: p.type ?? null,
         priority: p.priority ?? 'P2',
-        is_subtask: p.is_subtask ?? true,
+        tags: JSON.stringify(p.tags ?? []),
+        parent_task_id: parentId,
+        depends_on: p.depends_on ?? null,
+        references: JSON.stringify(p.references ?? []),
         inherit_session: p.inherit_session ?? false,
         status: 'pending',
         created_at: now,
       })
       .returning()
       .get()
-    results.push(row as TaskProposal)
+    results.push(deserializeProposal(row as Record<string, unknown>))
   }
 
   return results
+}
+
+/** Parse JSON columns (tags, references) on a proposal row. */
+function deserializeProposal(row: Record<string, unknown>): TaskProposal {
+  const tagsVal = row.tags
+  const refsVal = row.references
+  return {
+    ...row,
+    tags: typeof tagsVal === 'string' ? JSON.parse(tagsVal) : ((tagsVal as string[]) ?? []),
+    references: typeof refsVal === 'string' ? JSON.parse(refsVal) : ((refsVal as string[]) ?? []),
+  } as TaskProposal
 }
 
 export function getTaskProposals(taskId: string): TaskProposal[] {
@@ -326,7 +343,8 @@ export function getTaskProposals(taskId: string): TaskProposal[] {
     .select()
     .from(taskProposals)
     .where(eq(taskProposals.task_id, taskId))
-    .all() as TaskProposal[]
+    .all()
+    .map((row) => deserializeProposal(row as Record<string, unknown>))
 }
 
 export function updateTaskProposal(

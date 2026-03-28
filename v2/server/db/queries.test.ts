@@ -389,9 +389,108 @@ describe('DB Queries', () => {
       expect(proposal).toHaveProperty('title')
       expect(proposal).toHaveProperty('prompt')
       expect(proposal).toHaveProperty('priority')
+      expect(proposal).toHaveProperty('tags')
+      expect(proposal).toHaveProperty('parent_task_id')
+      expect(proposal).toHaveProperty('depends_on')
+      expect(proposal).toHaveProperty('references')
+      expect(proposal).toHaveProperty('inherit_session')
       expect(proposal).toHaveProperty('status')
       expect(proposal).toHaveProperty('created_at')
       expect(proposal.spawned_task_id).toBeNull()
+    })
+
+    it('defaults parent_task_id to proposing task ID', () => {
+      const projectId = getAllProjects()[0].id
+      const task = createTask({
+        project_id: projectId,
+        type: 'do',
+        prompt: 'parent',
+      })
+
+      const [proposal] = createTaskProposals(task.id, [
+        { title: 'Sub', prompt: 'Do sub' },
+      ])
+
+      expect(proposal.parent_task_id).toBe(task.id)
+    })
+
+    it('allows explicit null parent_task_id for transitions', () => {
+      const projectId = getAllProjects()[0].id
+      const task = createTask({
+        project_id: projectId,
+        type: 'discuss',
+        prompt: 'discuss',
+      })
+
+      const [proposal] = createTaskProposals(task.id, [
+        { title: 'Plan', prompt: 'Plan it', type: 'plan', parent_task_id: null, inherit_session: true },
+      ])
+
+      expect(proposal.parent_task_id).toBeNull()
+      expect(proposal.type).toBe('plan')
+      expect(proposal.inherit_session).toBe(true)
+    })
+
+    it('stores and retrieves tags and references', () => {
+      const projectId = getAllProjects()[0].id
+      const task = createTask({
+        project_id: projectId,
+        type: 'do',
+        prompt: 'parent',
+      })
+
+      const [proposal] = createTaskProposals(task.id, [
+        {
+          title: 'Tagged',
+          prompt: 'Do tagged work',
+          tags: ['bug', 'urgent'],
+          references: ['ref-task-1', 'ref-task-2'],
+        },
+      ])
+
+      expect(proposal.tags).toEqual(['bug', 'urgent'])
+      expect(proposal.references).toEqual(['ref-task-1', 'ref-task-2'])
+
+      // Verify round-trip through getTaskProposals
+      const [fetched] = getTaskProposals(task.id)
+      expect(fetched.tags).toEqual(['bug', 'urgent'])
+      expect(fetched.references).toEqual(['ref-task-1', 'ref-task-2'])
+    })
+
+    it('defaults tags and references to empty arrays', () => {
+      const projectId = getAllProjects()[0].id
+      const task = createTask({
+        project_id: projectId,
+        type: 'do',
+        prompt: 'parent',
+      })
+
+      const [proposal] = createTaskProposals(task.id, [
+        { title: 'Plain', prompt: 'Do it' },
+      ])
+
+      expect(proposal.tags).toEqual([])
+      expect(proposal.references).toEqual([])
+    })
+
+    it('stores depends_on', () => {
+      const projectId = getAllProjects()[0].id
+      const task = createTask({
+        project_id: projectId,
+        type: 'do',
+        prompt: 'parent',
+      })
+      const dep = createTask({
+        project_id: projectId,
+        type: 'do',
+        prompt: 'dependency',
+      })
+
+      const [proposal] = createTaskProposals(task.id, [
+        { title: 'Blocked', prompt: 'After dep', depends_on: dep.id },
+      ])
+
+      expect(proposal.depends_on).toBe(dep.id)
     })
   })
 

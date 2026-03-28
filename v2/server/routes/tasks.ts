@@ -775,9 +775,9 @@ export function createTaskRoutes(ctx: AppContext) {
     }
 
     const proposals = queries.createTaskProposals(id, body.tasks)
-    const hasSubtasks = proposals.some((p) => p.is_subtask)
+    const hasChildTasks = proposals.some((p) => p.parent_task_id != null)
 
-    if (hasSubtasks && config.auto_approve_subtasks) {
+    if (hasChildTasks && config.auto_approve_subtasks) {
       const autoTarget = guardTransition(
         c,
         task.status,
@@ -800,7 +800,10 @@ export function createTaskRoutes(ctx: AppContext) {
           title: proposal.title,
           prompt: proposal.prompt,
           priority: proposal.priority as Priority,
-          parent_task_id: proposal.is_subtask ? id : undefined,
+          tags: proposal.tags.length > 0 ? proposal.tags : undefined,
+          parent_task_id: proposal.parent_task_id ?? undefined,
+          depends_on: proposal.depends_on ?? undefined,
+          references: proposal.references.length > 0 ? proposal.references : undefined,
         })
         if (proposal.inherit_session) {
           const parentSession = getSessionData(task)
@@ -814,7 +817,7 @@ export function createTaskRoutes(ctx: AppContext) {
             })
           }
         }
-        if (!proposal.is_subtask) {
+        if (!proposal.parent_task_id) {
           queries.createTaskTransition(id, newTask.id, `${task.type}_to_${taskType}`)
         }
         queries.updateTaskProposal(proposal.id, {
@@ -950,13 +953,13 @@ export function createTaskRoutes(ctx: AppContext) {
       ensurePlanFeatureBranch(ctx, task)
     }
 
-    let hasApprovedSubtasks = false
+    let hasApprovedChildTasks = false
     for (const a of approvedItems) {
       const proposals = queries.getTaskProposals(id)
       const proposal = proposals.find((p) => p.id === a.id)
       if (!proposal) continue
 
-      if (proposal.is_subtask) hasApprovedSubtasks = true
+      if (proposal.parent_task_id != null) hasApprovedChildTasks = true
 
       const taskType = proposal.type ?? task.type
       const newTask = queries.createTask({
@@ -965,7 +968,10 @@ export function createTaskRoutes(ctx: AppContext) {
         title: proposal.title,
         prompt: a.prompt ?? proposal.prompt,
         priority: a.priority ?? (proposal.priority as Priority),
-        parent_task_id: proposal.is_subtask ? id : undefined,
+        tags: proposal.tags.length > 0 ? proposal.tags : undefined,
+        parent_task_id: proposal.parent_task_id ?? undefined,
+        depends_on: proposal.depends_on ?? undefined,
+        references: proposal.references.length > 0 ? proposal.references : undefined,
       })
 
       // Copy session if requested
@@ -982,8 +988,8 @@ export function createTaskRoutes(ctx: AppContext) {
         }
       }
 
-      // Record transition for non-subtask proposals
-      if (!proposal.is_subtask) {
+      // Record transition for non-child proposals
+      if (!proposal.parent_task_id) {
         queries.createTaskTransition(id, newTask.id, `${task.type}_to_${taskType}`)
       }
 
@@ -1032,7 +1038,7 @@ export function createTaskRoutes(ctx: AppContext) {
       const updated = queries.getTaskById(id)
       sseManager.broadcast('task:updated', updated)
       dispatcher.tryDispatch()
-    } else if (hasApprovedSubtasks) {
+    } else if (hasApprovedChildTasks) {
       // Has subtasks — parent waits
       const approveTarget = transition(
         task.status,
