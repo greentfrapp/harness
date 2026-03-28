@@ -9,7 +9,7 @@ import type {
   UpdateTaskInput,
 } from '../../shared/types'
 import { getErrorMessage, isRunning, isTerminal } from '../../shared/types'
-import { findAction, transition } from '../../shared/transitions'
+import { canTransition, findAction, transition } from '../../shared/transitions'
 import type { AppContext } from '../context'
 import * as git from '../git'
 import { serverLog } from '../log'
@@ -659,118 +659,154 @@ export function createTaskRoutes(ctx: AppContext) {
 
   // --- Delete / Cancel ---
 
-  /** Cancel or permanently delete a task. */
-  app.delete('/tasks/:id', (c) => {
-    const id = c.req.param('id')
-    const result = getTaskOr404(queries, c, id)
-    if (result instanceof Response) return result
-    const existing = result
+  // --- Cancel / Delete helpers ---
 
-    const forcePermanent = c.req.query('permanent') === 'true'
-    const isDraft = existing.status === 'draft'
-    const terminal = isTerminal(existing.status, existing.substatus)
-
-    if (terminal || isDraft || forcePermanent) {
-      pool.killAgent(id)
-      pool.killChatAgent(id)
-
-      const project = queries.getProjectById(existing.project_id)
-      if (project) cleanupWorktreeAndBranch(project, existing)
-
-      queries.deleteTasksByIds([id])
-      deleteSessionMessages(id)
-      serverLog.info(`Task permanently deleted`, id)
-      sseManager.broadcast('task:removed', { id })
-
-      if (!terminal) {
-        dispatcher.tryDispatch()
-      }
-
-      return c.json({ deleted: id })
+  /** Cancel a single task. Returns the updated task, or null if not cancellable. */
+  function cancelSingleTask(task: Task): Task | null {
+    if (!canTransition(task.status, task.substatus, 'cancel')) {
+      return null
     }
+    const target = transition(task.status, task.substatus, 'cancel')
 
-    const target = guardTransition(
-      c,
-      existing.status,
-      existing.substatus,
-      'cancel',
-    )
-    if (target instanceof Response) return target
+    pool.killAgent(task.id)
+    pool.killChatAgent(task.id)
 
-    pool.killAgent(id)
-    pool.killChatAgent(id)
+    const project = queries.getProjectById(task.project_id)
+    if (project) removeWorktree(project, task)
 
-    const cancelProject = queries.getProjectById(existing.project_id)
-    if (cancelProject) removeWorktree(cancelProject, existing)
+    queries.clearParentReferences(task.id)
 
-    queries.clearParentReferences(id)
-
-    const updated = queries.updateTask(id, {
+    const updated = queries.updateTask(task.id, {
       status: target.status,
       substatus: target.substatus,
       worktree_path: null,
       completed_at: Date.now(),
     })
-    queries.createTaskEvent(id, 'cancelled', null)
+    queries.createTaskEvent(task.id, 'cancelled', null)
     sseManager.broadcast('task:updated', updated)
 
-    // Check if this was a subtask and its parent plan is waiting
-    checkWaitingParent(ctx, existing)
+    checkWaitingParent(ctx, task)
 
+    return updated
+  }
+
+  /** Permanently delete a single task. Removes DB record, worktree, and branch. */
+  function deleteSingleTask(task: Task): void {
+    pool.killAgent(task.id)
+    pool.killChatAgent(task.id)
+
+    const project = queries.getProjectById(task.project_id)
+    if (project) cleanupWorktreeAndBranch(project, task)
+
+    queries.deleteTasksByIds([task.id])
+    deleteSessionMessages(task.id)
+    sseManager.broadcast('task:removed', { id: task.id })
+  }
+
+  /** Resolve a list of task IDs or a status query param to tasks. */
+  async function resolveTaskList(c: any): Promise<Task[] | Response> {
+    const statusParam = c.req.query('status')
+    if (statusParam) {
+      const statuses = statusParam.split(',').filter(Boolean) as TaskStatus[]
+      return queries.getTasksByStatus(statuses)
+    }
+    const body = await c.req.json<{ ids?: string[] }>().catch(() => ({}))
+    const ids = (body as { ids?: string[] }).ids
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return c.json(
+        { error: 'ids array or status query parameter is required' },
+        400,
+      )
+    }
+    return ids
+      .map((id) => queries.getTaskById(id))
+      .filter((t): t is NonNullable<typeof t> => t != null)
+  }
+
+  // --- Cancel endpoints ---
+
+  /** Bulk cancel tasks by IDs. Skips non-cancellable tasks. */
+  app.post('/tasks/cancel', async (c) => {
+    const body = await c.req.json<{ ids?: string[] }>().catch(() => ({}))
+    const ids = (body as { ids?: string[] }).ids
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return c.json({ error: 'ids array is required' }, 400)
+    }
+
+    const cancelled: string[] = []
+    const skipped: string[] = []
+    for (const id of ids) {
+      const task = queries.getTaskById(id)
+      if (!task) continue
+      const updated = cancelSingleTask(task)
+      if (updated) {
+        cancelled.push(id)
+      } else {
+        skipped.push(id)
+      }
+    }
+
+    if (cancelled.length > 0) {
+      dispatcher.tryDispatch()
+    }
+
+    return c.json({ cancelled, skipped })
+  })
+
+  /** Cancel a single task. */
+  app.post('/tasks/:id/cancel', (c) => {
+    const id = c.req.param('id')
+    const result = getTaskOr404(queries, c, id)
+    if (result instanceof Response) return result
+    const task = result
+
+    const target = guardTransition(c, task.status, task.substatus, 'cancel')
+    if (target instanceof Response) return target
+
+    const updated = cancelSingleTask(task)!
     dispatcher.tryDispatch()
-
     return c.json(updated)
   })
 
-  /** Bulk delete: permanently remove tasks by IDs or by status. */
-  app.delete('/tasks', async (c) => {
-    const statusParam = c.req.query('status')
+  // --- Delete endpoints ---
 
-    let tasksToDelete: Task[]
-    if (statusParam) {
-      const statuses = statusParam.split(',').filter(Boolean) as TaskStatus[]
-      tasksToDelete = queries.getTasksByStatus(statuses)
-    } else {
-      const body = await c.req.json<{ ids?: string[] }>().catch(() => ({}))
-      const ids = (body as { ids?: string[] }).ids
-      if (!Array.isArray(ids) || ids.length === 0) {
-        return c.json(
-          { error: 'ids array or status query parameter is required' },
-          400,
-        )
-      }
-      tasksToDelete = ids
-        .map((id) => queries.getTaskById(id))
-        .filter((t): t is NonNullable<typeof t> => t != null)
+  /** Permanently delete a single task. */
+  app.delete('/tasks/:id', (c) => {
+    const id = c.req.param('id')
+    const result = getTaskOr404(queries, c, id)
+    if (result instanceof Response) return result
+
+    deleteSingleTask(result)
+    serverLog.info(`Task permanently deleted`, id)
+
+    if (isRunning(result.status, result.substatus)) {
+      dispatcher.tryDispatch()
     }
 
-    if (tasksToDelete.length === 0) {
+    return c.json({ deleted: id })
+  })
+
+  /** Bulk delete tasks by IDs or by status. */
+  app.delete('/tasks', async (c) => {
+    const tasks = await resolveTaskList(c)
+    if (tasks instanceof Response) return tasks
+
+    if (tasks.length === 0) {
       return c.json({ deleted: [] })
     }
 
     let hadRunning = false
-    for (const task of tasksToDelete) {
-      if (isRunning(task.status, task.substatus)) {
-        pool.killAgent(task.id)
-        hadRunning = true
-      }
-      const project = queries.getProjectById(task.project_id)
-      if (project) cleanupWorktreeAndBranch(project, task)
-    }
-
-    const deleted = queries.deleteTasksByIds(tasksToDelete.map((t) => t.id))
-    const ids = deleted.map((t) => t.id)
-
-    for (const deletedId of ids) {
-      deleteSessionMessages(deletedId)
-      sseManager.broadcast('task:removed', { id: deletedId })
+    for (const task of tasks) {
+      if (isRunning(task.status, task.substatus)) hadRunning = true
+      deleteSingleTask(task)
     }
 
     if (hadRunning) {
       dispatcher.tryDispatch()
     }
 
-    return c.json({ deleted: ids })
+    serverLog.info(`Bulk deleted ${tasks.length} task(s)`)
+    return c.json({ deleted: tasks.map((t) => t.id) })
   })
 
   // --- Subtask Proposals ---
