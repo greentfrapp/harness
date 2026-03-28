@@ -72,7 +72,6 @@ export const taskProposals = sqliteTable('task_proposals', {
   depends_on: text('depends_on'),
   references: text('references').notNull().default('[]'),
   inherit_session: integer('inherit_session', { mode: 'boolean' }).notNull().default(false),
-  depends_on_title: text('depends_on_title'),
   status: text('status').notNull().default('pending'),
   feedback: text('feedback'),
   spawned_task_id: text('spawned_task_id').references(() => tasks.id),

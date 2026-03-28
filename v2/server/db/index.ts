@@ -69,7 +69,6 @@ const CREATE_TABLES_SQL = `
     depends_on TEXT,
     "references" TEXT NOT NULL DEFAULT '[]',
     inherit_session INTEGER NOT NULL DEFAULT 0,
-    depends_on_title TEXT,
     status TEXT NOT NULL DEFAULT 'pending',
     feedback TEXT,
     spawned_task_id TEXT REFERENCES tasks(id),

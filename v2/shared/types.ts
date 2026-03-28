@@ -110,7 +110,7 @@ export interface ProjectConfig {
 export interface HarnessConfig {
   worktree_limit: number
   conversation_limit: number
-  auto_approve_subtasks?: boolean
+  auto_approve_tasks?: boolean
   agents?: Record<string, AgentConfig>
   task_types: Record<string, TaskTypeConfig>
   tags: Record<string, TagConfig>
@@ -199,7 +199,6 @@ export interface TaskProposal {
   depends_on: string | null
   references: string[]
   inherit_session: boolean
-  depends_on_title: string | null
   status: TaskProposalStatus
   feedback: string | null
   spawned_task_id: string | null

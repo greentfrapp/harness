@@ -777,7 +777,7 @@ export function createTaskRoutes(ctx: AppContext) {
     const proposals = queries.createTaskProposals(id, body.tasks)
     const hasChildTasks = proposals.some((p) => p.parent_task_id != null)
 
-    if (hasChildTasks && config.auto_approve_subtasks) {
+    if (hasChildTasks && config.auto_approve_tasks) {
       const autoTarget = guardTransition(
         c,
         task.status,

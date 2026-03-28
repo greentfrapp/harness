@@ -58,7 +58,7 @@ Task:
 const DEFAULT_CONFIG: HarnessConfig = {
   worktree_limit: 3,
   conversation_limit: 5,
-  auto_approve_subtasks: false,
+  auto_approve_tasks: false,
   task_types: {
     do: {
       prompt_template: DEFAULT_DO_PROMPT,
@@ -147,8 +147,8 @@ export function loadConfig(): HarnessConfig {
     worktree_limit: parsed.worktree_limit ?? DEFAULT_CONFIG.worktree_limit,
     conversation_limit:
       parsed.conversation_limit ?? DEFAULT_CONFIG.conversation_limit,
-    auto_approve_subtasks:
-      parsed.auto_approve_subtasks ?? DEFAULT_CONFIG.auto_approve_subtasks,
+    auto_approve_tasks:
+      parsed.auto_approve_tasks ?? DEFAULT_CONFIG.auto_approve_tasks,
     agents: parsed.agents ?? undefined,
     task_types: {
       ...DEFAULT_CONFIG.task_types,
@@ -198,8 +198,8 @@ export function saveConfigRaw(
     worktree_limit: parsed.worktree_limit ?? DEFAULT_CONFIG.worktree_limit,
     conversation_limit:
       parsed.conversation_limit ?? DEFAULT_CONFIG.conversation_limit,
-    auto_approve_subtasks:
-      parsed.auto_approve_subtasks ?? DEFAULT_CONFIG.auto_approve_subtasks,
+    auto_approve_tasks:
+      parsed.auto_approve_tasks ?? DEFAULT_CONFIG.auto_approve_tasks,
     agents: parsed.agents ?? undefined,
     task_types: {
       ...DEFAULT_CONFIG.task_types,
