@@ -518,8 +518,9 @@ export function createTaskRoutes(ctx: AppContext) {
     const result = getTaskOr404(queries, c, id)
     if (result instanceof Response) return result
     const task = result
-    const FOLLOW_UP_STATUSES: TaskStatus[] = ['pending', 'done']
-    if (!FOLLOW_UP_STATUSES.includes(task.status)) {
+    // Follow-up doesn't transition the source task — it creates a new one.
+    // Not modeled as a transition action; just guard on status.
+    if (task.status !== 'pending' && task.status !== 'done') {
       return c.json(
         { error: `Cannot follow up on task in status '${task.status}'` },
         400,
