@@ -255,23 +255,23 @@ Implemented in `v2/cli/`. The CLI is the agent's interface to Harness, replacing
 - [x] **Agent prompt injection** — Updated `pool.ts` `harnessInstructions` to document all CLI commands. Updated `HARNESS_CLI` env var path to `v2/cli/harness.mjs`.
 - [x] **Tests** — `v2/cli/harness.test.ts` (CLI arg parsing, mock HTTP server), `v2/server/routes/tasks.test.ts` (cancel/delete + propose-tasks + resolve-proposals with subtask, transition, mixed, and dismiss-all flows), `v2/server/db/queries.test.ts` (proposal relation fields, tags/references round-trip, parent_task_id defaulting).
 
-### Phase 5: Frontend (Vue Client)
+### Phase 5: Frontend (Vue Client) ✓
 
-The client renders the new model. Depends on shared types and working routes.
+Implemented in `v2/client/`. The client is a port of v1, adapted for the v2 status+substatus model.
 
-- [ ] **Pinia stores** — Update `useTasks.ts` to handle status+substatus. Update `useEvents.ts` SSE handler for new event shapes. Update `useViews.ts` for substatus-aware filtering. Update `useCheckouts.ts` if checkout status references changed.
-- [ ] **TaskCard** — Show substatus as a secondary badge. Update status color mapping for the reduced set.
-- [ ] **TaskDetail** — Update the detail panel:
-  - Show `result` field instead of separate `agent_summary`/`diff_summary`
-  - Show task relations (parent chain, subtasks, references)
-  - Add mode-escalation approval UI (approve/reject transition request)
-  - Update action buttons for new lifecycle routes (fix, revise, approve, reject map to new statuses)
-- [ ] **SessionStream** — No major changes expected; stream format is adapter-level.
-- [ ] **NewTaskModal** — Ensure task type selector works with v2 types. Remove any UI for fields that no longer exist.
-- [ ] **DiffViewer** — Source diff from `result` or the task's branch rather than `diff_full` field.
-- [ ] **ViewEditor / ViewPanel** — Update filter UI for status+substatus model.
-- [ ] **Default views** — Update outbox/inbox default view definitions to match new status groups.
-- [ ] **Chat UI** — Should work with `done` status tasks. Minor wiring updates.
+- [x] **Shared type prep** — Moved `ViewFilter`/`ViewConfig` to `v2/shared/types.ts`. Added `getTaskContext()` helper. Fixed `CheckoutInfo.taskPrompt` → `taskTitle`. Updated `v2/server/views.ts` to re-export from shared.
+- [x] **api.ts** — Cancel is now `POST /tasks/:id/cancel`. Delete drops `?permanent=true`. Removed `retry`/`approvePlan`. Added `dismiss`, `transitions`, `bulkCancel`. `TaskProposal` replaces `SubtaskProposal`.
+- [x] **Pinia stores** — `useTasks.ts` rewritten: 6-status `ALL_STATUSES`, `sortKey(task)` function using (status, substatus) pairs, substatus-aware `pendingCount`/`hasPermissionRequests`, `tasksForView` supports `substatuses` filter. Other stores copied with import path updates.
+- [x] **TaskCard** — `getStatusConfig(task)` function keyed on (status, substatus) pairs with colors and pulse. All status checks (`needsInput`, `isError`, `isPermission`, `isSubtasksProposed`) use v2 pairs. Removed retry button. Added dismiss button for `pending:response`. Permission tooltip reads from `agent_session_data.pending_tool`.
+- [x] **TaskDetail** — `result` field replaces `agent_summary`/`error_message`/`diff_summary`. All status checks use `isRunning()`/`isTerminal()` from shared + local computed flags (`isPendingReview`, `isPendingError`, `isPendingResponse`, `isRevisable`). Removed `handleRetry`/`handleApprovePlan`. Added `handleDismiss` for `pending:response`. `TaskProposal` type. `canChat` checks `['draft', 'pending', 'done']`.
+- [x] **SessionStream** — Copied unchanged (imports `@shared/streamFilters` which exists in v2).
+- [x] **NewTaskModal** — Copied with minor type fix (`tag.description ?? ''`).
+- [x] **DiffViewer** — Copied unchanged (uses `/diff` endpoint, same in v2).
+- [x] **ViewEditor** — `ALL_STATUSES` updated to 6 v2 statuses. Added substatus checkbox section with all 10 non-null substatuses. `handleSave` includes `substatuses` in filter.
+- [x] **ViewPanel** — Draft detection uses `t.status === 'draft'` (no `DRAFT_STATUSES` import). `pendingCount` uses v2 pairs. Removed `retry` emit from TaskModal/TaskCard wiring.
+- [x] **TaskModal** — `getStatusDisplay(status, substatus)` function for header label/color.
+- [x] **App.vue** — `co.taskTitle` instead of `co.taskPrompt` in checkout banner.
+- [x] **Build config** — `vite.config.ts` and `tsconfig.json` with `@shared` alias pointing to `../shared`. `vue-tsc --noEmit` and `vite build` pass clean.
 - [ ] **Tests** — Port `useTasks.test.ts`, `useCheckouts.test.ts`, `useLog.test.ts`, `taskArrayUtils.test.ts`, `useTaskSelection.test.ts`.
 
 ### Phase 6: Integration & Cleanup
