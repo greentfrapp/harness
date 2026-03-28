@@ -510,6 +510,45 @@ describe('Task Routes — Proposals', () => {
       })
       expect(res.status).toBe(400)
     })
+
+    it('returns 400 for nonexistent parent_task_id', async () => {
+      const task = makeTask({ status: 'in_progress', substatus: 'running' })
+      ;(ctx.queries.getTaskById as any).mockImplementation((id: string) => {
+        if (id === 'task-1') return task
+        return undefined // nonexistent
+      })
+
+      const res = await app.request('/tasks/task-1/propose-tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tasks: [{ title: 'Sub', prompt: 'Do it', parent_task_id: 'nonexistent' }],
+        }),
+      })
+      expect(res.status).toBe(400)
+      const body = await res.json()
+      expect(body.error).toContain('parent_task_id')
+      expect(body.error).toContain('nonexistent')
+    })
+
+    it('returns 400 for nonexistent depends_on', async () => {
+      const task = makeTask({ status: 'in_progress', substatus: 'running' })
+      ;(ctx.queries.getTaskById as any).mockImplementation((id: string) => {
+        if (id === 'task-1') return task
+        return undefined
+      })
+
+      const res = await app.request('/tasks/task-1/propose-tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tasks: [{ title: 'Dep', prompt: 'After', depends_on: 'nonexistent' }],
+        }),
+      })
+      expect(res.status).toBe(400)
+      const body = await res.json()
+      expect(body.error).toContain('depends_on')
+    })
   })
 
   // --- POST /tasks/:id/resolve-proposals ---

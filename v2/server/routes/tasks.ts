@@ -801,6 +801,18 @@ export function createTaskRoutes(ctx: AppContext) {
           400,
         )
       }
+      if (s.parent_task_id && !queries.getTaskById(s.parent_task_id)) {
+        return c.json(
+          { error: `parent_task_id '${s.parent_task_id}' does not exist` },
+          400,
+        )
+      }
+      if (s.depends_on && !queries.getTaskById(s.depends_on)) {
+        return c.json(
+          { error: `depends_on '${s.depends_on}' does not exist` },
+          400,
+        )
+      }
     }
 
     const proposals = queries.createTaskProposals(id, body.tasks)
