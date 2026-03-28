@@ -1,15 +1,15 @@
 import { Hono } from 'hono'
+import { canTransition, findAction, transition } from '../../shared/transitions'
 import type {
   CreateTaskInput,
   Priority,
   Project,
-  TaskProposalInput,
   Task,
+  TaskProposalInput,
   TaskStatus,
   UpdateTaskInput,
 } from '../../shared/types'
 import { getErrorMessage, isRunning, isTerminal } from '../../shared/types'
-import { canTransition, findAction, transition } from '../../shared/transitions'
 import type { AppContext } from '../context'
 import * as git from '../git'
 import { serverLog } from '../log'
@@ -24,14 +24,7 @@ import {
 
 export function createTaskRoutes(ctx: AppContext) {
   const app = new Hono()
-  const {
-    queries,
-    sseManager,
-    taskQueue,
-    pool,
-    dispatcher,
-    config,
-  } = ctx
+  const { queries, sseManager, taskQueue, pool, dispatcher, config } = ctx
 
   /** Remove a task's worktree. Branch is preserved for diff review. */
   function removeWorktree(project: Project, task: Task): void {
@@ -243,17 +236,8 @@ export function createTaskRoutes(ctx: AppContext) {
         }
       }
 
-      if (
-        !git.hasCommits(
-          project.repo_path,
-          mergeTarget,
-          task.branch_name,
-        )
-      ) {
-        serverLog.warn(
-          `Task branch has no commits ahead of ${mergeTarget}`,
-          id,
-        )
+      if (!git.hasCommits(project.repo_path, mergeTarget, task.branch_name)) {
+        serverLog.warn(`Task branch has no commits ahead of ${mergeTarget}`, id)
         return c.json(
           {
             error:
@@ -264,16 +248,10 @@ export function createTaskRoutes(ctx: AppContext) {
       }
 
       try {
-        serverLog.info(
-          `Merging ${task.branch_name} into ${mergeTarget}`,
-          id,
-        )
-        git.mergeBranch(
-          project.repo_path,
-          mergeTarget,
-          task.branch_name,
-          { push: shouldPush },
-        )
+        serverLog.info(`Merging ${task.branch_name} into ${mergeTarget}`, id)
+        git.mergeBranch(project.repo_path, mergeTarget, task.branch_name, {
+          push: shouldPush,
+        })
         serverLog.info(
           `Merge successful${shouldPush ? ' (pushed to remote)' : ''}`,
           id,
@@ -739,9 +717,9 @@ export function createTaskRoutes(ctx: AppContext) {
     return c.json({ deleted: tasks.map((t) => t.id) })
   })
 
-  // --- Subtask Proposals ---
+  // --- Task Proposals ---
 
-  /** Propose subtasks: agent posts proposals, parent gets paused. */
+  /** Propose tasks: agent posts proposals, parent gets paused. */
   app.post('/tasks/:id/propose-tasks', async (c) => {
     const id = c.req.param('id')
     const result = getTaskOr404(queries, c, id)
@@ -803,7 +781,8 @@ export function createTaskRoutes(ctx: AppContext) {
           tags: proposal.tags.length > 0 ? proposal.tags : undefined,
           parent_task_id: proposal.parent_task_id ?? undefined,
           depends_on: proposal.depends_on ?? undefined,
-          references: proposal.references.length > 0 ? proposal.references : undefined,
+          references:
+            proposal.references.length > 0 ? proposal.references : undefined,
         })
         if (proposal.inherit_session) {
           const parentSession = getSessionData(task)
@@ -818,7 +797,11 @@ export function createTaskRoutes(ctx: AppContext) {
           }
         }
         if (!proposal.parent_task_id) {
-          queries.createTaskTransition(id, newTask.id, `${task.type}_to_${taskType}`)
+          queries.createTaskTransition(
+            id,
+            newTask.id,
+            `${task.type}_to_${taskType}`,
+          )
         }
         queries.updateTaskProposal(proposal.id, {
           status: 'approved',
@@ -849,65 +832,6 @@ export function createTaskRoutes(ctx: AppContext) {
     }
 
     return c.json({ ok: true, proposal_count: proposals.length })
-  })
-
-  /** Agent requests permission for a tool via CLI. */
-  app.post('/tasks/:id/request-permission', async (c) => {
-    const id = c.req.param('id')
-    const result = getTaskOr404(queries, c, id)
-    if (result instanceof Response) return result
-    const task = result
-
-    if (task.status !== 'in_progress' || task.substatus !== 'running') {
-      return c.json(
-        {
-          error: `Task must be in_progress:running to request permission, got '${task.status}:${task.substatus}'`,
-        },
-        400,
-      )
-    }
-
-    const body = await c.req.json<{
-      tool: string
-      tool_input?: Record<string, unknown>
-    }>()
-    if (!body.tool?.trim()) {
-      return c.json({ error: 'tool is required' }, 400)
-    }
-
-    const target = guardTransition(
-      c,
-      task.status,
-      task.substatus,
-      'request_permission',
-    )
-    if (target instanceof Response) return target
-
-    const toolInfo = `Tool requiring permission: ${body.tool}`
-
-    queries.updateTask(id, {
-      status: target.status,
-      substatus: target.substatus,
-      result: toolInfo,
-      agent_session_data: updateSessionData(task.agent_session_data, {
-        pending_tool: body.tool,
-        pending_tool_input: body.tool_input ?? null,
-      }),
-    })
-
-    pool.killAgent(id)
-
-    queries.createTaskEvent(
-      id,
-      'permission_requested',
-      JSON.stringify({ tool: body.tool }),
-    )
-    serverLog.info(`Permission requested for tool: ${body.tool} (via CLI)`, id)
-
-    const updated = queries.getTaskById(id)
-    sseManager.broadcast('inbox:new', updated)
-
-    return c.json({ ok: true, tool: body.tool })
   })
 
   /** Get proposals for a task. */
@@ -971,7 +895,8 @@ export function createTaskRoutes(ctx: AppContext) {
         tags: proposal.tags.length > 0 ? proposal.tags : undefined,
         parent_task_id: proposal.parent_task_id ?? undefined,
         depends_on: proposal.depends_on ?? undefined,
-        references: proposal.references.length > 0 ? proposal.references : undefined,
+        references:
+          proposal.references.length > 0 ? proposal.references : undefined,
       })
 
       // Copy session if requested
@@ -990,7 +915,11 @@ export function createTaskRoutes(ctx: AppContext) {
 
       // Record transition for non-child proposals
       if (!proposal.parent_task_id) {
-        queries.createTaskTransition(id, newTask.id, `${task.type}_to_${taskType}`)
+        queries.createTaskTransition(
+          id,
+          newTask.id,
+          `${task.type}_to_${taskType}`,
+        )
       }
 
       queries.updateTaskProposal(a.id, {
@@ -1006,8 +935,7 @@ export function createTaskRoutes(ctx: AppContext) {
       // All dismissed — re-queue parent with feedback
       const proposals = queries.getTaskProposals(id)
       const dismissed = proposals.filter((p) => p.status === 'dismissed')
-      let resumePrompt =
-        'All proposed tasks were dismissed by the user.\n\n'
+      let resumePrompt = 'All proposed tasks were dismissed by the user.\n\n'
       if (dismissed.length > 0) {
         resumePrompt += '## Dismissed Proposals\n'
         for (const d of dismissed) {
@@ -1078,6 +1006,67 @@ export function createTaskRoutes(ctx: AppContext) {
       approved: approvedCount,
       dismissed: (body.dismissed ?? []).length,
     })
+  })
+
+  // --- Request permission ---
+
+  /** Agent requests permission for a tool via CLI. */
+  app.post('/tasks/:id/request-permission', async (c) => {
+    const id = c.req.param('id')
+    const result = getTaskOr404(queries, c, id)
+    if (result instanceof Response) return result
+    const task = result
+
+    if (task.status !== 'in_progress' || task.substatus !== 'running') {
+      return c.json(
+        {
+          error: `Task must be in_progress:running to request permission, got '${task.status}:${task.substatus}'`,
+        },
+        400,
+      )
+    }
+
+    const body = await c.req.json<{
+      tool: string
+      tool_input?: Record<string, unknown>
+    }>()
+    if (!body.tool?.trim()) {
+      return c.json({ error: 'tool is required' }, 400)
+    }
+
+    const target = guardTransition(
+      c,
+      task.status,
+      task.substatus,
+      'request_permission',
+    )
+    if (target instanceof Response) return target
+
+    const toolInfo = `Tool requiring permission: ${body.tool}`
+
+    queries.updateTask(id, {
+      status: target.status,
+      substatus: target.substatus,
+      result: toolInfo,
+      agent_session_data: updateSessionData(task.agent_session_data, {
+        pending_tool: body.tool,
+        pending_tool_input: body.tool_input ?? null,
+      }),
+    })
+
+    pool.killAgent(id)
+
+    queries.createTaskEvent(
+      id,
+      'permission_requested',
+      JSON.stringify({ tool: body.tool }),
+    )
+    serverLog.info(`Permission requested for tool: ${body.tool} (via CLI)`, id)
+
+    const updated = queries.getTaskById(id)
+    sseManager.broadcast('inbox:new', updated)
+
+    return c.json({ ok: true, tool: body.tool })
   })
 
   // --- Read helpers ---
@@ -1224,19 +1213,22 @@ function getDependentTasks(
  * Ensure a plan task has a feature branch for its subtasks.
  * Creates the branch on first call (when first subtask is approved).
  */
-function ensurePlanFeatureBranch(
-  ctx: AppContext,
-  planTask: Task,
-): void {
+function ensurePlanFeatureBranch(ctx: AppContext, planTask: Task): void {
   if (planTask.type !== 'plan' || planTask.branch_name) return
 
   const project = ctx.queries.getProjectById(planTask.project_id)
   if (!project) return
 
-  const branchName = git.makeBranchName(planTask.id, planTask.title ?? planTask.prompt ?? '')
+  const branchName = git.makeBranchName(
+    planTask.id,
+    planTask.title ?? planTask.prompt ?? '',
+  )
   git.createBranch(project.repo_path, project.target_branch, branchName)
   ctx.queries.updateTask(planTask.id, { branch_name: branchName })
-  serverLog.info(`Created feature branch ${branchName} for plan task`, planTask.id)
+  serverLog.info(
+    `Created feature branch ${branchName} for plan task`,
+    planTask.id,
+  )
 }
 
 /**
