@@ -33,12 +33,17 @@ export function createTaskRoutes(ctx: AppContext) {
     config,
   } = ctx
 
-  /** Clean up a task's worktree and branch. */
-  function cleanupWorktree(project: Project, task: Task): void {
+  /** Remove a task's worktree. Branch is preserved for diff review. */
+  function removeWorktree(project: Project, task: Task): void {
     if (task.worktree_path) {
       serverLog.info(`Removing worktree ${task.worktree_path}`, task.id)
       git.removeWorktree(project.repo_path, task.worktree_path)
     }
+  }
+
+  /** Remove a task's worktree and delete its branch. Only for permanent deletion. */
+  function cleanupWorktreeAndBranch(project: Project, task: Task): void {
+    removeWorktree(project, task)
     if (task.branch_name) {
       serverLog.info(`Deleting branch ${task.branch_name}`, task.id)
       git.deleteBranch(project.repo_path, task.branch_name)
@@ -314,13 +319,12 @@ export function createTaskRoutes(ctx: AppContext) {
     pool.killChatAgent(id)
     autoReturnIfCheckedOut(ctx, id)
 
-    cleanupWorktree(project, task)
+    removeWorktree(project, task)
 
     const updated = queries.updateTask(id, {
       status: target.status,
       substatus: target.substatus,
       worktree_path: null,
-      branch_name: null,
       completed_at: Date.now(),
     })
     queries.createTaskEvent(id, 'rejected', null)
@@ -670,7 +674,7 @@ export function createTaskRoutes(ctx: AppContext) {
       pool.killChatAgent(id)
 
       const project = queries.getProjectById(existing.project_id)
-      if (project) cleanupWorktree(project, existing)
+      if (project) cleanupWorktreeAndBranch(project, existing)
 
       queries.deleteTasksByIds([id])
       deleteSessionMessages(id)
@@ -696,7 +700,7 @@ export function createTaskRoutes(ctx: AppContext) {
     pool.killChatAgent(id)
 
     const cancelProject = queries.getProjectById(existing.project_id)
-    if (cancelProject) cleanupWorktree(cancelProject, existing)
+    if (cancelProject) removeWorktree(cancelProject, existing)
 
     queries.clearParentReferences(id)
 
@@ -704,7 +708,6 @@ export function createTaskRoutes(ctx: AppContext) {
       status: target.status,
       substatus: target.substatus,
       worktree_path: null,
-      branch_name: null,
       completed_at: Date.now(),
     })
     queries.createTaskEvent(id, 'cancelled', null)
@@ -751,7 +754,7 @@ export function createTaskRoutes(ctx: AppContext) {
         hadRunning = true
       }
       const project = queries.getProjectById(task.project_id)
-      if (project) cleanupWorktree(project, task)
+      if (project) cleanupWorktreeAndBranch(project, task)
     }
 
     const deleted = queries.deleteTasksByIds(tasksToDelete.map((t) => t.id))
