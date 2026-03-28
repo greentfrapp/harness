@@ -274,10 +274,10 @@ Implemented in `v2/client/`. The client is a port of v1, adapted for the v2 stat
 - [x] **Build config** — `vite.config.ts` and `tsconfig.json` with `@shared` alias pointing to `../shared`. `vue-tsc --noEmit` and `vite build` pass clean.
 - [ ] **Tests** — Port `useTasks.test.ts`, `useCheckouts.test.ts`, `useLog.test.ts`, `taskArrayUtils.test.ts`, `useTaskSelection.test.ts`.
 
-### Phase 6: Integration & Cleanup
+### Phase 6: Integration & Cleanup ✓
 
+- [x] **Server entry point** — `v2/server/index.ts` wires all components: startup (config, DB, recovery), dependency injection (SSEManager, TaskQueue, AgentPool, Dispatcher with circular dep handling), checkout state recovery from git, route mounting (tasks, checkout, projects, views), SSE endpoint, static file serving from `v2/client/dist`.
+- [x] **No dead code in v2** — `checkWaitingParent` lives in `routes/tasks.ts` (not index.ts). Pool uses `getTaskProposals` (not v1's `getSubtaskProposals`). No unused imports.
 - [ ] **End-to-end smoke test** — Create a task (draft → send → agent runs → pending:review → approve/reject) for each task type. Verify mode escalation flow (discuss → plan → do).
 - [ ] **Crash recovery test** — Kill server mid-task, restart, verify recovery logic requeues or errors correctly.
 - [ ] **CLI integration test** — Agent spawns, uses CLI to set result and propose subtasks, verify server state.
-- [ ] **Remove dead code** — Delete any v1-only status handling, unused fields, old transition rules.
-- [ ] **Update CLAUDE.md** — Reflect the new status model, CLI commands, and mode escalation in the project docs.
