@@ -18,7 +18,7 @@ const DEFAULT_TAGS: Record<string, TagConfig> = {
   ui: { color: 'pink', description: 'UI/UX change' },
 }
 
-export const HARNESS_DIR = path.join(os.homedir(), '.harness')
+export const HARNESS_DIR = path.resolve('.harness')
 export const DB_PATH = path.join(HARNESS_DIR, 'harness.db')
 export const CONFIG_PATH = path.join(HARNESS_DIR, 'config.jsonc')
 export const SESSIONS_DIR = path.join(HARNESS_DIR, 'sessions')
