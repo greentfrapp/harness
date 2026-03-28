@@ -1,5 +1,7 @@
 node_modules/
 client/dist/
+v2/client/dist/
+.harness/
 *.db
 *.db-journal
 *.db-wal
