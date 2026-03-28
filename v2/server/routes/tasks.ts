@@ -13,7 +13,7 @@ import { findAction, transition } from '../../shared/transitions'
 import type { AppContext } from '../context'
 import * as git from '../git'
 import { serverLog } from '../log'
-import { getSessionData } from '../pool'
+import { getSessionData, updateSessionData } from '../pool'
 import { deleteSessionMessages, loadSessionMessages } from '../sessions'
 import { autoReturnIfCheckedOut } from './checkout'
 import {
@@ -859,6 +859,125 @@ export function createTaskRoutes(ctx: AppContext) {
     }
 
     return c.json({ ok: true, proposal_count: proposals.length })
+  })
+
+  /** Agent requests permission for a tool via CLI. */
+  app.post('/tasks/:id/request-permission', async (c) => {
+    const id = c.req.param('id')
+    const result = getTaskOr404(queries, c, id)
+    if (result instanceof Response) return result
+    const task = result
+
+    if (task.status !== 'in_progress' || task.substatus !== 'running') {
+      return c.json(
+        {
+          error: `Task must be in_progress:running to request permission, got '${task.status}:${task.substatus}'`,
+        },
+        400,
+      )
+    }
+
+    const body = await c.req.json<{
+      tool: string
+      tool_input?: Record<string, unknown>
+    }>()
+    if (!body.tool?.trim()) {
+      return c.json({ error: 'tool is required' }, 400)
+    }
+
+    const target = guardTransition(
+      c,
+      task.status,
+      task.substatus,
+      'request_permission',
+    )
+    if (target instanceof Response) return target
+
+    const toolInfo = `Tool requiring permission: ${body.tool}`
+
+    queries.updateTask(id, {
+      status: target.status,
+      substatus: target.substatus,
+      result: toolInfo,
+      agent_session_data: updateSessionData(task.agent_session_data, {
+        pending_tool: body.tool,
+        pending_tool_input: body.tool_input ?? null,
+      }),
+    })
+
+    pool.killAgent(id)
+
+    queries.createTaskEvent(
+      id,
+      'permission_requested',
+      JSON.stringify({ tool: body.tool }),
+    )
+    serverLog.info(`Permission requested for tool: ${body.tool} (via CLI)`, id)
+
+    const updated = queries.getTaskById(id)
+    sseManager.broadcast('inbox:new', updated)
+
+    return c.json({ ok: true, tool: body.tool })
+  })
+
+  /** Agent requests mode escalation via CLI. */
+  app.post('/tasks/:id/request-transition', async (c) => {
+    const id = c.req.param('id')
+    const result = getTaskOr404(queries, c, id)
+    if (result instanceof Response) return result
+    const task = result
+
+    if (task.status !== 'in_progress' || task.substatus !== 'running') {
+      return c.json(
+        {
+          error: `Task must be in_progress:running to request transition, got '${task.status}:${task.substatus}'`,
+        },
+        400,
+      )
+    }
+
+    const body = await c.req.json<{ target_type: string }>()
+    if (!body.target_type?.trim()) {
+      return c.json({ error: 'target_type is required' }, 400)
+    }
+
+    if (!config.task_types[body.target_type]) {
+      return c.json(
+        { error: `Unknown task type: ${body.target_type}` },
+        400,
+      )
+    }
+
+    const target = guardTransition(
+      c,
+      task.status,
+      task.substatus,
+      'request_transition',
+    )
+    if (target instanceof Response) return target
+
+    queries.updateTask(id, {
+      status: target.status,
+      substatus: target.substatus,
+      result: `Transition requested: ${task.type} → ${body.target_type}`,
+    })
+
+    pool.killAgent(id)
+
+    queries.createTaskEvent(
+      id,
+      'transition_requested',
+      JSON.stringify({ target_type: body.target_type }),
+    )
+    serverLog.info(
+      `Transition requested: ${task.type} → ${body.target_type} (via CLI)`,
+      id,
+    )
+
+    const updated = queries.getTaskById(id)
+    sseManager.broadcast('inbox:new', updated)
+
+    return c.json({ ok: true, target_type: body.target_type })
   })
 
   /** Get proposals for a task. */

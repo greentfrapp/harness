@@ -237,19 +237,19 @@ Implemented in `v2/server/routes/`. All routes use the v2 transition machine wit
 - [x] **Views** — `v2/server/routes/views.ts` — Unchanged structure, imports from v2 views module.
 - [x] **Additional endpoints** — `GET /tasks/:id/transitions` returns mode-escalation chain. `POST /tasks/:id/follow-up` creates follow-up tasks from `pending`/`done` tasks. `GET /tasks/:id/diff` sources diff from branch (no `diff_full` cache field).
 
-### Phase 4: CLI (Agent-Facing)
+### Phase 4: CLI (Agent-Facing) ✓
 
-The CLI is the agent's interface to Harness. It replaces stdout parsing with explicit commands. Depends on the routes being in place.
+Implemented in `v2/cli/`. The CLI is the agent's interface to Harness, replacing stdout parsing with explicit commands.
 
-- [ ] **CLI framework** — Rewrite `cli/harness.mjs` (or port to TS). Parse subcommands, read `HARNESS_TASK_ID` and `HARNESS_API_URL` from env.
-- [ ] **`harness set-result`** — Set the task's result text. `PATCH /tasks/:id` with `result` field.
-- [ ] **`harness request-permission <tool>`** — Move task to `pending:permission`. Agent blocks until the task is resumed.
-- [ ] **`harness request-transition <target_type>`** — Agent requests mode escalation (e.g. discuss → plan). Task moves to a pending state for user approval.
-- [ ] **`harness propose-subtasks`** — Accepts JSON array of subtask proposals. Posts to `POST /tasks/:id/propose-subtasks`.
-- [ ] **`harness get-task <id>`** — Read another task's data. `GET /tasks/:id`.
-- [ ] **`harness list-tasks [--status] [--project]`** — Query tasks. `GET /tasks` with filters.
-- [ ] **Agent prompt injection** — Update `pool.ts` to inject CLI usage instructions (env vars, available commands) into the agent's system prompt at spawn time.
-- [ ] **Tests** — Unit tests for CLI arg parsing; integration tests that spawn the CLI against a test server.
+- [x] **CLI framework** — `v2/cli/harness.mjs`. Self-contained Node.js script (no dependencies). Parses subcommands, reads `HARNESS_TASK_ID` and `HARNESS_API_URL` from env. Shared `apiCall()` helper for all HTTP requests. `--task-id` override for all commands.
+- [x] **`harness set-result`** — Set the task's result text. `PATCH /tasks/:id` with `result` field. Accepts positional args or `--text` flag.
+- [x] **`harness request-permission <tool>`** — New `POST /tasks/:id/request-permission` endpoint in `routes/tasks.ts`. Validates `in_progress:running`, transitions to `pending:permission`, stores tool in `agent_session_data.pending_tool`, kills agent via `pool.killAgent()`.
+- [x] **`harness request-transition <target_type>`** — New `POST /tasks/:id/request-transition` endpoint. Validates `in_progress:running`, validates target type exists in config, transitions to `pending:review`, kills agent. User approves via existing `approve-transition` endpoint.
+- [x] **`harness propose-subtasks`** — Ported from v1 `cli/harness.mjs`. Validates JSON array, posts to `POST /tasks/:id/propose-subtasks`.
+- [x] **`harness get-task <id>`** — Read another task's data. `GET /tasks/:id`. Prints JSON to stdout.
+- [x] **`harness list-tasks [--status] [--project]`** — Query tasks with optional filters. `GET /tasks` with query params. Prints JSON to stdout.
+- [x] **Agent prompt injection** — Updated `pool.ts` `harnessInstructions` to document all 6 CLI commands. Updated `HARNESS_CLI` env var path to `v2/cli/harness.mjs`.
+- [x] **Tests** — `v2/cli/harness.test.ts`: 25 tests covering all commands, arg parsing, error handling, `--task-id` override, and API error responses. Uses a mock HTTP server spawned in-process.
 
 ### Phase 5: Frontend (Vue Client)
 

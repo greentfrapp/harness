@@ -276,7 +276,7 @@ export class AgentPool {
         ...process.env,
         HARNESS_TASK_ID: task.id,
         HARNESS_API_URL: `http://localhost:${process.env.PORT ?? '3001'}`,
-        HARNESS_CLI: path.resolve(__dirname, '../../cli/harness.mjs'),
+        HARNESS_CLI: path.resolve(__dirname, '../cli/harness.mjs'),
       },
     })
 
@@ -501,14 +501,32 @@ export class AgentPool {
     const harnessInstructions = `
 
 ## Harness Task System
-You are running as an agent inside Harness, a task queue system. You can use your own tools to track progress, but you also have access to the Harness CLI for proposing subtasks that will be executed by other agents in parallel.
+You are running as an agent inside Harness, a task queue system. You have access to the Harness CLI for communicating with the task system.
 
-If this task is too large or would benefit from being broken into smaller pieces, you can propose subtasks by running:
-  $HARNESS_CLI propose-subtasks --subtasks '[{"title":"Short title","prompt":"Detailed instructions for the subtask"}]'
+### Available CLI commands:
 
-After proposing subtasks, you will be paused while the user reviews and approves them. Approved subtasks will be executed by other agents, and you will be resumed with their results.
+**Set your result (final output):**
+  $HARNESS_CLI set-result "Your result text here"
 
-Only propose subtasks when you have clear, actionable sub-pieces. Not every task needs subtasks.`
+**Request permission for a tool (pauses agent until granted):**
+  $HARNESS_CLI request-permission <tool-name>
+
+**Request mode escalation, e.g. discuss → plan (pauses agent until approved):**
+  $HARNESS_CLI request-transition <target-type>
+
+**Propose subtasks for parallel execution (pauses agent until reviewed):**
+  $HARNESS_CLI propose-subtasks --subtasks '[{"title":"Short title","prompt":"Detailed instructions"}]'
+
+**Read another task's data:**
+  $HARNESS_CLI get-task <task-id>
+
+**List tasks:**
+  $HARNESS_CLI list-tasks [--status <status>] [--project <project-id>]
+
+### Notes:
+- Use set-result to provide your final output before completing.
+- Only propose subtasks when you have clear, actionable sub-pieces. Not every task needs subtasks.
+- After proposing subtasks, you will be paused while the user reviews them. You will be resumed with their results.`
 
     const systemPrompt = opts.systemPrompt
       ? opts.systemPrompt + harnessInstructions
@@ -550,7 +568,7 @@ Only propose subtasks when you have clear, actionable sub-pieces. Not every task
         ...process.env,
         HARNESS_TASK_ID: task.id,
         HARNESS_API_URL: `http://localhost:${process.env.PORT ?? '3001'}`,
-        HARNESS_CLI: path.resolve(__dirname, '../../cli/harness.mjs'),
+        HARNESS_CLI: path.resolve(__dirname, '../cli/harness.mjs'),
       },
     })
 
